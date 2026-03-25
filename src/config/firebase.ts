@@ -11,11 +11,18 @@ const firebaseConfig = {
   appId: import.meta.env.VITE_FIREBASE_APP_ID
 };
 
+// 🎯 Debug: 用來確認 Netlify 是否有正確抓到環境變數
+console.log("🔥 Firebase Config ProjectID:", firebaseConfig.projectId);
+
 const app = initializeApp(firebaseConfig);
+
+// 匯出功能模組
 export const db = getFirestore(app);
 export const auth = getAuth(app);
 
-// 強制執行匿名登入，確保有權限讀取
-signInAnonymously(auth).catch(err => console.error("登入失敗:", err));
+// 執行匿名登入以獲取讀取權限
+signInAnonymously(auth)
+  .then(() => console.log("🔐 Firebase 匿名登入成功"))
+  .catch((err) => console.error("❌ Firebase 登入失敗:", err));
 
 export default app;
