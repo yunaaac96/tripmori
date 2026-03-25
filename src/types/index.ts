@@ -1,5 +1,3 @@
-import { Timestamp } from 'firebase/firestore';
-
 export type EventCategory = 'transport' | 'food' | 'attraction' | 'hotel' | 'spot';
 
 export interface TripEvent {
