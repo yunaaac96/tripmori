@@ -97,24 +97,28 @@ function App() {
         )}
 
         {activeTab === "預訂" && (
-          <main className="px-6 mt-6 pb-20 animate-in slide-in-from-bottom-4 duration-500">
-            <h2 className="text-sm font-black text-slate-400 mb-6 tracking-widest flex items-center gap-2">
-              <span className="w-8 h-[1px] bg-slate-200"></span> 交通與住宿資訊
-            </h2>
-            {/* 🎯 這裡修正：如果 bookings 有資料就顯示，否則顯示提示 */}
-            {bookings.length > 0 ? (
-              bookings.map(b => <BookingCard key={b.id} data={b} />)
-            ) : (
-              <div className="text-center py-20 opacity-30 font-bold">尚未加入預訂資訊 ✈️</div>
-            )}
-          </main>
-        )}
+  <main className="px-6 mt-6 pb-20">
+    <p className="text-xs text-slate-400 mb-4">偵測到預訂數量: {bookings.length}</p>
+    {bookings.length > 0 ? (
+      bookings.map(b => <BookingCard key={b.id} data={b} />)
+    ) : (
+      <p className="text-center py-10 text-slate-300">尚未加入預訂資訊</p>
+    )}
+  </main>
+)}
 
         {activeTab === "成員" && (
-          <main className="px-6 mt-6 grid grid-cols-2 gap-4 pb-20 animate-in zoom-in duration-300">
-            {members.map(m => <MemberCard key={m.id} member={m} />)}
-          </main>
-        )}
+  <main className="px-6 mt-6 pb-20">
+    <p className="text-xs text-slate-400 mb-4">偵測到成員數量: {members.length}</p>
+    <div className="grid grid-cols-2 gap-4">
+      {members.length > 0 ? (
+        members.map(m => <MemberCard key={m.id} member={m} />)
+      ) : (
+        <p className="col-span-2 text-center py-10 text-slate-300">資料庫成員列表為空</p>
+      )}
+    </div>
+  </main>
+)}
 
         <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
