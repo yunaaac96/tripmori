@@ -109,13 +109,17 @@ function App() {
 
         {activeTab === "成員" && (
   <main className="px-6 mt-6 pb-20">
-    <p className="text-xs text-slate-400 mb-4">偵測到成員數量: {members.length}</p>
     <div className="grid grid-cols-2 gap-4">
-      {members.length > 0 ? (
-        members.map(m => <MemberCard key={m.id} member={m} />)
-      ) : (
-        <p className="col-span-2 text-center py-10 text-slate-300">資料庫成員列表為空</p>
-      )}
+      {/* 直接渲染，不加額外判斷 */}
+      {members.map((m, index) => (
+        <MemberCard key={m.id || index} member={m} />
+      ))}
+      
+      {/* 新增按鈕 */}
+      <div className="border-2 border-dashed border-slate-100 rounded-[2.5rem] flex flex-col items-center justify-center p-6 text-slate-300 active:scale-95 transition-transform">
+         <span className="text-2xl">+</span>
+         <span className="text-[10px] font-bold mt-1">新增成員</span>
+      </div>
     </div>
   </main>
 )}
