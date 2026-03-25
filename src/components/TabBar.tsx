@@ -1,33 +1,35 @@
-import React from 'react';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faCalendarDays, faPlane, faWallet, faBook, faUsers } from '@fortawesome/free-solid-svg-icons';
 
 interface TabBarProps {
   activeTab: string;
-  onTabChange: (label: string) => void;
+  onTabChange: (tab: string) => void;
 }
 
-const TABS = [
-  { icon: '🗓️', label: '行程' },
-  { icon: '✈️', label: '預訂' },
-  { icon: '💰', label: '記帳' },
-  { icon: '📖', label: '日誌' },
-  { icon: '👥', label: '成員' },
-];
+const TabBar = ({ activeTab, onTabChange }: TabBarProps) => {
+  const tabs = [
+    { name: '行程', icon: faCalendarDays },
+    { name: '預訂', icon: faPlane },
+    { name: '記帳', icon: faWallet },
+    { name: '日誌', icon: faBook },
+    { name: '成員', icon: faUsers },
+  ];
 
-const TabBar: React.FC<TabBarProps> = ({ activeTab, onTabChange }) => {
   return (
-    <div className="fixed bottom-0 left-0 right-0 p-5 z-50 flex justify-center pointer-events-none">
-      <div className="w-full max-w-md bg-white/95 backdrop-blur-md rounded-full shadow-2xl border border-slate-100 flex justify-around py-4 px-3 pointer-events-auto">
-        {TABS.map((tab) => (
-          <button 
-            key={tab.label} 
-            type="button"
-            onClick={() => onTabChange(tab.label)}
-            className={`flex flex-col items-center gap-1 transition-all active:scale-75 cursor-pointer ${
-              activeTab === tab.label ? "text-[#769370]" : "text-slate-300 grayscale opacity-70"
+    <div className="fixed bottom-0 left-0 right-0 flex justify-center pb-8 px-4 z-50 pointer-events-none">
+      <div className="bg-white/80 backdrop-blur-md border border-slate-200 rounded-2xl shadow-lg px-2 py-2 flex gap-1 pointer-events-auto max-w-sm w-full justify-between">
+        {tabs.map((tab) => (
+          <button
+            key={tab.name}
+            onClick={() => onTabChange(tab.name)}
+            className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-xl transition-all ${
+              activeTab === tab.name 
+              ? 'bg-[#769370] text-white shadow-md' 
+              : 'text-slate-400 hover:bg-slate-50'
             }`}
           >
-            <span className="text-xl">{tab.icon}</span>
-            <span className="text-[10px] font-black">{tab.label}</span>
+            <FontAwesomeIcon icon={tab.icon} className="text-lg" />
+            <span className="text-[10px] font-bold">{tab.name}</span>
           </button>
         ))}
       </div>
