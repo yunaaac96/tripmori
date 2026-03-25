@@ -28,7 +28,7 @@ function App() {
         console.log("🔐 Firebase 已登入");
 
         // --- 🚛 強制搬移邏輯 (從舊 ID 複製到新 ID) ---
-        const oldId = "74pfE7RXyEIusdRV0rZ";
+        const oldId = "74pfE7RXyEIusEdRV0rZ";
         const collectionsToMigrate = ["events", "members", "bookings"];
         
         for (const colName of collectionsToMigrate) {
