@@ -19,7 +19,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   
   // 🎯 確保 ID 是純淨字串
-  const tripId = "74pfE7RXyEIusdRV0rZ".trim(); 
+  const tripId = "test123".trim(); 
 
   useEffect(() => {
     const fetchData = async () => {
