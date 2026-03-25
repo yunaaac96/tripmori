@@ -25,7 +25,8 @@ function App() {
         setLoading(true);
         // 抓取行程
         const eventSnap = await getDocs(query(collection(db, `trips/${tripId}/events`), orderBy("startTime")));
-        setEvents(eventSnap.docs.map(d => ({ id: d.id, ...d.data() } as TripEvent)));
+        const eventList = eventSnap.docs.map(d => ({ id: d.id, ...d.data() } as TripEvent));
+        setEvents(eventList);
         
         // 抓取成員
         const memberSnap = await getDocs(collection(db, `trips/${tripId}/members`));
@@ -35,11 +36,16 @@ function App() {
         const bookingSnap = await getDocs(collection(db, `trips/${tripId}/bookings`));
         setBookings(bookingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
-      } catch (error) { console.error(error); } finally { setLoading(false); }
+      } catch (error) { 
+        console.error("Firebase Error:", error); 
+      } finally { 
+        setLoading(false); 
+      }
     };
     fetchData();
   }, []);
 
+  // 1. 修正日期與星期 (4/23 為週四)
   const dayOptions: DayOption[] = [
     { date: "2026-04-23", label: "4/23", week: "四" },
     { date: "2026-04-24", label: "4/24", week: "五" },
@@ -47,7 +53,8 @@ function App() {
     { date: "2026-04-26", label: "4/26", week: "日" },
   ];
 
-  const currentDayEvents = events.filter(e => e.date === activeDay);
+  // 🎯 修正過濾邏輯：加入 trim() 確保字串完全匹配，並確保事件渲染與 activeDay 連動
+  const currentDayEvents = events.filter(e => e.date.trim() === activeDay.trim());
 
   if (loading) return (
     <div className="min-h-screen flex items-center justify-center bg-[#FDFCF8] text-[#769370] font-black">
@@ -56,20 +63,25 @@ function App() {
   );
 
   return (
-    <div className="min-h-screen bg-[#F1F1E6] flex justify-center">
+    <div className="min-h-screen bg-[#F1F1E6] flex justify-center items-start">
       <div className="w-full max-w-md bg-[#FDFCF8] min-h-screen relative shadow-2xl overflow-y-auto no-scrollbar pb-32"
            style={{ backgroundImage: 'radial-gradient(#e5e7eb 1.5px, transparent 1.5px)', backgroundSize: '30px 30px' }}>
         
         {/* 固定 Header */}
-        <header className="pt-14 pb-4 px-6 text-center">
+        <header className="pt-12 pb-4 px-6 text-center">
           <span className="text-[10px] font-black tracking-[0.2em] text-[#769370]/50 uppercase">Okinawa Journal</span>
           <h1 className="text-3xl font-black text-slate-950 mt-1">日本沖繩之旅 🗾</h1>
         </header>
 
         {/* 根據不同 Tab 顯示不同內容 */}
         {activeTab === "行程" && (
-          <>
-            <DaySelector days={dayOptions} activeDay={activeDay} onDayChange={setActiveDay} />
+          <div className="animate-in fade-in duration-500">
+            {/* 🎯 確保 DaySelector 接收正確的狀態改變函式 */}
+            <DaySelector 
+              days={dayOptions} 
+              activeDay={activeDay} 
+              onDayChange={(date) => setActiveDay(date)} 
+            />
             <WeatherCard />
             <main className="px-6 mt-10 relative">
               <div className="absolute left-[1.9rem] top-2 bottom-0 w-[2px] bg-slate-100 z-0"></div>
@@ -88,15 +100,18 @@ function App() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-20 opacity-30 font-bold">這天暫時沒排行程 🌱</div>
+                  <div className="text-center py-20 opacity-30 font-bold">
+                    <p>今天暫時沒排行程 🌱</p>
+                    <p className="text-[10px] mt-2 italic font-normal">ActiveDay: {activeDay}</p>
+                  </div>
                 )}
               </div>
             </main>
-          </>
+          </div>
         )}
 
         {activeTab === "預訂" && (
-          <main className="px-6 mt-6 pb-20">
+          <main className="px-6 mt-6 pb-20 animate-in slide-in-from-bottom-4 duration-500">
             <h2 className="text-sm font-black text-slate-400 mb-6 tracking-widest flex items-center gap-2">
               <span className="w-8 h-[1px] bg-slate-200"></span> 交通與住宿資訊
             </h2>
@@ -107,11 +122,10 @@ function App() {
         )}
 
         {activeTab === "成員" && (
-          <main className="px-6 mt-6 grid grid-cols-2 gap-4 pb-20">
+          <main className="px-6 mt-6 grid grid-cols-2 gap-4 pb-20 animate-in zoom-in duration-300">
             {members.map(m => (
               <MemberCard key={m.id} member={m} />
             ))}
-            {/* 新增成員的虛線按鈕 */}
             <div className="border-2 border-dashed border-slate-100 rounded-[2.5rem] flex flex-col items-center justify-center p-6 text-slate-300">
                <span className="text-2xl">+</span>
                <span className="text-[10px] font-bold mt-1">新增成員</span>
@@ -119,7 +133,8 @@ function App() {
           </main>
         )}
 
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+        {/* 🎯 底部導航欄，確保 Tab 切換正常工作 */}
+        <TabBar activeTab={activeTab} onTabChange={(tab) => setActiveTab(tab)} />
       </div>
     </div>
   );
