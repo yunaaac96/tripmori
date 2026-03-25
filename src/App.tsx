@@ -18,7 +18,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   
   // ⚠️ 確保這裡沒有多餘空格
-  const tripId = "74pfE7RXyEIusdRV0rZ"; 
+  const tripId = "74pfE7RXyEIusdRV0rZ".trim();
 
   useEffect(() => {
     const fetchData = async () => {
@@ -41,6 +41,8 @@ function App() {
       } finally { 
         setLoading(false); 
       }
+      console.log("🔍 正在嘗試讀取路徑:", `trips/${tripId}/events`);
+const eventSnap = await getDocs(collection(db, `trips/${tripId}/events`));
     };
     fetchData();
   }, []);
