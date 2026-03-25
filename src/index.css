@@ -1,4 +1,7 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 @theme {
   --color-accent: var(--accent);
   --color-border-base: var(--border);
