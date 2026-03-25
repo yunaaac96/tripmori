@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db, auth } from './config/firebase';
-import { collection, getDocs, doc, setDoc } from 'firebase/firestore';
+import { collection, getDocs, doc, setDoc, getDoc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import DaySelector from './components/DaySelector';
 import EventCard from './components/EventCard';
@@ -18,42 +18,38 @@ function App() {
   const [activeTab, setActiveTab] = useState("行程");
   const [loading, setLoading] = useState(true);
   
-  const tripId = "okinawa2026"; // 測試成功的 ID
+  const tripId = "okinawa2026"; 
 
   useEffect(() => {
-    const startApp = async () => {
+    const runMigrationAndFetch = async () => {
       try {
         setLoading(true);
         await signInAnonymously(auth);
-        console.log("🔐 Firebase 已連線");
+        console.log("🔐 Firebase 已登入");
 
-        // --- 🚛 強制搬移邏輯 ---
+        // --- 🚛 強制搬移邏輯 (從舊 ID 複製到新 ID) ---
         const oldId = "74pfE7RXyEIusdRV0rZ";
-        const subCollections = ["events", "members", "bookings"];
+        const collectionsToMigrate = ["events", "members", "bookings"];
         
-        console.log("🚀 檢查是否需要從舊 ID 搬移資料...");
-        
-        for (const colName of subCollections) {
+        for (const colName of collectionsToMigrate) {
           const oldSnap = await getDocs(collection(db, "trips", oldId, colName));
           if (!oldSnap.empty) {
-            console.log(`📦 發現舊資料 [${colName}]: ${oldSnap.size} 筆，開始複製...`);
+            console.log(`📦 搬移中: [${colName}] 找到 ${oldSnap.size} 筆舊資料`);
             for (const d of oldSnap.docs) {
-              // 寫入新 ID 下的子集合
+              // 強制寫入到新 ID 的路徑下
               await setDoc(doc(db, "trips", tripId, colName, d.id), d.data());
             }
           }
         }
-        console.log("✅ 搬移程序檢查完成");
-        // -----------------------
+        // ------------------------------------------
 
-        // 重新抓取新 ID 的資料
         const tripDocRef = doc(db, 'trips', tripId);
         
+        // 抓取搬移後的新資料
         const eventSnap = await getDocs(collection(tripDocRef, 'events'));
         const eventList = eventSnap.docs.map(d => ({ id: d.id, ...d.data() } as TripEvent));
         eventList.sort((a, b) => (a.startTime || "").localeCompare(b.startTime || ""));
         setEvents(eventList);
-        console.log(`📊 行程載入完成: ${eventList.length} 筆`);
 
         const memberSnap = await getDocs(collection(tripDocRef, 'members'));
         setMembers(memberSnap.docs.map(d => ({ id: d.id, ...d.data() })));
@@ -61,14 +57,16 @@ function App() {
         const bookingSnap = await getDocs(collection(tripDocRef, 'bookings'));
         setBookings(bookingSnap.docs.map(d => ({ id: d.id, ...d.data() })));
 
+        console.log("✅ 全數資料同步完成！");
+
       } catch (error) {
-        console.error("🔥 啟動失敗:", error);
+        console.error("🔥 發生錯誤:", error);
       } finally {
         setLoading(false);
       }
     };
 
-    startApp();
+    runMigrationAndFetch();
   }, []);
 
   const dayOptions: DayOption[] = [
@@ -91,7 +89,9 @@ function App() {
 
   return (
     <div className="min-h-screen bg-[#F1F1E6] flex justify-center items-start">
-      <div className="w-full max-w-md bg-[#FDFCF8] min-h-screen relative shadow-2xl pb-32">
+      <div className="w-full max-w-md bg-[#FDFCF8] min-h-screen relative shadow-2xl pb-32 overflow-y-auto no-scrollbar"
+           style={{ backgroundImage: 'radial-gradient(#e5e7eb 1.5px, transparent 1.5px)', backgroundSize: '30px 30px' }}>
+        
         <header className="pt-14 pb-4 px-6 text-center">
           <span className="text-[10px] font-black tracking-[0.2em] text-[#769370]/50 uppercase">Okinawa Journal</span>
           <h1 className="text-3xl font-black text-slate-950 mt-1">日本沖繩之旅 🗾</h1>
@@ -118,21 +118,21 @@ function App() {
                     </div>
                   ))
                 ) : (
-                  <div className="text-center py-20 opacity-30 font-bold">目前無行程資料 🌱</div>
+                  <div className="text-center py-20 opacity-30 font-bold">今天休息一下 🌱</div>
                 )}
               </div>
             </main>
           </div>
         )}
 
-        {/* 預訂與成員分頁內容同前，此處省略以保持簡潔，請確保你的專案中保有這些 component */}
         {activeTab === "預訂" && (
-          <main className="px-6 mt-6 pb-20">
-            {bookings.map(b => <BookingCard key={b.id} data={b} />)}
+          <main className="px-6 mt-6 pb-20 animate-in slide-in-from-bottom-4 duration-500">
+            {bookings.length > 0 ? bookings.map(b => <BookingCard key={b.id} data={b} />) : <p className="text-center py-20 opacity-30">無預訂資訊</p>}
           </main>
         )}
+
         {activeTab === "成員" && (
-          <main className="px-6 mt-6 grid grid-cols-2 gap-4 pb-20">
+          <main className="px-6 mt-6 grid grid-cols-2 gap-4 pb-20 animate-in zoom-in duration-300">
             {members.map(m => <MemberCard key={m.id} member={m} />)}
           </main>
         )}
