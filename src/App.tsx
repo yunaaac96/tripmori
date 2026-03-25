@@ -1,11 +1,16 @@
 import { useEffect, useState } from 'react';
-import { db } from './config/firebase'; // 確保你的 firebase.ts 在這個路徑
+import { db } from './config/firebase';
 import { doc, getDoc } from 'firebase/firestore';
+import { importTripData } from './scripts/importData';
 
 function App() {
   const [tripName, setTripName] = useState<string>("讀取中...");
 
   useEffect(() => {
+    // ── 第一次匯入資料用，成功後把這三行刪掉 ──
+    importTripData();
+    // ────────────────────────────────────────
+
     const fetchTrip = async () => {
       try {
         const docRef = doc(db, "trips", "okinawa-2026");
