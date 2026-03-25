@@ -7,10 +7,6 @@ function App() {
   const [tripName, setTripName] = useState<string>("讀取中...");
 
   useEffect(() => {
-    // ── 第一次匯入資料用，成功後把這三行刪掉 ──
-    importTripData();
-    // ────────────────────────────────────────
-
     const fetchTrip = async () => {
       try {
         const docRef = doc(db, "trips", "okinawa-2026");
