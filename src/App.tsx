@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
+import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
 import SchedulePage from './pages/Schedule/index';
 import BookingsPage from './pages/Bookings/index';
@@ -38,6 +39,9 @@ function App() {
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [['events', setEvents], ['members', setMembers], ['bookings', setBookings], ['expenses', setExpenses], ['journals', setJournals], ['lists', setLists]];
         unsubs = cols.map(([col, setter]) => onSnapshot(collection(tripRef, col), snap => { setter(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }));
         setLoading(false);
+        if (!localStorage.getItem('tripmori_imported')) {
+          runImport().then(() => localStorage.setItem('tripmori_imported', '1'));
+        }
       } catch (err) { console.error(err); setLoading(false); }
     };
     init();
@@ -58,20 +62,5 @@ function App() {
       </div>
     </div>
   );
-}python3 << 'PYEOF'
-path = '/Users/yunhanc/tripmori/src/App.tsx'
-with open(path, 'r') as f:
-    content = f.read()
-
-old = "const firestore = { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc };"
-new = '''import { runImport } from './scripts/importData';
-const firestore = { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc };
-// 一次性匯入 — 完成後會自動移除
-if (!localStorage.getItem('imported')) { runImport().then(() => localStorage.setItem('imported', '1')); }'''
-
-content = content.replace(old, new)
-with open(path, 'w') as f:
-    f.write(content)
-print('✅ App.tsx 更新完成')
-PYEOF
+}
 export default App;
