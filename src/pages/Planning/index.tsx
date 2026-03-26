@@ -1,9 +1,1 @@
-import React from 'react';
-const PlanningPage = (props: any) => {
-  return (
-    <div style={ padding: '20px', textAlign: 'center', color: '#6B5C4E', fontWeight: 900 }>
-      Planning 頁面內容載入中... 🏝️
-    </div>
-  );
-};
-export default PlanningPage;
+import React from 'react'; export default () => <div style={{padding:20, textAlign:'center'}}>📋 準備清單載入中...</div>;

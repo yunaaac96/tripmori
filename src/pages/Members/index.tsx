@@ -1,9 +1,1 @@
-import React from 'react';
-const MembersPage = (props: any) => {
-  return (
-    <div style={ padding: '20px', textAlign: 'center', color: '#6B5C4E', fontWeight: 900 }>
-      Members 頁面內容載入中... 🏝️
-    </div>
-  );
-};
-export default MembersPage;
+import React from 'react'; export default () => <div style={{padding:20, textAlign:'center'}}>👥 旅伴成員載入中...</div>;
