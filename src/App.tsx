@@ -21,7 +21,7 @@ export const C = {
 };
 export const FONT = "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif";
 export const cardStyle: React.CSSProperties = { background: 'white', borderRadius: 20, padding: '14px 16px', boxShadow: C.shadow, marginBottom: 10 };
-export const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: C.cream, fontSize: 14, color: C.bark, outline: 'none', fontFamily: FONT, boxSizing: 'border-box' };
+export const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: C.cream, fontSize: 16, color: C.bark, outline: 'none', fontFamily: FONT, boxSizing: 'border-box' };
 export const btnPrimary = (color = C.sage): React.CSSProperties => ({ background: color, color: 'white', border: 'none', borderRadius: 14, padding: '12px 24px', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: C.shadowSm, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 });
 export const CATEGORY_MAP: Record<string, { label: string; bg: string; text: string; emoji: string }> = {
   attraction: { label: '景點', bg: '#E0F0D8', text: '#4A7A35', emoji: '🌿' },

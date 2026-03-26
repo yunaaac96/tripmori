@@ -146,7 +146,7 @@ export default function MembersPage({ members, expenses, firestore }: any) {
               value={form.name}
               onChange={e => set('name', e.target.value)}
               placeholder="旅伴名稱"
-              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: FONT, outline: 'none', color: C.bark }}
+              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark }}
             />
           </div>
 
@@ -164,7 +164,7 @@ export default function MembersPage({ members, expenses, firestore }: any) {
               value={form.role}
               onChange={e => set('role', e.target.value)}
               placeholder="或自訂角色..."
-              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '8px 12px', fontSize: 13, fontFamily: FONT, outline: 'none', color: C.bark }}
+              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '8px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark }}
             />
           </div>
 

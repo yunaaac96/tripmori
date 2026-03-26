@@ -124,7 +124,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
               onChange={e => set('text', e.target.value)}
               onKeyDown={e => { if (e.key === 'Enter' && form.text.trim()) isEdit ? handleEditSave() : handleAdd(); }}
               placeholder="輸入項目內容..."
-              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: FONT, outline: 'none', color: C.bark }}
+              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark }}
             />
           </div>
 
@@ -161,7 +161,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
               type="date"
               value={form.dueDate}
               onChange={e => set('dueDate', e.target.value)}
-              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 14, fontFamily: FONT, outline: 'none', color: C.bark }}
+              style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark }}
             />
           </div>
 
