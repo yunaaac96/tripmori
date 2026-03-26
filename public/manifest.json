@@ -1,0 +1,37 @@
+{
+  "name": "TripMori 旅行手帳",
+  "short_name": "TripMori",
+  "description": "團體旅遊規劃手帳",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#F7F4EB",
+  "theme_color": "#6B7C58",
+  "lang": "zh-TW",
+  "icons": [
+    {
+      "src": "/icons/icon-192-light.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192-dark.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
+    },
+    {
+      "src": "/icons/icon-512-light.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-512-dark.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

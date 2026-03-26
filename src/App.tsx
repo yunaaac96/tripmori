@@ -93,7 +93,7 @@ function App() {
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} firestore={firestore} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}
-        {activeTab === '成員' && <MembersPage members={members} expenses={expenses} />}
+        {activeTab === '成員' && <MembersPage members={members} expenses={expenses} firestore={firestore} />}
         <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     </div>

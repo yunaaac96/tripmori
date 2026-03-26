@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 
@@ -23,9 +23,9 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
 
   // countdown timer
-  useState(() => {
+  useEffect(() => {
     const target = new Date('2026-04-23T00:00:00').getTime();
-    const t = setInterval(() => {
+    const tick = () => {
       const diff = target - Date.now();
       if (diff > 0) setCountdown({
         d: Math.floor(diff / 86400000),
@@ -33,9 +33,11 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
         m: Math.floor((diff % 3600000) / 60000),
         s: Math.floor((diff % 60000) / 1000),
       });
-    }, 1000);
+    };
+    tick();
+    const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  });
+  }, []);
 
   const dayInfo = DAY_OPTIONS.find(d => d.date === activeDay)!;
   const dayEvents = events
@@ -127,7 +129,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
         <div style={{ marginTop: 14, background: C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
           <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>⏰ 距離出發</span>
           <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>
-            {([['d','天',countdown.d],['h','時',countdown.h],['m','分',countdown.m]] as [string,string,number][]).map(([k,u,v],i) => (
+            {([['d','天',countdown.d],['h','時',countdown.h],['m','分',countdown.m],['s','秒',countdown.s]] as [string,string,number][]).map(([k,u,v],i) => (
               <span key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
                 {i>0 && <span style={{ opacity: 0.4, marginRight: 2 }}>:</span>}
                 <span style={{ fontSize: 18 }}>{String(v).padStart(2,'0')}</span>

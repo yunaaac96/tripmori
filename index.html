@@ -1,10 +1,36 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-TW">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>tripmori</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>TripMori 旅行手帳</title>
+    <meta name="description" content="團體旅遊規劃手帳" />
+    <meta name="application-name" content="TripMori" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="TripMori" />
+
+    <!-- PWA manifest -->
+    <link rel="manifest" href="/manifest.json" />
+
+    <!-- theme-color: 淺色 / 深色自動切換 -->
+    <meta name="theme-color" content="#F7F4EB" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#3A5A3A" media="(prefers-color-scheme: dark)" />
+
+    <!-- Favicon 32px 淺色 / 深色 -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-light.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-dark.png"  media="(prefers-color-scheme: dark)" />
+
+    <!-- Favicon 48px 淺色 / 深色 -->
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48-light.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48-dark.png"  media="(prefers-color-scheme: dark)" />
+
+    <!-- 舊瀏覽器 fallback（不支援 media query on <link>） -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-light.png" />
+
+    <!-- Apple Touch Icon (iOS 主畫面) -->
+    <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192-light.png" />
+    <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512-light.png" />
   </head>
   <body>
     <div id="root"></div>

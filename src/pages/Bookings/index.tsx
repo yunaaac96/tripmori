@@ -159,20 +159,21 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
               </div>
             </div>
 
-            {/* 費用 + 訂單 + PIN */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
-              <div style={{ background: C.cream, borderRadius: 12, padding: '7px 8px' }}>
+            {/* 費用 + PIN */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
+              <div style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
                 <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>每人分攤</p>
-                <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {h.costPerPerson.toLocaleString()}</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {h.costPerPerson.toLocaleString()}</p>
               </div>
-              <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 8px' }}>
-                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
-                <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
-              </div>
-              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 8px' }}>
+              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
                 <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
                 <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
               </div>
+            </div>
+            {/* 訂單編號（獨立一排） */}
+            <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <p style={{ fontSize: 9, color: C.barkLight, margin: 0, flexShrink: 0, marginRight: 8 }}>訂單編號</p>
+              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 0.5 }}>{h.confirmCode}</p>
             </div>
 
             {h.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '4px 0 6px' }}>💡 {h.notes}</p>}
@@ -242,7 +243,7 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
                 <img
                   src={QR_SRC}
                   alt="OTS QR Code"
-                  style={{ width: 200, height: 200, imageRendering: 'pixelated' }}
+                  style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block', margin: '0 auto' }}
                   onError={() => setQrErr(true)}
                 />
               ) : (
