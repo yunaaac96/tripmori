@@ -1,137 +1,62 @@
 import { useEffect, useState } from 'react';
-import { db, auth } from './config/firebase'; // 確保這條路徑正確
-import { collection, getDocs } from 'firebase/firestore'; // 根據需要引入
-import { signInAnonymously } from 'firebase/auth'; // 根據需要引入
-import DaySelector from './components/DaySelector';
-import EventCard from './components/EventCard';
-import WeatherCard from './components/WeatherCard';
-import TabBar from './components/TabBar';
-import { TripEvent, DayOption } from './types/index'; // 確保路徑與型別定義正確
-
-// 引入 Asset
-import heroImage from './assets/hero.png'; 
-
+import { db, auth } from './config/firebase';
+import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { signInAnonymously } from 'firebase/auth';
+import BottomNav from './components/layout/BottomNav';
+import SchedulePage from './pages/Schedule/index';
+import BookingsPage from './pages/Bookings/index';
+import ExpensePage from './pages/Expense/index';
+import JournalPage from './pages/Journal/index';
+import PlanningPage from './pages/Planning/index';
+import MembersPage from './pages/Members/index';
+export const TRIP_ID = "74pfE7RXyEIusEdRV0rZ";
+export const C = { cream: '#F7F4EB', creamDark: '#EDE8D5', sage: '#8FAF7E', sageDark: '#6A8F5C', sageLight: '#B5CFA7', earth: '#C4956A', bark: '#6B5C4E', barkLight: '#8C7B6E', sky: '#A8CADF', blush: '#E8B4B8', honey: '#E8C96A', shadow: '4px 4px 0px #D6D0BE', shadowSm: '3px 3px 0px #D6D0BE' };
+export const FONT = "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif";
+export const cardStyle: React.CSSProperties = { background: 'white', borderRadius: 20, padding: '14px 16px', boxShadow: C.shadow, marginBottom: 10 };
+export const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: C.cream, fontSize: 14, color: C.bark, outline: 'none', fontFamily: FONT, boxSizing: 'border-box' };
+export const btnPrimary = (color = C.sage): React.CSSProperties => ({ background: color, color: 'white', border: 'none', borderRadius: 14, padding: '12px 24px', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: C.shadowSm, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 });
+export const CATEGORY_MAP: Record<string, { label: string; bg: string; text: string; emoji: string }> = { attraction: { label: '景點', bg: '#E0F0D8', text: '#4A7A35', emoji: '🌿' }, food: { label: '美食', bg: '#FFF2CC', text: '#9A7200', emoji: '🍜' }, transport: { label: '交通', bg: '#D8EDF8', text: '#2A6A9A', emoji: '🚌' }, hotel: { label: '住宿', bg: '#FAE0E0', text: '#9A3A3A', emoji: '🏨' } };
+export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; bg: string; label: string }> = { transport: { emoji: '🚌', bg: '#D8EDF8', label: '交通' }, food: { emoji: '🍜', bg: '#FFF2CC', label: '美食' }, attraction: { emoji: '🎟', bg: '#E0F0D8', label: '景點' }, shopping: { emoji: '🛍', bg: '#FAE0E0', label: '購物' }, hotel: { emoji: '🏨', bg: '#F0E8FF', label: '住宿' }, other: { emoji: '📦', bg: '#F0F0F0', label: '其他' } };
+export const JPY_TO_TWD = 0.22;
+export const EMPTY_EVENT_FORM = { title: '', startTime: '', endTime: '', category: 'attraction', location: '', notes: '', mapUrl: '', cost: '', currency: 'JPY' };
 function App() {
-  const [events, setEvents] = useState<TripEvent[]>([]);
-  const [activeDay, setActiveDay] = useState("2026-04-23"); // 設為行程第一天
-  const [activeTab, setActiveTab] = useState("行程");
+  const [events, setEvents] = useState<any[]>([]);
+  const [members, setMembers] = useState<any[]>([]);
+  const [bookings, setBookings] = useState<any[]>([]);
+  const [expenses, setExpenses] = useState<any[]>([]);
+  const [journals, setJournals] = useState<any[]>([]);
+  const [lists, setLists] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState('行程');
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
-    // 🎯 這裡填入你之前編寫的 Firebase fetchData 邏輯
-    // 務必保留 setLoading(true) 和 setLoading(false)
-    const fetchData = async () => {
+    let unsubs: any[] = [];
+    const init = async () => {
       try {
         setLoading(true);
-        console.log("正在從 Firebase 抓取資料...");
-        
-        // --- 你的 Firebase 邏輯開始 ---
-        // (例如: signInAnonymously, getDocs 等)
-        // 抓取完成後使用 setEvents(data)
-        // --- 你的 Firebase 邏輯結束 ---
-
-        // 模擬延遲 (測試 UI 用，接好資料後請刪除)
-        await new Promise(resolve => setTimeout(resolve, 1000)); 
-        setLoading(false); 
-      } catch (error) {
-        console.error("Firebase 讀取失敗:", error);
+        await signInAnonymously(auth);
+        const tripRef = doc(db, 'trips', TRIP_ID);
+        const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [['events', setEvents], ['members', setMembers], ['bookings', setBookings], ['expenses', setExpenses], ['journals', setJournals], ['lists', setLists]];
+        unsubs = cols.map(([col, setter]) => onSnapshot(collection(tripRef, col), snap => { setter(snap.docs.map(d => ({ id: d.id, ...d.data() }))); }));
         setLoading(false);
-      }
+      } catch (err) { console.error(err); setLoading(false); }
     };
-
-    fetchData();
+    init();
+    return () => unsubs.forEach(u => u());
   }, []);
-
-  // 根據模板定義的日期選項
-  const dayOptions: DayOption[] = [
-    { date: "2026-04-23", label: "4/23", week: "四" },
-    { date: "2026-04-24", label: "4/24", week: "五" },
-    { date: "2026-04-25", label: "4/25", week: "六" },
-    { date: "2026-04-26", label: "4/26", week: "日" },
-  ];
-
-  // 根據 activeDay 過濾行程
-  const currentDayEvents = events.filter(event => event.date === activeDay);
-
-  if (loading) return (
-    <div className="min-h-screen flex items-center justify-center bg-[#FDFCF8] text-[#769370] font-bold">
-      沖繩手帳載入中...
-    </div>
-  );
-
+  if (loading) return (<div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F7F4EB', fontFamily: FONT }}><div style={{ fontSize: 48, marginBottom: 16 }}>🍃</div><p style={{ fontWeight: 700, color: '#8FAF7E', fontSize: 16 }}>同步資料中...</p></div>);
+  const firestore = { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc };
   return (
-    // 外層容器：確保在 PC 端置中，手機端滿版。背景色對齊模板。
-    <div className="min-h-screen bg-[#F1F1E6] flex justify-center items-start">
-      {/* 手機模擬容器：限制最大寬度，加上陰影，背景設為手帳米白色 */}
-      <div className="w-full max-w-md bg-[#FDFCF8] min-h-screen relative shadow-2xl overflow-y-auto no-scrollbar pb-32">
-        
-        {/* 1. 拍立得風格 Hero 區域 */}
-        <div className="aspect-[1.1] w-full p-4">
-          <img 
-            src={heroImage} 
-            alt="Okinawa View" 
-            className="w-full h-full object-cover rounded-sm shadow-xl border-4 border-white"
-          />
-        </div>
-
-        {/* 2. 標題區域 */}
-        <header className="pt-6 pb-4 px-6 text-center">
-          <span className="text-[10px] font-black tracking-[0.2em] text-[#769370]/50 uppercase">Okinawa Journal</span>
-          <h1 className="text-3xl font-black text-slate-950 mt-1">日本沖繩之旅 🗾</h1>
-        </header>
-
-        {/* 3. 日期選擇器 (需要更新其子組件 UI 以匹配模板) */}
-        <DaySelector days={dayOptions} activeDay={activeDay} onDayChange={setActiveDay} />
-
-        {/* 4. 天氣卡片 (需要更新其子組件 UI 以匹配模板) */}
-        <WeatherCard />
-
-        {/* 5. 行程列表區域 (Tab 切換) */}
-        {activeTab === "行程" && (
-          <main className="px-6 mt-10 relative">
-            {/* 時間軸垂直線 */}
-            <div className="absolute left-[1.9rem] top-2 bottom-0 w-[2px] bg-slate-100"></div>
-
-            <div className="space-y-10">
-              {currentDayEvents.length > 0 ? (
-                currentDayEvents.map((event) => (
-                  <div key={event.id} className="relative flex gap-6 z-10">
-                    {/* 時間與節點 */}
-                    <div className="flex flex-col items-center">
-                      <span className="text-[10px] font-bold text-slate-400 mb-1.5">{event.startTime}</span>
-                      <div className={`w-3.5 h-3.5 rounded-full border-4 border-white shadow-md ${
-                        event.category === 'food' ? 'bg-[#E9C46A]' : 
-                        event.category === 'transport' ? 'bg-[#90BECC]' : 'bg-[#769370]'
-                      }`}></div>
-                    </div>
-                    {/* 行程卡片 (需要更新其子組件 UI 以匹配模板) */}
-                    <div className="flex-1">
-                      <EventCard event={event} />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                // 無行程時的顯示
-                <div className="text-center py-20 opacity-30 font-bold italic text-sm text-slate-400 uppercase tracking-widest">
-                  今天休息一下 🌱
-                </div>
-              )}
-            </div>
-          </main>
-        )}
-
-        {/* 其他 Tab 的佔位 (根據需要自行擴充 MemberCard, BookingCard 等) */}
-        {activeTab !== "行程" && (
-          <main className="px-6 py-20 text-center text-slate-400 font-bold animate-pulse">
-            {activeTab} 內容載入中...
-          </main>
-        )}
-
-        {/* 6. 底部導覽列 (需要更新其子組件 UI 以匹配模板) */}
-        <TabBar activeTab={activeTab} onTabChange={setActiveTab} />
+    <div style={{ minHeight: '100vh', background: C.cream, backgroundImage: 'radial-gradient(circle, #C8C0AD 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
+      <div style={{ width: '100%', maxWidth: 430, background: C.cream, minHeight: '100vh', position: 'relative', paddingBottom: 80 }}>
+        {activeTab === '行程' && <SchedulePage events={events} members={members} firestore={firestore} />}
+        {activeTab === '預訂' && <BookingsPage bookings={bookings} />}
+        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
+        {activeTab === '日誌' && <JournalPage journals={journals} members={members} firestore={firestore} />}
+        {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}
+        {activeTab === '成員' && <MembersPage members={members} expenses={expenses} />}
+        <BottomNav activeTab={activeTab} onTabChange={setActiveTab} />
       </div>
     </div>
   );
 }
-
 export default App;

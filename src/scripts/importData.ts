@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════
+//  TripMori — 沖繩行程 Firestore 匯入資料
+//  使用方式：貼入 src/scripts/importData.ts 後執行一次即可
+// ═══════════════════════════════════════════════════════════════
+
 import { collection, addDoc, setDoc, doc, Timestamp } from 'firebase/firestore';
 import { db } from '../config/firebase';
 
