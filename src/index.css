@@ -8,6 +8,13 @@
   --font-sans: var(--sans);
 }
 :root {
+  /* TripMori theme tokens */
+  --tm-page-bg: #F7F4EB;
+  --tm-dot-color: #C8C0AD;
+  --tm-nav-bg: #FFFFFF;
+  --tm-nav-border: #EDE8D5;
+  --tm-card-bg: #FFFFFF;
+
   --text: #6b6375;
   --text-h: #08060d;
   --bg: #fff;
@@ -41,6 +48,13 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* TripMori dark theme */
+    --tm-page-bg: #1A2018;
+    --tm-dot-color: #263020;
+    --tm-nav-bg: #1E2716;
+    --tm-nav-border: #2E3828;
+    --tm-card-bg: #28321E;
+
     --text: #9ca3af;
     --text-h: #f3f4f6;
     --bg: #16171d;

@@ -22,8 +22,8 @@ export default function BottomNav({
     <div style={{
       position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 430,
-      height: 72, background: 'white',
-      borderTop: `2px solid ${C.creamDark}`,
+      height: 72, background: 'var(--tm-nav-bg)',
+      borderTop: '2px solid var(--tm-nav-border)',
       display: 'flex',
       zIndex: 100,
       boxShadow: '0 -2px 16px rgba(107,92,78,0.08)',

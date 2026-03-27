@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { db, auth } from './config/firebase';
-import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc } from 'firebase/firestore';
 import { signInAnonymously } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
@@ -54,10 +54,57 @@ function App() {
   // ── Active project state ──────────────────────────────────────
   const [activeProject, setActiveProjectState] = useState<StoredProject | null>(() => {
     ensureDefaultProject();                        // always register default trip
+    // Check for ?visit=TRIP_ID URL param (visitor auto-join via share link)
+    const params = new URLSearchParams(window.location.search);
+    const visitId = params.get('visit');
+    if (visitId) {
+      const existing = loadProjects().find(p => p.id === visitId);
+      if (existing) {
+        setActiveProject(existing.id);
+        return { ...existing, role: 'visitor' as TripRole };
+      }
+      // Will be resolved async in useEffect
+    }
     const id = getActiveProject();
     if (!id) return null;
     return loadProjects().find(p => p.id === id) || null;
   });
+
+  // ── Handle ?visit=TRIP_ID URL param (visitor auto-join) ────────
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tripId = params.get('visit');
+    if (!tripId || activeProject) return;
+    // Check localStorage first
+    const stored = loadProjects().find(p => p.id === tripId);
+    if (stored) {
+      setActiveProject(stored.id);
+      setActiveProjectState({ ...stored, role: 'visitor' });
+      return;
+    }
+    // Fetch trip metadata from Firestore
+    const lookup = async () => {
+      try {
+        await signInAnonymously(auth);
+        const tripSnap = await getDoc(doc(db, 'trips', tripId));
+        if (!tripSnap.exists()) return;
+        const data = tripSnap.data();
+        const p: StoredProject = {
+          id: tripId,
+          title: data.title || '旅行行程',
+          emoji: data.emoji || '✈️',
+          role: 'visitor',
+          collaboratorKey: data.collaboratorKey || '',
+          shareCode: data.shareCode || '',
+          addedAt: Date.now(),
+        };
+        saveProject(p);
+        setActiveProject(p.id);
+        setActiveProjectState(p);
+      } catch (e) { console.error(e); }
+    };
+    lookup();
+  }, []);
 
   // ── Trip data ─────────────────────────────────────────────────
   const [events, setEvents]     = useState<any[]>([]);
@@ -155,8 +202,8 @@ function App() {
   const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly };
 
   return (
-    <div style={{ minHeight: '100vh', background: C.cream, backgroundImage: 'radial-gradient(circle, #C8C0AD 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
-      <div style={{ width: '100%', maxWidth: 430, background: C.cream, minHeight: '100vh', position: 'relative', paddingBottom: 80 }}>
+    <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
+      <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', minHeight: '100vh', position: 'relative', paddingBottom: 80 }}>
 
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (

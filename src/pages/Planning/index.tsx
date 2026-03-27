@@ -7,6 +7,16 @@ const MEMBER_COLORS: Record<string, string> = {
 };
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
+const getDueStatus = (dueDate: string, checked: boolean): 'normal' | 'soon' | 'overdue' => {
+  if (!dueDate || checked) return 'normal';
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  const due = new Date(dueDate);
+  const diff = Math.floor((due.getTime() - today.getTime()) / 86400000);
+  if (diff < 0) return 'overdue';
+  if (diff <= 3) return 'soon';
+  return 'normal';
+};
+
 export default function PlanningPage({ lists, members, firestore }: any) {
   const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc } = firestore;
 
@@ -268,9 +278,12 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {filtered.map((item: any) => {
                         const color = MEMBER_COLORS[item.assignedTo] || C.creamDark;
+                        const status = getDueStatus(item.dueDate, item.checked);
+                        const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'white';
+                        const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : '1.5px solid transparent';
                         return (
                           <div key={item.id}
-                            style={{ background: 'white', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: item.checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                            style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: item.checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                             <div
                               onClick={() => toggleItem(item.id, item.checked)}
                               style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${item.checked ? C.sageDark : C.creamDark}`, background: item.checked ? C.sage : 'white', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
@@ -278,7 +291,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                             </div>
                             <div onClick={() => toggleItem(item.id, item.checked)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
                               <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: item.checked ? 'line-through' : 'none' }}>{item.text}</p>
-                              {item.dueDate && <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0' }}>截止：{item.dueDate}</p>}
+                              {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0' }}>{status === 'overdue' ? '⚠️ 已逾期：' : status === 'soon' ? '⏰ 即將到期：' : '截止：'}{item.dueDate}</p>}
                             </div>
                             <div style={{ background: color, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: C.bark, flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
                               {item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—')}

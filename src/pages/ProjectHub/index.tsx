@@ -2,9 +2,10 @@
  * ProjectHub — 多專案選擇 / 建立 / 加入 畫面
  * 進入 App 時如果沒有 active project 就顯示此頁。
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
 import { collection, doc, getDoc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
+import { GoogleAuthProvider, signInWithPopup, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
@@ -81,13 +82,33 @@ const ROLE_LABEL: Record<TripRole, { label: string; color: string; bg: string }>
   visitor: { label: '訪客',   color: '#2A6A9A', bg: '#D8EDF8' },
 };
 
-type View = 'hub' | 'create' | 'join-collab' | 'join-share';
+type View = 'hub' | 'create' | 'join-collab';
+
+const googleProvider = new GoogleAuthProvider();
+
+const signInWithGoogle = async (): Promise<User | null> => {
+  try {
+    const result = await signInWithPopup(auth, googleProvider);
+    return result.user;
+  } catch (e: any) {
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return null;
+    throw e;
+  }
+};
 
 export default function ProjectHub({ onEnterProject }: Props) {
   const projects = loadProjects();
   const [view, setView]       = useState<View>('hub');
   const [busy, setBusy]       = useState(false);
   const [error, setError]     = useState('');
+  const [googleUser, setGoogleUser] = useState<User | null>(null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      if (user && !user.isAnonymous) setGoogleUser(user);
+    });
+    return unsub;
+  }, []);
 
   // Create form
   const [newTitle, setNewTitle]       = useState('');
@@ -105,12 +126,19 @@ export default function ProjectHub({ onEnterProject }: Props) {
     if (!newTitle.trim() || !newStart) { setError('請填寫旅行名稱和出發日期'); return; }
     setBusy(true); setError('');
     try {
-      await auth.currentUser || await import('firebase/auth').then(m => m.signInAnonymously(auth));
+      // Require Google sign-in for owner
+      let user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+      if (!user) {
+        user = await signInWithGoogle();
+        if (!user) { setBusy(false); setError('請先登入 Google 帳號'); return; }
+        setGoogleUser(user);
+      }
       const ref = await addDoc(collection(db, 'trips'), {
         title: newTitle.trim(), emoji: newEmoji,
         startDate: newStart, endDate: newEnd || newStart,
         description: newDesc.trim(),
-        ownerUid: auth.currentUser?.uid || '',
+        ownerUid: user.uid,
+        ownerEmail: user.email || '',
         collaboratorKey: '', shareCode: '',
         createdAt: Timestamp.now(),
       });
@@ -132,6 +160,13 @@ export default function ProjectHub({ onEnterProject }: Props) {
     if (!key) { setError('請輸入協作金鑰'); return; }
     setBusy(true); setError('');
     try {
+      // Require Google sign-in for editor
+      let user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+      if (!user) {
+        user = await signInWithGoogle();
+        if (!user) { setBusy(false); setError('請先登入 Google 帳號'); return; }
+        setGoogleUser(user);
+      }
       // Key format: COLLAB-{tripId_prefix}-{suffix}
       // We need to search trips for a matching collaboratorKey
       const existing = projects.find(p => p.collaboratorKey === key);
@@ -154,25 +189,6 @@ export default function ProjectHub({ onEnterProject }: Props) {
       // Try to fetch trip directly if we find it in known projects
       setError('找不到符合的專案，請確認金鑰是否正確');
     } catch (e) { setError('加入失敗，請重試'); }
-    setBusy(false);
-  };
-
-  const handleJoinShare = async () => {
-    const code = keyInput.trim().toUpperCase();
-    if (!code) { setError('請輸入分享代碼'); return; }
-    setBusy(true); setError('');
-
-    const existing = projects.find(p => p.shareCode === code);
-    if (existing) { onEnterProject({ ...existing, role: 'visitor' }); setBusy(false); return; }
-
-    if (code === DEFAULT_SHARE) {
-      ensureDefaultProject();
-      const p = loadProjects().find(x => x.id === DEFAULT_TRIP_ID)!;
-      onEnterProject({ ...p, role: 'visitor' });
-      setBusy(false); return;
-    }
-
-    setError('找不到符合的專案，請確認分享代碼');
     setBusy(false);
   };
 
@@ -239,27 +255,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
     </Screen>
   );
 
-  if (view === 'join-share') return (
-    <Screen title="👁 輸入分享代碼" onBack={() => { setView('hub'); setError(''); setKeyInput(''); }}>
-      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-        <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>
-          輸入旅行分享代碼，以「訪客（唯讀）」身份瀏覽行程內容。
-        </p>
-        <input style={inputSt} placeholder="SHARE-XXXXXX-XXX"
-          value={keyInput} onChange={e => setKeyInput(e.target.value.toUpperCase())}
-          autoCapitalize="characters" />
-        {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
-        <button onClick={handleJoinShare} disabled={busy}
-          style={{ padding: 14, borderRadius: 14, border: 'none', background: C.sky.replace('A8', '5A'), color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: busy ? 0.6 : 1 }}>
-          {busy ? '驗證中...' : '👁 瀏覽'}
-        </button>
-      </div>
-    </Screen>
-  );
-
   // ── Main hub view ─────────────────────────────────────────────
   return (
-    <div style={{ minHeight: '100vh', background: C.cream, backgroundImage: 'radial-gradient(circle, #C8C0AD 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
+    <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 430, padding: '0 0 40px' }}>
         {/* Hero */}
         <div style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`, padding: '40px 24px 32px', textAlign: 'center' }}>
@@ -292,14 +290,28 @@ export default function ProjectHub({ onEnterProject }: Props) {
             </>
           )}
 
+          {/* Google login status */}
+          {googleUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 14, background: '#E0F0D8', marginBottom: 16 }}>
+              {googleUser.photoURL && <img src={googleUser.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} />}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
+                <p style={{ fontSize: 11, color: '#6A8F5C', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{googleUser.displayName || googleUser.email}</p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ padding: '10px 14px', borderRadius: 14, background: '#FFF8E1', marginBottom: 16, fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
+              💡 建立或編輯行程需要登入 Google 帳號，訪客可直接使用分享連結進入
+            </div>
+          )}
+
           {/* Actions */}
           <p style={{ fontSize: 13, fontWeight: 700, color: C.barkLight, margin: '0 0 10px', letterSpacing: 0.5 }}>
             {projects.length === 0 ? '開始規劃旅行' : '加入更多'}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <ActionBtn emoji="✈️" title="建立新旅行" sub="從零開始規劃行程，成為擁有者" color={C.earth} onClick={() => { setView('create'); setError(''); }} />
-            <ActionBtn emoji="🔑" title="輸入協作金鑰" sub="加入朋友的行程，可以共同編輯" color={C.sageDark} onClick={() => { setView('join-collab'); setError(''); setKeyInput(''); }} />
-            <ActionBtn emoji="👁" title="輸入分享代碼" sub="以訪客身份瀏覽行程（唯讀）" color={C.sky.replace('A8', '5A')} onClick={() => { setView('join-share'); setError(''); setKeyInput(''); }} />
+            <ActionBtn emoji="✈️" title="建立新旅行" sub="從零開始規劃行程，成為擁有者（需登入 Google）" color={C.earth} onClick={() => { setView('create'); setError(''); }} />
+            <ActionBtn emoji="🔑" title="輸入協作金鑰" sub="加入朋友的行程，可以共同編輯（需登入 Google）" color={C.sageDark} onClick={() => { setView('join-collab'); setError(''); setKeyInput(''); }} />
           </div>
         </div>
       </div>
@@ -311,7 +323,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
 
 function Screen({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
   return (
-    <div style={{ minHeight: '100vh', background: C.cream, backgroundImage: 'radial-gradient(circle, #C8C0AD 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
+    <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 430 }}>
         <div style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`, padding: '20px 20px 24px' }}>
           <button onClick={onBack} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, padding: '6px 12px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, marginBottom: 16 }}>‹ 返回</button>

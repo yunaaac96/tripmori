@@ -310,9 +310,11 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
             </div>
             <div style={{ background: '#D8EDF8', borderRadius: 10, padding: '8px 12px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, color: '#2A6A9A', margin: '0 0 3px' }}>分享代碼（訪客唯讀）</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 0.5, fontFamily: 'monospace' }}>{project.shareCode}</p>
-              <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此代碼，對方可以瀏覽行程（無法編輯）</p>
+              <p style={{ fontSize: 10, fontWeight: 700, color: '#2A6A9A', margin: '0 0 3px' }}>訪客連結（唯讀瀏覽）</p>
+              <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 0, fontFamily: 'monospace', wordBreak: 'break-all' }}>
+                {`${window.location.origin}/?visit=${project.id}`}
+              </p>
+              <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此連結，對方可直接瀏覽行程（無需輸入代碼）</p>
             </div>
           </div>
         </div>
