@@ -8,6 +8,22 @@
   --font-sans: var(--sans);
 }
 :root {
+  /* TripMori theme tokens — light mode defaults */
+  --tm-page-bg: #F7F4EB;
+  --tm-dot-color: #C8C0AD;
+  --tm-nav-bg: #FFFFFF;
+  --tm-nav-border: #EDE8D5;
+  --tm-card-bg: #FFFFFF;
+  --tm-card-border: transparent;
+  --tm-sheet-bg: #FFFFFF;
+  --tm-input-bg: #F7F4EB;
+  --tm-input-border: #E0D9C8;
+  --tm-cream: #F7F4EB;
+  --tm-cream-dark: #EDE8D5;
+  --tm-bark: #6B5C4E;
+  --tm-bark-light: #8C7B6E;
+  --tm-text-inv: #FFFFFF;
+
   --text: #6b6375;
   --text-h: #08060d;
   --bg: #fff;
@@ -41,6 +57,32 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
+    /* TripMori dark theme
+     * Palette: deep forest night — navy-green base, muted teal accents
+     * --tm-page-bg   : main page background (dark forest green-black)
+     * --tm-dot-color : dot pattern (subtle, barely visible)
+     * --tm-nav-bg    : bottom nav background
+     * --tm-nav-border: top border of nav
+     * --tm-card-bg   : card/sheet surface color
+     * --tm-text      : primary text
+     * --tm-text-sub  : secondary/muted text
+     * --tm-card-border: subtle card border
+     */
+    --tm-page-bg: #141C12;
+    --tm-dot-color: #1E2A1A;
+    --tm-nav-bg: #1A2418;
+    --tm-nav-border: #283422;
+    --tm-card-bg: #1F2B1C;
+    --tm-card-border: #2A3825;
+    --tm-sheet-bg: #243220;
+    --tm-input-bg: #1A2416;
+    --tm-input-border: #344830;
+    --tm-cream: #1A2018;
+    --tm-cream-dark: #243220;
+    --tm-bark: #D4C9BC;
+    --tm-bark-light: #A09080;
+    --tm-text-inv: #1A2018;
+
     --text: #9ca3af;
     --text-h: #f3f4f6;
     --bg: #16171d;

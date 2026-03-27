@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.ico', 'icons/*.png'],
+      includeAssets: ['favicon.svg', 'favicon.ico', 'icons/*.png'],
       manifest: {
         name: 'TripMori 旅行手帳',
         short_name: 'TripMori',
@@ -17,8 +17,15 @@ export default defineConfig({
         display: 'standalone',
         orientation: 'portrait',
         icons: [
-          { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
-          { src: '/icons/icon-512.png', sizes: '512x512', type: 'image/png' },
+          // Light mode icons (cream background)
+          { src: '/icons/icon-192-light.png', sizes: '192x192', type: 'image/png', purpose: 'any', media: '(prefers-color-scheme: light)' },
+          { src: '/icons/icon-512-light.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable', media: '(prefers-color-scheme: light)' },
+          // Dark mode icons (forest green background)
+          { src: '/icons/icon-192-dark.png', sizes: '192x192', type: 'image/png', purpose: 'any', media: '(prefers-color-scheme: dark)' },
+          { src: '/icons/icon-512-dark.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable', media: '(prefers-color-scheme: dark)' },
+          // Fallback (no media query) for Play Store / universal use
+          { src: '/icons/icon-192-light.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
+          { src: '/icons/icon-512-light.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
       workbox: {
