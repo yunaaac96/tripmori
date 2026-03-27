@@ -117,19 +117,7 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
             <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
             {/* 下半部 */}
             <div style={{ background: 'white', padding: '10px 18px 14px' }}>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
-                <div>
-                  <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>乘客</p>
-                  <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{f.passengers.join('、')}</p>
-                </div>
-                {f.costPerPerson && (
-                  <div>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>每人票價</p>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {f.costPerPerson.toLocaleString()}</p>
-                  </div>
-                )}
-              </div>
-              {f.notes && <p style={{ fontSize: 11, color: C.barkLight, margin: '8px 0 0', fontStyle: 'italic' }}>💡 {f.notes}</p>}
+              {f.notes && <p style={{ fontSize: 11, color: C.barkLight, margin: '0', fontStyle: 'italic' }}>💡 {f.notes}</p>}
             </div>
           </div>
         ))}
@@ -159,21 +147,12 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
               </div>
             </div>
 
-            {/* 費用 + PIN */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 6 }}>
-              <div style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
-                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>每人分攤</p>
-                <p style={{ fontSize: 13, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {h.costPerPerson.toLocaleString()}</p>
-              </div>
+            {/* PIN */}
+            <div style={{ marginBottom: 6 }}>
               <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
                 <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
                 <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
               </div>
-            </div>
-            {/* 訂單編號（獨立一排） */}
-            <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 12px', marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <p style={{ fontSize: 9, color: C.barkLight, margin: 0, flexShrink: 0, marginRight: 8 }}>訂單編號</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 0.5 }}>{h.confirmCode}</p>
             </div>
 
             {h.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '4px 0 6px' }}>💡 {h.notes}</p>}
