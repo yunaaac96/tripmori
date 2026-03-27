@@ -143,6 +143,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
   const openEdit = (event: any) => {
     setForm({
       title: event.title || '', startTime: event.startTime || '', endTime: event.endTime || '',
+      travelTime: event.travelTime || '',
       category: event.category || 'attraction', location: event.location || '',
       notes: event.notes || '', mapUrl: event.mapUrl || '',
       cost: event.cost ? String(event.cost) : '', currency: event.currency || 'JPY',
@@ -155,6 +156,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
     setSaving(true);
     const payload = {
       title: form.title, startTime: form.startTime, endTime: form.endTime || '',
+      travelTime: form.travelTime || '',
       category: form.category, location: form.location || '', notes: form.notes || '',
       mapUrl: form.mapUrl || '', cost: form.cost ? Number(form.cost) : 0,
       currency: form.currency, date: activeDay,
@@ -197,9 +199,21 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>行程名稱 *</label><input style={inputStyle} placeholder="例：美麗海水族館" value={form.title} onChange={e => set('title', e.target.value)} /></div>
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
-                <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>開始時間 *</label><input style={inputStyle} type="time" value={form.startTime} onChange={e => set('startTime', e.target.value)} /></div>
-                <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>結束時間</label><input style={inputStyle} type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} /></div>
+              {/* 時間欄：flex 取代 grid，避免 iOS time input overflow */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>開始時間 *</label>
+                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="time" value={form.startTime} onChange={e => set('startTime', e.target.value)} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>結束時間</label>
+                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} />
+                </div>
+              </div>
+              {/* 預計車程 */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>🚗 前往下一站預計車程（選填）</label>
+                <input style={inputStyle} placeholder="例：約 30 分鐘" value={form.travelTime} onChange={e => set('travelTime', e.target.value)} />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
@@ -318,7 +332,8 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
             const isLast = idx === dayEvents.length - 1;
             const mapUrl = getMapUrl(event);
             return (
-              <div key={event.id} style={{ display: 'flex', alignItems: 'flex-start', marginBottom: isLast ? 0 : 12, position: 'relative', zIndex: 1 }}>
+              <div key={event.id}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: event.travelTime ? 0 : (isLast ? 0 : 12), position: 'relative', zIndex: 1 }}>
                 {/* Time column */}
                 <div style={{ width: 50, flexShrink: 0, textAlign: 'right', paddingRight: 6, paddingTop: 14 }}>
                   <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1 }}>
@@ -350,6 +365,15 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
                     </button>
                   </div>
                 </div>
+              </div>
+              {/* Travel time connector between events */}
+              {event.travelTime && !isLast && (
+                <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
+                  <div style={{ background: '#FFF8E1', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
+                    🚗 {event.travelTime}
+                  </div>
+                </div>
+              )}
               </div>
             );
           })}

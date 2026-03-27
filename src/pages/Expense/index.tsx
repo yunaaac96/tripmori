@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { createWorker } from 'tesseract.js';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 
@@ -25,7 +26,10 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
   const [showSubItems, setShowSubItems] = useState(false);
   const [expandedExpense, setExpandedExpense] = useState<string | null>(null);
 
-  const descRef = useRef<HTMLInputElement>(null);
+  const descRef  = useRef<HTMLInputElement>(null);
+  const ocrRef   = useRef<HTMLInputElement>(null);
+  const [ocrState, setOcrState] = useState<'idle' | 'scanning' | 'done'>('idle');
+  const [ocrPreview, setOcrPreview] = useState<string | null>(null);
 
   // Delayed focus to prevent iOS zoom
   useEffect(() => {
@@ -36,6 +40,36 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
       return () => clearTimeout(t);
     }
   }, [showForm]);
+
+  // Parse OCR text — extract the largest number as amount, first text line as description
+  const parseReceiptText = (text: string) => {
+    const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
+    // Find all numbers ≥ 100 → likely prices (JPY amounts)
+    const nums = text.match(/[\d,]+/g)
+      ?.map(n => parseInt(n.replace(/,/g, ''), 10))
+      .filter(n => n >= 100) ?? [];
+    const amount = nums.length > 0 ? String(Math.max(...nums)) : '';
+    // First meaningful line as description
+    const desc = lines.find(l => /[\u3040-\u9FFF\w]{2,}/.test(l) && !/^\d/.test(l)) || '';
+    return { amount, description: desc };
+  };
+
+  const handleOCR = async (file: File) => {
+    setOcrState('scanning');
+    setOcrPreview(URL.createObjectURL(file));
+    try {
+      const worker = await createWorker(['jpn', 'eng']);
+      const { data: { text } } = await worker.recognize(file);
+      await worker.terminate();
+      const parsed = parseReceiptText(text);
+      if (parsed.amount)      set('amount', parsed.amount);
+      if (parsed.description) set('description', parsed.description);
+      setOcrState('done');
+    } catch (e) {
+      console.error('OCR 失敗:', e);
+      setOcrState('idle');
+    }
+  };
 
   const memberNames: string[] = members.length > 0 ? members.map((m: any) => m.name) : ['uu', 'brian'];
 
@@ -131,6 +165,8 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
     setShowForm(false);
     setShowSubItems(false);
     setForm({ ...EMPTY_FORM });
+    setOcrState('idle');
+    setOcrPreview(null);
   };
 
   const handleDelete = async (id: string) => {
@@ -179,11 +215,36 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>💰 新增支出</p>
-              <button onClick={() => { setShowForm(false); setShowSubItems(false); setForm({ ...EMPTY_FORM }); }}
+              <button onClick={() => { setShowForm(false); setShowSubItems(false); setForm({ ...EMPTY_FORM }); setOcrState('idle'); setOcrPreview(null); }}
                 style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+              {/* OCR 拍照識別發票 */}
+              <div>
+                <input ref={ocrRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                  onChange={e => { if (e.target.files?.[0]) handleOCR(e.target.files[0]); }} />
+                <button
+                  onClick={() => ocrRef.current?.click()}
+                  disabled={ocrState === 'scanning'}
+                  style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${ocrState === 'done' ? C.sageDark : C.creamDark}`, background: ocrState === 'done' ? '#EAF3DE' : C.cream, color: ocrState === 'done' ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: ocrState === 'scanning' ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: ocrState === 'scanning' ? 0.7 : 1 }}>
+                  {ocrState === 'scanning' ? (
+                    <><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>🔄</span> 識別中，請稍候...</>
+                  ) : ocrState === 'done' ? (
+                    <>✅ 識別完成，已自動填入</>
+                  ) : (
+                    <>📷 拍照識別發票（自動填入）</>
+                  )}
+                </button>
+                {ocrPreview && ocrState !== 'scanning' && (
+                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <img src={ocrPreview} alt="發票預覽" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}` }} />
+                    <button onClick={() => { setOcrPreview(null); setOcrState('idle'); }}
+                      style={{ fontSize: 11, color: C.barkLight, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>✕ 清除</button>
+                  </div>
+                )}
+              </div>
 
               {/* Description */}
               <div>
@@ -381,7 +442,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
 
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                <button onClick={() => { setShowForm(false); setShowSubItems(false); setForm({ ...EMPTY_FORM }); }}
+                <button onClick={() => { setShowForm(false); setShowSubItems(false); setForm({ ...EMPTY_FORM }); setOcrState('idle'); setOcrPreview(null); }}
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
                   取消
                 </button>

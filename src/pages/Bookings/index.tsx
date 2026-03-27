@@ -147,9 +147,13 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
               </div>
             </div>
 
-            {/* PIN */}
-            <div style={{ marginBottom: 6 }}>
-              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
+            {/* 訂單編號 + PIN */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, marginBottom: 6 }}>
+              <div style={{ background: '#EEF2FF', borderRadius: 12, padding: '7px 10px' }}>
+                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
+                <p style={{ fontSize: 13, fontWeight: 700, color: '#3A4A8A', margin: '2px 0 0', letterSpacing: 0.3, wordBreak: 'break-all' }}>{h.confirmCode}</p>
+              </div>
+              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px', minWidth: 72 }}>
                 <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
                 <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
               </div>
