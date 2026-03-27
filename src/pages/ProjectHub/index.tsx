@@ -260,10 +260,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 430, padding: '0 0 40px' }}>
         {/* Hero */}
-        <div style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`, padding: '40px 24px 32px', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 8 }}>🍃</div>
-          <h1 style={{ fontSize: 26, fontWeight: 900, color: 'white', margin: '0 0 6px', fontFamily: FONT }}>TripMori</h1>
-          <p style={{ fontSize: 13, color: 'rgba(255,255,255,0.85)', margin: 0 }}>你的旅行規劃小幫手</p>
+        <div style={{ background: 'linear-gradient(150deg, #EDF5F4 0%, #F5EDE6 100%)', padding: '44px 24px 32px', textAlign: 'center', borderBottom: '1px solid #E0D9CF' }}>
+          <img src="/logo.png" alt="TripMori" style={{ width: '72%', maxWidth: 260, display: 'block', margin: '0 auto 12px' }} />
+          <p style={{ fontSize: 13, color: '#8B7565', margin: 0, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3 }}>你的旅行規劃小幫手</p>
         </div>
 
         <div style={{ padding: '24px 20px' }}>
@@ -325,9 +324,9 @@ function Screen({ title, onBack, children }: { title: string; onBack: () => void
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 430 }}>
-        <div style={{ background: `linear-gradient(135deg, ${C.sage}, ${C.sageDark})`, padding: '20px 20px 24px' }}>
-          <button onClick={onBack} style={{ background: 'rgba(255,255,255,0.2)', border: 'none', borderRadius: 10, padding: '6px 12px', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, marginBottom: 16 }}>‹ 返回</button>
-          <h2 style={{ fontSize: 20, fontWeight: 900, color: 'white', margin: 0, fontFamily: FONT }}>{title}</h2>
+        <div style={{ background: 'linear-gradient(150deg, #EDF5F4 0%, #F5EDE6 100%)', padding: '20px 20px 24px', borderBottom: '1px solid #E0D9CF' }}>
+          <button onClick={onBack} style={{ background: 'rgba(28,52,97,0.08)', border: 'none', borderRadius: 10, padding: '6px 12px', color: '#1C3461', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, marginBottom: 16 }}>‹ 返回</button>
+          <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1C3461', margin: 0, fontFamily: FONT }}>{title}</h2>
         </div>
         <div style={{ padding: '24px 20px' }}>{children}</div>
       </div>
