@@ -285,27 +285,25 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
           <div style={{ flex: 1, background: 'linear-gradient(135deg,#D0E8F5,#E8F4E8)', borderRadius: 18, padding: '10px 14px', boxShadow: C.shadowSm }}>
             {currentWeather ? (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
-                <span style={{ fontSize: 22 }}>{currentWeather.emoji}</span>
-                <div style={{ flex: 1 }}>
-                  <p style={{ fontSize: 10, color: '#6A8F5C', fontWeight: 600, margin: '0 0 2px' }}>{weatherSubtitle}</p>
-                  <p style={{ fontSize: 13, color: '#3A5A3A', fontWeight: 700, margin: '0 0 2px' }}>
-                    {currentWeather.desc} · {currentWeather.max}°/{currentWeather.min}°C
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{currentWeather.emoji}</span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 10, color: '#6A8F5C', fontWeight: 600, margin: '0 0 3px' }}>{weatherSubtitle}</p>
+                  <p style={{ fontSize: 14, color: '#3A5A3A', fontWeight: 700, margin: '0 0 3px' }}>
+                    {currentWeather.desc} · {currentWeather.max}°<span style={{ fontWeight: 500, fontSize: 12 }}>/{currentWeather.min}°C</span>
                   </p>
-                  <p style={{ fontSize: 10, color: '#3A5A3A', margin: '0 0 2px' }}>
-                    降雨 {currentWeather.precipProb}%
+                  <p style={{ fontSize: 11, color: '#4A7A5A', margin: '0 0 2px' }}>
+                    ☂️ 降雨機率 {currentWeather.precipProb}%
                   </p>
-                  <p style={{ fontSize: 10, color: '#5A7A5A', margin: 0, fontStyle: 'italic' }}>
-                    穿搭：{currentWeather.outfit}
+                  <p style={{ fontSize: 11, color: '#5A7A5A', margin: 0 }}>
+                    👗 {currentWeather.outfit}
                   </p>
                 </div>
               </div>
             ) : (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <span style={{ fontSize: 22 }}>⛅</span>
-                <div>
-                  <p style={{ fontSize: 11, color: '#6A8F5C', fontWeight: 600, margin: 0 }}>載入天氣中...</p>
-                </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                <span style={{ fontSize: 36, lineHeight: 1 }}>⛅</span>
+                <p style={{ fontSize: 11, color: '#6A8F5C', fontWeight: 600, margin: 0 }}>載入天氣中...</p>
               </div>
             )}
           </div>

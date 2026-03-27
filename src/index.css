@@ -48,12 +48,22 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* TripMori dark theme */
-    --tm-page-bg: #1A2018;
-    --tm-dot-color: #263020;
-    --tm-nav-bg: #1E2716;
-    --tm-nav-border: #2E3828;
-    --tm-card-bg: #28321E;
+    /* TripMori dark theme
+     * Palette: deep forest night — navy-green base, muted teal accents
+     * --tm-page-bg   : main page background (dark forest green-black)
+     * --tm-dot-color : dot pattern (subtle, barely visible)
+     * --tm-nav-bg    : bottom nav background
+     * --tm-nav-border: top border of nav
+     * --tm-card-bg   : card/sheet surface color
+     * --tm-text      : primary text
+     * --tm-text-sub  : secondary/muted text
+     * --tm-card-border: subtle card border
+     */
+    --tm-page-bg: #141C12;
+    --tm-dot-color: #1E2A1A;
+    --tm-nav-bg: #1A2418;
+    --tm-nav-border: #283422;
+    --tm-card-bg: #1F2B1C;
 
     --text: #9ca3af;
     --text-h: #f3f4f6;

@@ -126,13 +126,16 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
         <SectionTitle>🏨 住宿安排</SectionTitle>
         {HOTELS.map(h => (
           <div key={h.id} style={{ ...cardStyle }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
-              <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
-              <div style={{ flex: 1 }}>
-                <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{h.name}</p>
-                <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameJa}</p>
-                <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
+                <div style={{ width: 40, height: 40, borderRadius: 14, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🏨</div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, lineHeight: 1.3 }}>{h.name}</p>
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameJa}</p>
+                </div>
               </div>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>📍 {h.address}</p>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>🛏 {h.roomType}</p>
             </div>
 
             {/* Check-in / Check-out */}

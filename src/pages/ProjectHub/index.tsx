@@ -120,7 +120,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
   // Join form
   const [keyInput, setKeyInput]       = useState('');
 
-  const EMOJI_OPTS = ['✈️','🌸','🏝','🗾','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡'];
+  const EMOJI_OPTS = ['✈️','🌸','🏝','🗾','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡','🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸','⛷️','🏂','❄️','🌨️','🎿','🗻','🏕️','🚂','🎪','🎭','🌅','🌃','🏖️','🎯'];
 
   const handleCreate = async () => {
     if (!newTitle.trim() || !newStart) { setError('請填寫旅行名稱和出發日期'); return; }
@@ -129,8 +129,14 @@ export default function ProjectHub({ onEnterProject }: Props) {
       // Require Google sign-in for owner
       let user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
       if (!user) {
-        user = await signInWithGoogle();
-        if (!user) { setBusy(false); setError('請先登入 Google 帳號'); return; }
+        try {
+          user = await signInWithGoogle();
+        } catch (e: any) {
+          setBusy(false);
+          setError('Google 登入失敗（' + (e.message || e.code || '未知錯誤') + '）。請先點上方登入按鈕完成登入後再試。');
+          return;
+        }
+        if (!user) { setBusy(false); setError('請登入 Google 帳號後再建立旅行（點上方登入按鈕）'); return; }
         setGoogleUser(user);
       }
       const ref = await addDoc(collection(db, 'trips'), {
@@ -200,10 +206,10 @@ export default function ProjectHub({ onEnterProject }: Props) {
         {/* Emoji */}
         <div>
           <label style={labelStyle}>旅行表情</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
             {EMOJI_OPTS.map(e => (
               <button key={e} onClick={() => setNewEmoji(e)}
-                style={{ width: 40, height: 40, fontSize: 22, borderRadius: 12, border: `2px solid ${newEmoji === e ? C.sageDark : C.creamDark}`, background: newEmoji === e ? C.sageLight : 'white', cursor: 'pointer' }}>
+                style={{ width: 40, height: 40, fontSize: 22, borderRadius: 12, border: `2px solid ${newEmoji === e ? C.sageDark : C.creamDark}`, background: newEmoji === e ? C.sageLight : 'white', cursor: 'pointer', flexShrink: 0 }}>
                 {e}
               </button>
             ))}
@@ -266,6 +272,31 @@ export default function ProjectHub({ onEnterProject }: Props) {
         </div>
 
         <div style={{ padding: '24px 20px' }}>
+
+          {/* Google sign-in / user status — shown after hero, before MY TRIPS */}
+          {googleUser ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 16, background: '#E0F0D8', marginBottom: 20, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
+              {googleUser.photoURL && (
+                <img src={googleUser.photoURL} alt="" style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid #A0CC88', flexShrink: 0 }} />
+              )}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
+                <p style={{ fontSize: 12, color: '#6A8F5C', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{googleUser.displayName || googleUser.email}</p>
+              </div>
+            </div>
+          ) : (
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ padding: '10px 14px', borderRadius: 12, background: '#FFF8E1', marginBottom: 10, fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
+                💡 建立或編輯行程需要登入 Google 帳號，訪客可直接使用分享連結進入
+              </div>
+              <button onClick={async () => { const u = await signInWithGoogle(); if (u) setGoogleUser(u); }}
+                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'white', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm }}>
+                <span style={{ fontSize: 18 }}>🔐</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#1C3461' }}>使用 Google 帳號登入</span>
+              </button>
+            </div>
+          )}
+
           {/* My projects */}
           {projects.length > 0 && (
             <>
@@ -287,21 +318,6 @@ export default function ProjectHub({ onEnterProject }: Props) {
                 })}
               </div>
             </>
-          )}
-
-          {/* Google login status */}
-          {googleUser ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 14, background: '#E0F0D8', marginBottom: 16 }}>
-              {googleUser.photoURL && <img src={googleUser.photoURL} alt="" style={{ width: 28, height: 28, borderRadius: '50%' }} />}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
-                <p style={{ fontSize: 11, color: '#6A8F5C', margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{googleUser.displayName || googleUser.email}</p>
-              </div>
-            </div>
-          ) : (
-            <div style={{ padding: '10px 14px', borderRadius: 14, background: '#FFF8E1', marginBottom: 16, fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
-              💡 建立或編輯行程需要登入 Google 帳號，訪客可直接使用分享連結進入
-            </div>
           )}
 
           {/* Actions */}

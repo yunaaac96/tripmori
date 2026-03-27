@@ -14,9 +14,10 @@ export default function JournalPage({ journals, members, journalComments, firest
   const fileRef    = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
-  // Comments
-  const [commentText, setCommentText] = useState('');
-  const [savingComment, setSavingComment] = useState(false);
+  // Per-journal comment state
+  const [expandedJournal, setExpandedJournal] = useState<string | null>(null);
+  const [journalCommentInputs, setJournalCommentInputs] = useState<Record<string, string>>({});
+  const [savingComment, setSavingComment] = useState<string | null>(null);
   const [currentUser] = useState<string>(() => localStorage.getItem(LS_USER_KEY) || '');
 
   const memberNames: string[] = members.length > 0 ? members.map((m: any) => m.name) : ['uu', 'brian'];
@@ -71,26 +72,30 @@ export default function JournalPage({ journals, members, journalComments, firest
     setForm({ content: '', date: '', author: '', photos: [] });
   };
 
-  // Comments
-  const sortedComments = [...(journalComments || [])].sort((a: any, b: any) => {
-    const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
-    const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
-    return ta - tb;
-  });
+  // Per-journal comment helpers
+  const getCommentsFor = (journalId: string) =>
+    [...(journalComments || [])]
+      .filter((c: any) => c.journalId === journalId)
+      .sort((a: any, b: any) => {
+        const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
+        const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
+        return ta - tb;
+      });
 
-  const handleAddComment = async () => {
-    const text = commentText.trim();
+  const handleAddComment = async (journalId: string) => {
+    const text = (journalCommentInputs[journalId] || '').trim();
     if (!text || !currentUser) return;
-    setSavingComment(true);
+    setSavingComment(journalId);
     try {
       await addDoc(collection(db, 'trips', TRIP_ID, 'journalComments'), {
+        journalId,
         authorName: currentUser,
         content: text,
         createdAt: Timestamp.now(),
       });
-      setCommentText('');
+      setJournalCommentInputs(prev => ({ ...prev, [journalId]: '' }));
     } catch (e) { console.error(e); }
-    setSavingComment(false);
+    setSavingComment(null);
   };
 
   const handleDeleteComment = async (id: string) => {
@@ -185,95 +190,115 @@ export default function JournalPage({ journals, members, journalComments, firest
           </div>
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
-            {[...journals].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((j: any) => (
-              <div key={j.id} style={cardStyle}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.blush, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: C.bark }}>
-                      {j.authorName?.[0]?.toUpperCase()}
-                    </div>
-                    <div>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{j.authorName}</p>
-                      <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{j.date}</p>
-                    </div>
-                  </div>
-                  <button onClick={() => handleDelete(j.id)}
-                    style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑</button>
-                </div>
-                <p style={{ fontSize: 14, color: C.bark, lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>{j.content}</p>
-                {j.photos?.length > 0 && (
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {j.photos.map((url: string, i: number) => (
-                      <img key={i} src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10 }} />
-                    ))}
-                  </div>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
+            {[...journals].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((j: any) => {
+              const comments = getCommentsFor(j.id);
+              const isExpanded = expandedJournal === j.id;
+              const commentInput = journalCommentInputs[j.id] || '';
 
-        {/* ── 留言板 ── */}
-        <div style={{ background: 'white', borderRadius: 20, padding: '16px', boxShadow: C.shadow }}>
-          <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            💬 旅伴留言板
-            <span style={{ fontSize: 11, fontWeight: 500, color: C.barkLight }}>({sortedComments.length} 則)</span>
-          </p>
-
-          {sortedComments.length === 0 ? (
-            <p style={{ fontSize: 12, color: C.barkLight, textAlign: 'center', padding: '12px 0', fontStyle: 'italic' }}>還沒有留言，來說說你的感受吧！</p>
-          ) : (
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
-              {sortedComments.map((c: any) => {
-                const isOwn = c.authorName === currentUser;
-                const ts = c.createdAt?.toDate ? c.createdAt.toDate() : null;
-                const timeStr = ts ? `${ts.getMonth()+1}/${ts.getDate()} ${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}` : '';
-                return (
-                  <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.blush, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, color: C.bark, flexShrink: 0, marginTop: 2 }}>
-                      {c.authorName?.[0]?.toUpperCase()}
-                    </div>
-                    <div style={{ flex: 1, background: C.cream, borderRadius: '4px 16px 16px 16px', padding: '8px 12px' }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: C.bark }}>{c.authorName}</span>
-                        <span style={{ fontSize: 10, color: C.barkLight }}>{timeStr}</span>
+              return (
+                <div key={j.id} style={{ ...cardStyle, padding: 0, overflow: 'hidden' }}>
+                  {/* Card body */}
+                  <div style={{ padding: '16px 16px 12px' }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.blush, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: C.bark }}>
+                          {j.authorName?.[0]?.toUpperCase()}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{j.authorName}</p>
+                          <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{j.date}</p>
+                        </div>
                       </div>
-                      <p style={{ fontSize: 13, color: C.bark, margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.content}</p>
+                      <button onClick={() => handleDelete(j.id)}
+                        style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑</button>
                     </div>
-                    {isOwn && (
-                      <button onClick={() => handleDeleteComment(c.id)}
-                        style={{ width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>✕</button>
+                    <p style={{ fontSize: 14, color: C.bark, lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>{j.content}</p>
+                    {j.photos?.length > 0 && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
+                        {j.photos.map((url: string, i: number) => (
+                          <img key={i} src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10 }} />
+                        ))}
+                      </div>
                     )}
                   </div>
-                );
-              })}
-            </div>
-          )}
 
-          {/* Comment input */}
-          {currentUser ? (
-            <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ flex: 1, background: C.cream, borderRadius: 14, padding: '8px 12px' }}>
-                <textarea
-                  value={commentText}
-                  onChange={e => setCommentText(e.target.value)}
-                  placeholder={`${currentUser} 說...`}
-                  rows={2}
-                  style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: 14, fontFamily: FONT, color: C.bark, resize: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
-                  onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(); } }}
-                />
-              </div>
-              <button onClick={handleAddComment} disabled={savingComment || !commentText.trim()}
-                style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, opacity: commentText.trim() ? 1 : 0.5, flexShrink: 0 }}>
-                {savingComment ? '...' : '送出'}
-              </button>
-            </div>
-          ) : (
-            <p style={{ fontSize: 12, color: C.barkLight, textAlign: 'center', fontStyle: 'italic', margin: 0 }}>
-              請先在「成員」頁選擇身份後即可留言
-            </p>
-          )}
-        </div>
+                  {/* Comment toggle button */}
+                  <div style={{ borderTop: `1px solid ${C.creamDark}`, padding: '0' }}>
+                    <button
+                      onClick={() => setExpandedJournal(isExpanded ? null : j.id)}
+                      style={{ width: '100%', padding: '10px 16px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 13, color: C.barkLight, fontWeight: 600 }}
+                    >
+                      <span>💬</span>
+                      <span>{comments.length} 則回應</span>
+                      <span style={{ marginLeft: 'auto', fontSize: 11, color: C.barkLight }}>{isExpanded ? '▲' : '▼'}</span>
+                    </button>
+                  </div>
+
+                  {/* Expanded comment section */}
+                  {isExpanded && (
+                    <div style={{ background: '#FAF7F2', borderRadius: '0 0 16px 16px', padding: '12px 16px 16px' }}>
+                      {comments.length === 0 ? (
+                        <p style={{ fontSize: 12, color: C.barkLight, textAlign: 'center', padding: '8px 0 12px', fontStyle: 'italic', margin: 0 }}>
+                          還沒有回應，來說說你的感受吧！
+                        </p>
+                      ) : (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
+                          {comments.map((c: any) => {
+                            const isOwn = c.authorName === currentUser;
+                            const ts = c.createdAt?.toDate ? c.createdAt.toDate() : null;
+                            const timeStr = ts ? `${ts.getMonth()+1}/${ts.getDate()} ${String(ts.getHours()).padStart(2,'0')}:${String(ts.getMinutes()).padStart(2,'0')}` : '';
+                            return (
+                              <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+                                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.blush, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, color: C.bark, flexShrink: 0, marginTop: 2 }}>
+                                  {c.authorName?.[0]?.toUpperCase()}
+                                </div>
+                                <div style={{ flex: 1, background: C.cream, borderRadius: '4px 16px 16px 16px', padding: '8px 12px' }}>
+                                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                                    <span style={{ fontSize: 11, fontWeight: 700, color: C.bark }}>{c.authorName}</span>
+                                    <span style={{ fontSize: 10, color: C.barkLight }}>{timeStr}</span>
+                                  </div>
+                                  <p style={{ fontSize: 13, color: C.bark, margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{c.content}</p>
+                                </div>
+                                {isOwn && (
+                                  <button onClick={() => handleDeleteComment(c.id)}
+                                    style={{ width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>✕</button>
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {/* Comment input */}
+                      {currentUser ? (
+                        <div style={{ display: 'flex', gap: 8, alignItems: 'flex-end' }}>
+                          <div style={{ flex: 1, background: C.cream, borderRadius: 14, padding: '8px 12px' }}>
+                            <textarea
+                              value={commentInput}
+                              onChange={e => setJournalCommentInputs(prev => ({ ...prev, [j.id]: e.target.value }))}
+                              placeholder={`${currentUser} 說...`}
+                              rows={2}
+                              style={{ width: '100%', border: 'none', outline: 'none', background: 'transparent', fontSize: 14, fontFamily: FONT, color: C.bark, resize: 'none', lineHeight: 1.5, boxSizing: 'border-box' }}
+                              onKeyDown={e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleAddComment(j.id); } }}
+                            />
+                          </div>
+                          <button onClick={() => handleAddComment(j.id)} disabled={savingComment === j.id || !commentInput.trim()}
+                            style={{ padding: '10px 14px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, opacity: commentInput.trim() ? 1 : 0.5, flexShrink: 0 }}>
+                            {savingComment === j.id ? '...' : '送出'}
+                          </button>
+                        </div>
+                      ) : (
+                        <p style={{ fontSize: 12, color: C.barkLight, textAlign: 'center', fontStyle: 'italic', margin: 0 }}>
+                          請先在成員頁選擇身份後即可留言
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
     </div>
   );

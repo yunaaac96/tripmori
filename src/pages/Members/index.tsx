@@ -3,6 +3,8 @@ import { C, FONT } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth } from '../../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -24,6 +26,29 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   // Identity: who is the current user? Stored in localStorage
   const [currentUser, setCurrentUser]   = useState<string>(() => localStorage.getItem(LS_USER_KEY) || '');
   const [showWhoAmI, setShowWhoAmI]     = useState(false);
+  const [copied, setCopied]             = useState<string | null>(null);
+  const [googleUid, setGoogleUid]       = useState<string | null>(null);
+  const [googleEmail, setGoogleEmail]   = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      if (user && !user.isAnonymous) {
+        setGoogleUid(user.uid);
+        setGoogleEmail(user.email);
+      } else {
+        setGoogleUid(null);
+        setGoogleEmail(null);
+      }
+    });
+    return unsub;
+  }, []);
+
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setCopied(key);
+      setTimeout(() => setCopied(null), 2500);
+    });
+  };
 
   // Note input state per member
   const [noteInput, setNoteInput]       = useState<Record<string, string>>({});
@@ -107,9 +132,20 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   };
 
   const openEdit = (m: any) => {
+    const role = firestore.role;
+    // Editor can only edit their own card (matched by googleUid)
+    if (role === 'editor' && googleUid && m.googleUid !== googleUid) return;
+    if (firestore.isReadOnly) return;
     setEditTarget(m);
     setForm({ name: m.name, role: m.role || '', color: m.color || PRESET_COLORS[0], avatarUrl: m.avatarUrl || '' });
     setShowAdd(false);
+  };
+
+  const handleBindGoogle = async (memberId: string) => {
+    if (!googleUid) return;
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'members', memberId), { googleUid, googleEmail: googleEmail || '' });
+    } catch (e) { console.error(e); }
   };
 
   // ── Notes (message board) ─────────────────────────────────────
@@ -299,22 +335,37 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       </PageHeader>
 
+      {/* Copy toast */}
+      {copied && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#3A5A3A', color: 'white', borderRadius: 24, padding: '10px 22px', fontSize: 13, fontWeight: 700, zIndex: 500, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', whiteSpace: 'nowrap', fontFamily: FONT }}>
+          ✅ 已複製，快去分享給朋友吧！
+        </div>
+      )}
+
       {/* Share project keys (Owner only) */}
       {project?.role === 'owner' && (
         <div style={{ margin: '12px 16px 0', background: 'white', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>🔑 分享此旅行</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            <div style={{ background: '#FFF2CC', borderRadius: 10, padding: '8px 12px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, color: '#9A6800', margin: '0 0 3px' }}>協作金鑰（編輯者）</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 0.5, fontFamily: 'monospace' }}>{project.collaboratorKey}</p>
+            {/* 協作金鑰 — tap to copy */}
+            <div onClick={() => handleCopy(project.collaboratorKey, 'collab')}
+              style={{ background: copied === 'collab' ? '#E0F0D8' : '#FFF2CC', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : '#9A6800', margin: 0 }}>協作金鑰（編輯者）</p>
+                <span style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : '#9A6800', fontWeight: 700 }}>{copied === 'collab' ? '✅ 已複製' : '點擊複製 📋'}</span>
+              </div>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{project.collaboratorKey}</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
             </div>
-            <div style={{ background: '#D8EDF8', borderRadius: 10, padding: '8px 12px' }}>
-              <p style={{ fontSize: 10, fontWeight: 700, color: '#2A6A9A', margin: '0 0 3px' }}>訪客連結（唯讀瀏覽）</p>
-              <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 0, fontFamily: 'monospace', wordBreak: 'break-all' }}>
-                {`${window.location.origin}/?visit=${project.id}`}
-              </p>
-              <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此連結，對方可直接瀏覽行程（無需輸入代碼）</p>
+            {/* 訪客連結 — tap to copy */}
+            <div onClick={() => handleCopy(`${window.location.origin}/?visit=${project.id}`, 'visit')}
+              style={{ background: copied === 'visit' ? '#E0F0D8' : '#D8EDF8', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: copied === 'visit' ? '#4A7A35' : '#2A6A9A', margin: 0 }}>訪客連結（唯讀瀏覽）</p>
+                <span style={{ fontSize: 10, color: copied === 'visit' ? '#4A7A35' : '#2A6A9A', fontWeight: 700 }}>{copied === 'visit' ? '✅ 已複製' : '點擊複製 📋'}</span>
+              </div>
+              <p style={{ fontSize: 12, fontWeight: 600, color: C.bark, margin: 0 }}>訪客專屬分享連結</p>
+              <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>對方點擊連結即可直接瀏覽行程（無需登入或輸入代碼）</p>
             </div>
           </div>
         </div>
@@ -340,14 +391,20 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           const isSavingNote = savingNote === m.id;
           const colorIdx     = displayMembers.indexOf(m) % NOTE_COLORS.length;
 
+          const canEdit = firestore.role === 'owner' || (firestore.role === 'editor' && googleUid && m.googleUid === googleUid);
+          const isMyCard = googleUid && m.googleUid === googleUid;
+          const canBind = googleUid && !m.googleUid && !firestore.isReadOnly;
+
           return (
             <div key={m.id} style={{ marginBottom: 16 }}>
               {/* Member info card */}
               <div style={{ background: 'white', borderRadius: '20px 20px 0 0', padding: '16px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
-                <button onClick={() => openEdit(m)}
-                  style={{ position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  ✏️
-                </button>
+                {canEdit && (
+                  <button onClick={() => openEdit(m)}
+                    style={{ position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    ✏️
+                  </button>
+                )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: C.bark, border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>
                     {m.avatarUrl
@@ -361,8 +418,18 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   </div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>
+                    {isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 6, padding: '1px 6px' }}>我</span>}
+                    {m.googleUid && !isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px' }}>🔗 已綁定</span>}
+                  </div>
                   <p style={{ fontSize: 12, color: C.barkLight, margin: '3px 0 0' }}>{m.role || '旅伴'}</p>
+                  {canBind && (
+                    <button onClick={() => handleBindGoogle(m.id)}
+                      style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                      🔗 綁定為我的成員卡
+                    </button>
+                  )}
                 </div>
                 {/* Board toggle */}
                 <button onClick={() => setExpandedBoard(isExpanded ? null : m.id)}

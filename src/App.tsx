@@ -138,7 +138,8 @@ function App() {
     const init = async () => {
       setLoading(true);
       try {
-        await signInAnonymously(auth);
+        // Only sign in anonymously if no user is signed in (preserve Google auth)
+        if (!auth.currentUser) await signInAnonymously(auth);
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
           ['events', setEvents], ['members', setMembers], ['bookings', setBookings],
