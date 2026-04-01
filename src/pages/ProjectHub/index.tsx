@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
 import { collection, doc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
-import { GoogleAuthProvider, signInWithPopup, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
@@ -67,18 +67,29 @@ export const ensureDefaultProject = () => {
   }
 };
 
-// 檢查登入的 Google user 是否為此 trip 的 owner，是則升級 localStorage role
+// 檢查登入的 Google user 是否為此 trip 的 owner，是則升級 localStorage role（或首次加入）
 export const checkOwnerRole = async (googleEmail: string): Promise<TripRole | null> => {
   try {
-    const { getFirestore, doc, getDoc } = await import('firebase/firestore');
-    const { db } = await import('../../config/firebase');
-    const snap = await getDoc(doc(db, 'trips', DEFAULT_TRIP_ID));
+    const { doc: fDoc, getDoc } = await import('firebase/firestore');
+    const { db: fDb } = await import('../../config/firebase');
+    const snap = await getDoc(fDoc(fDb, 'trips', DEFAULT_TRIP_ID));
     if (!snap.exists()) return null;
     const data = snap.data();
     if (data.ownerEmail && data.ownerEmail.toLowerCase() === googleEmail.toLowerCase()) {
       const projects = loadProjects();
       const idx = projects.findIndex(p => p.id === DEFAULT_TRIP_ID);
-      if (idx >= 0 && projects[idx].role !== 'owner') {
+      if (idx < 0) {
+        // First time owner opens app — add the trip
+        saveProject({
+          id: DEFAULT_TRIP_ID,
+          title: data.title || '沖繩之旅 2026',
+          emoji: data.emoji || '🌸',
+          role: 'owner',
+          collaboratorKey: data.collaboratorKey || DEFAULT_COLLAB,
+          shareCode: data.shareCode || DEFAULT_SHARE,
+          addedAt: Date.now(),
+        });
+      } else if (projects[idx].role !== 'owner') {
         projects[idx].role = 'owner';
         localStorage.setItem('tripmori_projects', JSON.stringify(projects));
       }
@@ -304,6 +315,11 @@ export default function ProjectHub({ onEnterProject }: Props) {
                 <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
                 <p style={{ fontSize: 12, color: '#6A8F5C', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{googleUser.displayName || googleUser.email}</p>
               </div>
+              <button
+                onClick={() => signOut(auth).catch(console.error)}
+                style={{ fontSize: 11, fontWeight: 700, color: '#6A8F5C', background: 'none', border: '1px solid #A0CC88', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+                登出
+              </button>
             </div>
           ) : (
             <div style={{ marginBottom: 20 }}>
