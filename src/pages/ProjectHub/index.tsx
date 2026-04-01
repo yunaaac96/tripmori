@@ -132,7 +132,12 @@ export default function ProjectHub({ onEnterProject }: Props) {
     setSigningIn(false);
   };
 
-  const EMOJI_OPTS = ['✈️','🌸','🏝','🗾','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡','🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸','⛷️','🏂','❄️','🌨️','🎿','🗻','🏕️','🚂','🎪','🎭','🌅','🌃','🏖️','🎯'];
+  // 34 emojis — 3 groups of ~11: transport/nature, country flags, winter/scenery
+  const EMOJI_OPTS = [
+    '✈️','🌸','🏝','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡',
+    '🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸',
+    '⛷️','🏂','❄️','🎿','🗻','🏕️','🚂','🌅','🌃','🏖️','🎯',
+  ];
 
   const handleCreate = async () => {
     if (!newTitle.trim() || !newStart) { setError('請填寫旅行名稱和出發日期'); return; }
@@ -193,7 +198,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
     <Screen title="✈️ 建立新旅行" onBack={() => { setView('hub'); setError(''); }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!googleUser && (
-          <div style={{ padding: '10px 14px', borderRadius: 12, background: '#FFF8E1', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
+          <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
             ⚠️ 請先返回首頁登入 Google 帳號後再建立旅行
           </div>
         )}
@@ -203,7 +208,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
           <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
             {EMOJI_OPTS.map(e => (
               <button key={e} onClick={() => setNewEmoji(e)}
-                style={{ width: 40, height: 40, fontSize: 22, borderRadius: 12, border: `2px solid ${newEmoji === e ? C.sageDark : C.creamDark}`, background: newEmoji === e ? C.sageLight : 'white', cursor: 'pointer', flexShrink: 0 }}>
+                style={{ width: 40, height: 40, fontSize: 22, borderRadius: 12, border: `2px solid ${newEmoji === e ? C.sageDark : C.creamDark}`, background: newEmoji === e ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', flexShrink: 0 }}>
                 {e}
               </button>
             ))}
@@ -285,7 +290,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
               </div>
               {error && <p style={{ fontSize: 12, color: '#C0392B', margin: '0 0 8px' }}>{error}</p>}
               <button onClick={handleGoogleSignIn} disabled={signingIn}
-                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'white', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
+                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
                 <span style={{ fontSize: 18 }}>🔐</span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
               </button>
@@ -301,7 +306,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
                   const rl = ROLE_LABEL[p.role];
                   return (
                     <button key={p.id} onClick={() => onEnterProject(p)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'white', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
                       <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
@@ -348,7 +353,7 @@ function Screen({ title, onBack, children }: { title: string; onBack: () => void
 function ActionBtn({ emoji, title, sub, color, onClick }: { emoji: string; title: string; sub: string; color: string; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'white', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
       <div style={{ width: 44, height: 44, borderRadius: 14, background: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{emoji}</div>
       <div style={{ flex: 1 }}>
         <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{title}</p>
@@ -360,4 +365,4 @@ function ActionBtn({ emoji, title, sub, color, onClick }: { emoji: string; title
 }
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#8C7B6E', display: 'block', marginBottom: 6 };
-const inputSt: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #EDE8D5', background: '#F7F4EB', fontSize: 16, color: '#6B5C4E', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
+const inputSt: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-input-bg)', fontSize: 16, color: 'var(--tm-bark)', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };

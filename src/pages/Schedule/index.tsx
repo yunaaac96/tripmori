@@ -49,7 +49,7 @@ const FALLBACK_CLIMATE: WeatherDay = {
 };
 
 export default function SchedulePage({ events, firestore }: { events: any[]; members: any[]; firestore: any }) {
-  const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc } = firestore;
+  const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly } = firestore;
 
   const [activeDay, setActiveDay]   = useState('2026-04-23');
   const [mode, setMode]             = useState<Mode>('view');
@@ -139,7 +139,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
     .filter(e => (e.date || '').replace(/\//g, '-') === activeDay)
     .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
-  const openAdd  = () => { setForm({ ...EMPTY_EVENT_FORM }); setSelectedEvent(null); setMode('add'); };
+  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM }); setSelectedEvent(null); setMode('add'); };
   const openEdit = (event: any) => {
     setForm({
       title: event.title || '', startTime: event.startTime || '', endTime: event.endTime || '',
@@ -152,6 +152,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
   };
 
   const handleSave = async () => {
+    if (isReadOnly) return;
     if (!form.title || !form.startTime) return;
     setSaving(true);
     const payload = {
@@ -172,6 +173,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
   };
 
   const handleDelete = async () => {
+    if (isReadOnly) return;
     if (!selectedEvent) return;
     await deleteDoc(doc(db, 'trips', TRIP_ID, 'events', selectedEvent.id));
     setShowDeleteConfirm(false); setMode('view'); setSelectedEvent(null);
@@ -219,7 +221,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   {Object.entries(CATEGORY_MAP).map(([key, info]) => (
-                    <button key={key} onClick={() => set('category', key)} style={{ padding: '9px 10px', borderRadius: 12, border: `2px solid ${form.category === key ? info.text : '#E0D9C8'}`, background: form.category === key ? info.bg : 'white', color: info.text, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>{info.emoji} {info.label}</button>
+                    <button key={key} onClick={() => set('category', key)} style={{ padding: '9px 10px', borderRadius: 12, border: `2px solid ${form.category === key ? info.text : '#E0D9C8'}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: info.text, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>{info.emoji} {info.label}</button>
                   ))}
                 </div>
               </div>
@@ -228,7 +230,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結</label><input style={inputStyle} placeholder="https://maps.app.goo.gl/..." value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} /></div>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 {mode === 'edit' && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>🗑</button>}
-                <button onClick={() => setMode('view')} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
+                <button onClick={() => setMode('view')} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.title || !form.startTime} style={{ ...btnPrimary(), flex: 2, opacity: saving || !form.title || !form.startTime ? 0.6 : 1 }}>{saving ? '儲存中...' : mode === 'add' ? '✓ 新增' : '✓ 儲存'}</button>
               </div>
             </div>
@@ -244,7 +246,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
             <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>刪除這筆行程？</p>
             <p style={{ fontSize: 13, color: C.barkLight, margin: '0 0 20px' }}>「{selectedEvent?.title}」將永久刪除。</p>
             <div style={{ display: 'flex', gap: 8 }}>
-              <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
+              <button onClick={() => setShowDeleteConfirm(false)} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
               <button onClick={handleDelete} style={{ flex: 1, padding: 12, borderRadius: 12, border: 'none', background: '#E76F51', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>確認刪除</button>
             </div>
           </div>
@@ -273,7 +275,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
             const active = day.date === activeDay;
             return (
               <button key={day.date} onClick={() => setActiveDay(day.date)}
-                style={{ flexShrink: 0, minWidth: 58, padding: '10px 12px', textAlign: 'center', borderRadius: 16, border: `2px solid ${active ? C.sageDark : 'transparent'}`, background: active ? C.sage : 'white', boxShadow: C.shadowSm, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
+                style={{ flexShrink: 0, minWidth: 58, padding: '10px 12px', textAlign: 'center', borderRadius: 16, border: `2px solid ${active ? C.sageDark : 'transparent'}`, background: active ? C.sage : 'var(--tm-card-bg)', boxShadow: C.shadowSm, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
                 <div style={{ fontSize: 15, fontWeight: 700, color: active ? 'white' : C.bark }}>{day.label}</div>
                 <div style={{ fontSize: 10, color: active ? 'rgba(255,255,255,0.85)' : C.barkLight, fontWeight: 600 }}>{day.week}</div>
               </button>
@@ -307,10 +309,12 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
               </div>
             )}
           </div>
-          <button onClick={openAdd}
-            style={{ flexShrink: 0, width: 56, height: 56, borderRadius: 18, background: C.earth, border: 'none', color: 'white', fontSize: 26, cursor: 'pointer', boxShadow: C.shadow, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-            ＋
-          </button>
+          {!isReadOnly && (
+            <button onClick={openAdd}
+              style={{ flexShrink: 0, width: 56, height: 56, borderRadius: 18, background: C.earth, border: 'none', color: 'white', fontSize: 26, cursor: 'pointer', boxShadow: C.shadow, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              ＋
+            </button>
+          )}
         </div>
 
         {/* Timeline */}
@@ -321,7 +325,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
             <div style={{ textAlign: 'center', padding: '36px 0', color: C.barkLight }}>
               <div style={{ fontSize: 36, marginBottom: 8 }}>🌿</div>
               <p style={{ fontSize: 13, margin: 0 }}>這天還沒有行程</p>
-              <button onClick={openAdd} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>＋ 新增第一筆行程</button>
+              {!isReadOnly && <button onClick={openAdd} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>＋ 新增第一筆行程</button>}
             </div>
           )}
 
@@ -343,7 +347,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
                   <div style={{ width: 12, height: 12, borderRadius: '50%', background: cat.bg, border: `2.5px solid ${cat.text}`, boxShadow: `0 0 0 3px ${C.cream}`, flexShrink: 0 }} />
                 </div>
                 {/* Card */}
-                <div style={{ flex: 1, marginLeft: 8, background: 'white', borderRadius: 16, padding: '10px 14px', boxShadow: C.shadowSm }}>
+                <div style={{ flex: 1, marginLeft: 8, background: 'var(--tm-card-bg)', borderRadius: 16, padding: '10px 14px', boxShadow: C.shadowSm }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-block', marginBottom: 4 }}>{cat.emoji} {cat.label}</span>
@@ -357,17 +361,19 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
                         </a>
                       )}
                     </div>
-                    <button onClick={() => openEdit(event)}
-                      style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 10, background: C.cream, border: `1.5px solid ${C.creamDark}`, color: C.barkLight, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
-                      ✏️
-                    </button>
+                    {!isReadOnly && (
+                      <button onClick={() => openEdit(event)}
+                        style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 10, background: C.cream, border: `1.5px solid ${C.creamDark}`, color: C.barkLight, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+                        ✏️
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
               {/* Travel time connector between events */}
               {event.travelTime && !isLast && (
                 <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
-                  <div style={{ background: '#FFF8E1', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
+                  <div style={{ background: 'var(--tm-note-1)', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
                     🚗 {event.travelTime}
                   </div>
                 </div>
@@ -377,9 +383,9 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
           })}
         </div>
 
-        {dayEvents.length > 0 && (
+        {dayEvents.length > 0 && !isReadOnly && (
           <div style={{ textAlign: 'center', padding: '12px 0 16px' }}>
-            <button onClick={openAdd} style={{ padding: '8px 20px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>＋ 繼續新增行程</button>
+            <button onClick={openAdd} style={{ padding: '8px 20px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>＋ 繼續新增行程</button>
           </div>
         )}
       </div>

@@ -18,7 +18,7 @@ const EMPTY_FORM = {
 };
 
 export default function ExpensePage({ expenses, members, firestore }: any) {
-  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection } = firestore;
+  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly } = firestore;
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -135,6 +135,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
   const subItemTotal = form.subItems.reduce((s, si) => s + (Number(si.amount) || 0), 0);
 
   const handleSave = async () => {
+    if (isReadOnly) return;
     if (!form.description || !form.amount || !form.payer) return;
     setSaving(true);
     const amt = Number(form.amount);
@@ -170,6 +171,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
   };
 
   const handleDelete = async (id: string) => {
+    if (isReadOnly) return;
     await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
   };
 
@@ -278,7 +280,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['cash', 'card'] as const).map(m => (
                     <button key={m} onClick={() => set('paymentMethod', m)}
-                      style={{ flex: 1, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.paymentMethod === m ? C.sageDark : C.creamDark}`, background: form.paymentMethod === m ? C.sageLight : 'white', color: C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ flex: 1, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.paymentMethod === m ? C.sageDark : C.creamDark}`, background: form.paymentMethod === m ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                       {m === 'cash' ? '💵 現金' : '💳 刷卡'}
                     </button>
                   ))}
@@ -291,7 +293,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => (
                     <button key={key} onClick={() => set('category', key)}
-                      style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'white', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
                       {info.emoji} {info.label}
                     </button>
                   ))}
@@ -304,7 +306,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {memberNames.map((name: string) => (
                     <button key={name} onClick={() => set('payer', name)}
-                      style={{ flex: 1, minWidth: 60, padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${form.payer === name ? C.sageDark : C.creamDark}`, background: form.payer === name ? C.sage : 'white', color: form.payer === name ? 'white' : C.bark, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
+                      style={{ flex: 1, minWidth: 60, padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${form.payer === name ? C.sageDark : C.creamDark}`, background: form.payer === name ? C.sage : 'var(--tm-card-bg)', color: form.payer === name ? 'white' : C.bark, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
                       {name}
                     </button>
                   ))}
@@ -317,7 +319,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
                   {([['equal', '⚖️', '均分'], ['weighted', '⚖', '權重'], ['amount', '✍️', '自訂金額']] as [SplitMode, string, string][]).map(([mode, icon, label]) => (
                     <button key={mode} onClick={() => set('splitMode', mode)}
-                      style={{ padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${form.splitMode === mode ? C.sageDark : C.creamDark}`, background: form.splitMode === mode ? C.sageLight : 'white', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${form.splitMode === mode ? C.sageDark : C.creamDark}`, background: form.splitMode === mode ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
                       {icon} {label}
                     </button>
                   ))}
@@ -330,7 +332,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                       {memberNames.map((name: string) => (
                         <button key={name} onClick={() => toggleSplitMember(name)}
-                          style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.splitWith.includes(name) ? C.sageDark : C.creamDark}`, background: form.splitWith.includes(name) ? C.sage : 'white', color: form.splitWith.includes(name) ? 'white' : C.bark, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
+                          style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.splitWith.includes(name) ? C.sageDark : C.creamDark}`, background: form.splitWith.includes(name) ? C.sage : 'var(--tm-card-bg)', color: form.splitWith.includes(name) ? 'white' : C.bark, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
                           {name}
                         </button>
                       ))}
@@ -353,10 +355,10 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                         <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.cream, borderRadius: 12, padding: '8px 12px' }}>
                           <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>{name}</span>
                           <button onClick={() => setWeight(name, -1)}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                            style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
                           <span style={{ minWidth: 20, textAlign: 'center', fontSize: 14, fontWeight: 700, color: C.bark }}>{w}</span>
                           <button onClick={() => setWeight(name, 1)}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
+                            style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
                           <span style={{ minWidth: 70, textAlign: 'right', fontSize: 12, color: C.earth, fontWeight: 600 }}>NT$ {share.toLocaleString()}</span>
                         </div>
                       );
@@ -390,7 +392,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
               </div>
 
               {/* Sub-items */}
-              <div>
+              {!isReadOnly && <div>
                 <button onClick={() => setShowSubItems(v => !v)}
                   style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: C.sageDark, fontWeight: 600, fontFamily: FONT, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
                   {showSubItems ? '▾' : '▸'} ＋ 新增細項
@@ -416,7 +418,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                       </div>
                     ))}
                     <button onClick={addSubItem}
-                      style={{ padding: '7px 0', borderRadius: 10, border: `1.5px dashed ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ padding: '7px 0', borderRadius: 10, border: `1.5px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
                       ＋ 新增一筆
                     </button>
                     {form.subItems.length > 0 && (
@@ -426,7 +428,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                     )}
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* Notes */}
               <div>
@@ -443,7 +445,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button onClick={() => { setShowForm(false); setShowSubItems(false); setForm({ ...EMPTY_FORM }); setOcrState('idle'); setOcrPreview(null); }}
-                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
                   取消
                 </button>
                 <button onClick={handleSave} disabled={saving || !form.description || !form.amount || !form.payer}
@@ -471,7 +473,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
           {memberStats.map(ms => {
             const balance = ms.paid - ms.owed;
             return (
-              <div key={ms.name} style={{ background: 'white', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm }}>
+              <div key={ms.name} style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm }}>
                 <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>{ms.name}</p>
                 <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>已付出</p>
                 <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 6px' }}>NT$ {ms.paid.toLocaleString()}</p>
@@ -488,9 +490,11 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
         </div>
 
         {/* Add button */}
-        <button onClick={() => setShowForm(true)} style={{ ...btnPrimary(C.earth), width: '100%', marginBottom: 16 }}>
-          ＋ 新增支出
-        </button>
+        {!isReadOnly && (
+          <button onClick={() => setShowForm(true)} style={{ ...btnPrimary(C.earth), width: '100%', marginBottom: 16 }}>
+            ＋ 新增支出
+          </button>
+        )}
 
         {/* Expense list */}
         {expenses.length === 0 ? (
@@ -533,10 +537,12 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                       <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {amtTWD.toLocaleString()}</p>
                       {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{e.currency} {e.amount?.toLocaleString()}</p>}
-                      <button onClick={() => handleDelete(e.id)}
-                        style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        🗑
-                      </button>
+                      {!isReadOnly && (
+                        <button onClick={() => handleDelete(e.id)}
+                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          🗑
+                        </button>
+                      )}
                     </div>
                   </div>
 
