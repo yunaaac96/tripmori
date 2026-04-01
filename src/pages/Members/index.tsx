@@ -180,6 +180,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     } catch (e) { console.error(e); }
   };
 
+  const handleUnbindGoogle = async (memberId: string) => {
+    if (!window.confirm('確定要解除此成員的 Google 帳號綁定嗎？')) return;
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'members', memberId), { googleUid: '', googleEmail: '' });
+    } catch (e) { console.error(e); }
+  };
+
   // ── Notes (message board) ─────────────────────────────────────
   const getNotesFor = (memberId: string) =>
     (memberNotes || [])
@@ -449,6 +456,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                     <button onClick={() => handleBindGoogle(m.id)}
                       style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
                       🔗 綁定為我的成員卡
+                    </button>
+                  )}
+                  {/* 解除綁定：owner 可解除任何人，本人可解除自己 */}
+                  {m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly && (
+                    <button onClick={() => handleUnbindGoogle(m.id)}
+                      style={{ marginTop: 4, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                      ✕ 解除綁定
                     </button>
                   )}
                 </div>

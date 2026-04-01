@@ -1,7 +1,7 @@
 import { initializeApp } from 'firebase/app';
 import { getFirestore, enableIndexedDbPersistence } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
-import { getAuth, signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, browserLocalPersistence, setPersistence } from 'firebase/auth';
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -17,6 +17,9 @@ const app  = initializeApp(firebaseConfig);
 export const db      = getFirestore(app);
 export const storage = getStorage(app);
 export const auth    = getAuth(app);
+
+// 登入狀態持久化：存 localStorage，關閉瀏覽器後仍保持登入
+setPersistence(auth, browserLocalPersistence).catch(console.error);
 
 // 啟用離線持久化
 enableIndexedDbPersistence(db).catch((err) => {
