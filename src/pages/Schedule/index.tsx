@@ -268,7 +268,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
         </div>
       </PageHeader>
 
-      <div style={{ padding: '16px 16px 0' }}>
+      <div style={{ padding: '16px 16px 0', textAlign: 'left' }}>
         {/* Day selector */}
         <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', marginBottom: 14 }}>
           {DAY_OPTIONS.map(day => {

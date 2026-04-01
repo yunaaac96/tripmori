@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
 import { collection, doc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
-import { GoogleAuthProvider, signInWithPopup, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithRedirect, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
@@ -117,19 +117,13 @@ export default function ProjectHub({ onEnterProject }: Props) {
     setSigningIn(true);
     setError('');
     try {
-      const result = await signInWithPopup(auth, googleProvider);
-      setGoogleUser(result.user);
+      await signInWithRedirect(auth, googleProvider);
+      // Page navigates away — code below won't execute
     } catch (e: any) {
-      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
-        // user dismissed — no error needed
-      } else if (e.code === 'auth/popup-blocked') {
-        setError('彈出視窗被封鎖，請允許彈出視窗後再試');
-      } else {
-        console.error('Google sign-in error:', e);
-        setError('登入失敗，請重試');
-      }
+      console.error('Google sign-in error:', e);
+      setError('登入失敗，請重試');
+      setSigningIn(false);
     }
-    setSigningIn(false);
   };
 
   // 42 emojis — 3 groups of 14: transport/nature, country flags, winter/scenery
