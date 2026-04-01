@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
-import { collection, doc, getDoc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 
@@ -86,29 +86,13 @@ type View = 'hub' | 'create' | 'join-collab';
 
 const googleProvider = new GoogleAuthProvider();
 
-const signInWithGoogle = async (): Promise<User | null> => {
-  try {
-    const result = await signInWithPopup(auth, googleProvider);
-    return result.user;
-  } catch (e: any) {
-    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return null;
-    throw e;
-  }
-};
-
 export default function ProjectHub({ onEnterProject }: Props) {
   const projects = loadProjects();
   const [view, setView]       = useState<View>('hub');
   const [busy, setBusy]       = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [error, setError]     = useState('');
   const [googleUser, setGoogleUser] = useState<User | null>(null);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, user => {
-      if (user && !user.isAnonymous) setGoogleUser(user);
-    });
-    return unsub;
-  }, []);
 
   // Create form
   const [newTitle, setNewTitle]       = useState('');
@@ -120,25 +104,47 @@ export default function ProjectHub({ onEnterProject }: Props) {
   // Join form
   const [keyInput, setKeyInput]       = useState('');
 
-  const EMOJI_OPTS = ['✈️','🌸','🏝','🗾','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡','🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸','⛷️','🏂','❄️','🌨️','🎿','🗻','🏕️','🚂','🎪','🎭','🌅','🌃','🏖️','🎯'];
+  // Track auth state
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      if (user && !user.isAnonymous) setGoogleUser(user);
+      else setGoogleUser(null);
+    });
+    return unsub;
+  }, []);
+
+  const handleGoogleSignIn = async () => {
+    setSigningIn(true);
+    setError('');
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setGoogleUser(result.user);
+    } catch (e: any) {
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
+        // user dismissed — no error needed
+      } else if (e.code === 'auth/popup-blocked') {
+        setError('彈出視窗被封鎖，請允許彈出視窗後再試');
+      } else {
+        console.error('Google sign-in error:', e);
+        setError('登入失敗，請重試');
+      }
+    }
+    setSigningIn(false);
+  };
+
+  // 34 emojis — 3 groups of ~11: transport/nature, country flags, winter/scenery
+  const EMOJI_OPTS = [
+    '✈️','🌸','🏝','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡',
+    '🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸',
+    '⛷️','🏂','❄️','🎿','🗻','🏕️','🚂','🌅','🌃','🏖️','🎯',
+  ];
 
   const handleCreate = async () => {
     if (!newTitle.trim() || !newStart) { setError('請填寫旅行名稱和出發日期'); return; }
+    const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+    if (!user) { setError('請先登入 Google 帳號後再建立旅行'); return; }
     setBusy(true); setError('');
     try {
-      // Require Google sign-in for owner
-      let user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
-      if (!user) {
-        try {
-          user = await signInWithGoogle();
-        } catch (e: any) {
-          setBusy(false);
-          setError('Google 登入失敗（' + (e.message || e.code || '未知錯誤') + '）。請先點上方登入按鈕完成登入後再試。');
-          return;
-        }
-        if (!user) { setBusy(false); setError('請登入 Google 帳號後再建立旅行（點上方登入按鈕）'); return; }
-        setGoogleUser(user);
-      }
       const ref = await addDoc(collection(db, 'trips'), {
         title: newTitle.trim(), emoji: newEmoji,
         startDate: newStart, endDate: newEnd || newStart,
@@ -164,21 +170,13 @@ export default function ProjectHub({ onEnterProject }: Props) {
   const handleJoinCollab = async () => {
     const key = keyInput.trim().toUpperCase();
     if (!key) { setError('請輸入協作金鑰'); return; }
+    const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+    if (!user) { setError('請先登入 Google 帳號後再加入行程'); return; }
     setBusy(true); setError('');
     try {
-      // Require Google sign-in for editor
-      let user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
-      if (!user) {
-        user = await signInWithGoogle();
-        if (!user) { setBusy(false); setError('請先登入 Google 帳號'); return; }
-        setGoogleUser(user);
-      }
-      // Key format: COLLAB-{tripId_prefix}-{suffix}
-      // We need to search trips for a matching collaboratorKey
       const existing = projects.find(p => p.collaboratorKey === key);
       if (existing) { onEnterProject({ ...existing, role: 'editor' }); return; }
 
-      // Check default trip
       if (key === DEFAULT_COLLAB) {
         ensureDefaultProject();
         const p = loadProjects().find(x => x.id === DEFAULT_TRIP_ID)!;
@@ -186,13 +184,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
         return;
       }
 
-      // Search Firestore by collaboratorKey (simple approach: query by key embedded in trips)
-      // Since we can't query by field easily without index, we use the key prefix to find tripId
-      // Key format: COLLAB-{id6}-{rand4}  — extract id prefix
       const parts = key.split('-');
       if (parts.length < 3 || parts[0] !== 'COLLAB') { setError('金鑰格式不正確'); setBusy(false); return; }
 
-      // Try to fetch trip directly if we find it in known projects
       setError('找不到符合的專案，請確認金鑰是否正確');
     } catch (e) { setError('加入失敗，請重試'); }
     setBusy(false);
@@ -203,13 +197,18 @@ export default function ProjectHub({ onEnterProject }: Props) {
   if (view === 'create') return (
     <Screen title="✈️ 建立新旅行" onBack={() => { setView('hub'); setError(''); }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!googleUser && (
+          <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
+            ⚠️ 請先返回首頁登入 Google 帳號後再建立旅行
+          </div>
+        )}
         {/* Emoji */}
         <div>
           <label style={labelStyle}>旅行表情</label>
           <div style={{ maxHeight: 120, overflowY: 'auto', display: 'flex', gap: 8, flexWrap: 'wrap', padding: '4px 0' }}>
             {EMOJI_OPTS.map(e => (
               <button key={e} onClick={() => setNewEmoji(e)}
-                style={{ width: 40, height: 40, fontSize: 22, borderRadius: 12, border: `2px solid ${newEmoji === e ? C.sageDark : C.creamDark}`, background: newEmoji === e ? C.sageLight : 'white', cursor: 'pointer', flexShrink: 0 }}>
+                style={{ width: 40, height: 40, fontSize: 22, borderRadius: 12, border: `2px solid ${newEmoji === e ? C.sageDark : C.creamDark}`, background: newEmoji === e ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', flexShrink: 0 }}>
                 {e}
               </button>
             ))}
@@ -273,7 +272,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
 
         <div style={{ padding: '24px 20px' }}>
 
-          {/* Google sign-in / user status — shown after hero, before MY TRIPS */}
+          {/* Google sign-in / user status */}
           {googleUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 16, background: '#E0F0D8', marginBottom: 20, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
               {googleUser.photoURL && (
@@ -289,10 +288,11 @@ export default function ProjectHub({ onEnterProject }: Props) {
               <div style={{ padding: '10px 14px', borderRadius: 12, background: '#FFF8E1', marginBottom: 10, fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
                 💡 建立或編輯行程需要登入 Google 帳號，訪客可直接使用分享連結進入
               </div>
-              <button onClick={async () => { const u = await signInWithGoogle(); if (u) setGoogleUser(u); }}
-                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'white', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm }}>
+              {error && <p style={{ fontSize: 12, color: '#C0392B', margin: '0 0 8px' }}>{error}</p>}
+              <button onClick={handleGoogleSignIn} disabled={signingIn}
+                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
                 <span style={{ fontSize: 18 }}>🔐</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#1C3461' }}>使用 Google 帳號登入</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
               </button>
             </div>
           )}
@@ -306,7 +306,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
                   const rl = ROLE_LABEL[p.role];
                   return (
                     <button key={p.id} onClick={() => onEnterProject(p)}
-                      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'white', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
+                      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
                       <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
@@ -353,7 +353,7 @@ function Screen({ title, onBack, children }: { title: string; onBack: () => void
 function ActionBtn({ emoji, title, sub, color, onClick }: { emoji: string; title: string; sub: string; color: string; onClick: () => void }) {
   return (
     <button onClick={onClick}
-      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'white', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
+      style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
       <div style={{ width: 44, height: 44, borderRadius: 14, background: color + '22', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>{emoji}</div>
       <div style={{ flex: 1 }}>
         <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{title}</p>
@@ -365,4 +365,4 @@ function ActionBtn({ emoji, title, sub, color, onClick }: { emoji: string; title
 }
 
 const labelStyle: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#8C7B6E', display: 'block', marginBottom: 6 };
-const inputSt: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1.5px solid #EDE8D5', background: '#F7F4EB', fontSize: 16, color: '#6B5C4E', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
+const inputSt: React.CSSProperties = { width: '100%', boxSizing: 'border-box', padding: '12px 14px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-input-bg)', fontSize: 16, color: 'var(--tm-bark)', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };

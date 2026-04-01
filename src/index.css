@@ -8,12 +8,30 @@
   --font-sans: var(--sans);
 }
 :root {
-  /* TripMori theme tokens */
+  /* TripMori theme tokens — light mode defaults */
   --tm-page-bg: #F7F4EB;
   --tm-dot-color: #C8C0AD;
   --tm-nav-bg: #FFFFFF;
   --tm-nav-border: #EDE8D5;
   --tm-card-bg: #FFFFFF;
+  --tm-card-border: transparent;
+  --tm-sheet-bg: #FFFFFF;
+  --tm-input-bg: #F7F4EB;
+  --tm-input-border: #E0D9C8;
+  --tm-cream: #F7F4EB;
+  --tm-cream-dark: #EDE8D5;
+  --tm-bark: #6B5C4E;
+  --tm-bark-light: #8C7B6E;
+  --tm-text-inv: #FFFFFF;
+  --tm-shadow: #D6D0BE;
+  --tm-note-1: #FFF8C5;
+  --tm-note-2: #D4F1F9;
+  --tm-note-3: #E8F8E8;
+  --tm-note-4: #FFE4E1;
+  --tm-note-5: #F0E6FF;
+  --tm-note-6: #FFE8CC;
+  --tm-weather-bg: #F0F7FF;
+  --tm-section-bg: #FAFAF8;
 
   --text: #6b6375;
   --text-h: #08060d;
@@ -64,6 +82,24 @@
     --tm-nav-bg: #1A2418;
     --tm-nav-border: #283422;
     --tm-card-bg: #1F2B1C;
+    --tm-card-border: #2A3825;
+    --tm-sheet-bg: #243220;
+    --tm-input-bg: #1A2416;
+    --tm-input-border: #344830;
+    --tm-cream: #1A2018;
+    --tm-cream-dark: #243220;
+    --tm-bark: #D4C9BC;
+    --tm-bark-light: #A09080;
+    --tm-text-inv: #1A2018;
+    --tm-shadow: #0D1A0A;
+    --tm-note-1: #2A2C1A;
+    --tm-note-2: #1A2A2C;
+    --tm-note-3: #1A2C1E;
+    --tm-note-4: #2C1A1A;
+    --tm-note-5: #241A2C;
+    --tm-note-6: #2C2218;
+    --tm-weather-bg: #1A2030;
+    --tm-section-bg: #1C2419;
 
     --text: #9ca3af;
     --text-h: #f3f4f6;

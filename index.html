@@ -10,21 +10,22 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="TripMori" />
 
-    <link rel="manifest" href="/manifest.json" />
-
+    <!-- theme-color: light / dark auto-switch -->
     <meta name="theme-color" content="#F7F4EB" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#3A5A3A" media="(prefers-color-scheme: dark)" />
 
-    <!-- Favicon: dark/light mode switching -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" media="(prefers-color-scheme: dark)" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" media="(prefers-color-scheme: dark)" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48.png" media="(prefers-color-scheme: light)" />
-    <!-- Fallback favicon (dark) for browsers that don't support media queries on icons -->
-    <link rel="icon" type="image/png" sizes="192x192" href="/icons/icon-192-dark.png" />
-    <link rel="icon" type="image/png" sizes="512x512" href="/icons/icon-512-dark.png" />
+    <!-- Favicon 32px light / dark -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-light.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-dark.png"  media="(prefers-color-scheme: dark)" />
 
-    <!-- Apple Touch Icon -->
+    <!-- Favicon 48px light / dark -->
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48-light.png" media="(prefers-color-scheme: light)" />
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48-dark.png"  media="(prefers-color-scheme: dark)" />
+
+    <!-- Fallback favicon (no media query) for browsers that don't support media on <link> -->
+    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-light.png" />
+
+    <!-- Apple Touch Icons -->
     <link rel="apple-touch-icon" sizes="192x192" href="/icons/icon-192-light.png" />
     <link rel="apple-touch-icon" sizes="512x512" href="/icons/icon-512-light.png" />
   </head>

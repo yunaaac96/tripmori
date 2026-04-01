@@ -18,7 +18,7 @@ const getDueStatus = (dueDate: string, checked: boolean): 'normal' | 'soon' | 'o
 };
 
 export default function PlanningPage({ lists, members, firestore }: any) {
-  const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc } = firestore;
+  const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly } = firestore;
 
   const [filterBy, setFilterBy]           = useState<string>('all');
   const [activeSection, setActiveSection] = useState<string>('todo');
@@ -48,11 +48,13 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));
 
   const toggleItem = async (itemId: string, current: boolean) => {
+    if (isReadOnly) return;
     try { await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', itemId), { checked: !current }); }
     catch (e) { console.error(e); }
   };
 
   const handleAdd = async () => {
+    if (isReadOnly) return;
     if (!form.text.trim()) return;
     setSaving(true);
     try {
@@ -81,18 +83,21 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   };
 
   const handleDelete = async (itemId: string) => {
+    if (isReadOnly) return;
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'lists', itemId)); }
     catch (e) { console.error(e); }
     setConfirmDelete(null);
   };
 
   const openAdd = (type: string) => {
+    if (isReadOnly) return;
     setEditTarget(null);
     setForm({ ...EMPTY_FORM, listType: type });
     setShowSheet(true);
   };
 
   const openEdit = (item: any) => {
+    if (isReadOnly) return;
     setEditTarget(item);
     setForm({ text: item.text, listType: item.listType, assignedTo: item.assignedTo || 'all', dueDate: item.dueDate || '' });
     setShowSheet(true);
@@ -116,13 +121,13 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       {/* ── 刪除確認 ── */}
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}>
-          <div style={{ background: 'white', borderRadius: 20, padding: '24px 20px', width: '100%', maxWidth: 320, fontFamily: FONT, textAlign: 'center' }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 20, padding: '24px 20px', width: '100%', maxWidth: 320, fontFamily: FONT, textAlign: 'center' }}>
             <p style={{ fontSize: 28, margin: '0 0 10px' }}>🗑️</p>
             <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>確定刪除？</p>
             <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 20px' }}>此操作無法復原</p>
             <div style={{ display: 'flex', gap: 8 }}>
               <button onClick={() => setConfirmDelete(null)}
-                style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
                 取消
               </button>
               <button onClick={() => handleDelete(confirmDelete!)}
@@ -135,12 +140,12 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       )}
 
       {/* ── 底部新增/編輯面板 (inlined to prevent remount on rerender) ── */}
-      {showSheet && (
+      {!isReadOnly && showSheet && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
           onClick={e => { if (e.target === e.currentTarget) { setShowSheet(false); setEditTarget(null); } }}
         >
-          <div style={{ background: 'white', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '85vh', overflowY: 'auto', boxSizing: 'border-box' }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '85vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
                 {isEdit ? '✏️ 編輯項目' : '➕ 新增項目'}
@@ -159,7 +164,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                   onChange={e => set('text', e.target.value)}
                   onKeyDown={e => { if (e.key === 'Enter' && form.text.trim()) isEdit ? handleEditSave() : handleAdd(); }}
                   placeholder="輸入項目內容..."
-                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'white' }}
+                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'var(--tm-input-bg)' }}
                 />
               </div>
 
@@ -169,7 +174,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                 <div style={{ display: 'flex', gap: 8 }}>
                   {[{ v: 'todo', l: '✅ 待辦' }, { v: 'packing', l: '🧳 行李' }].map(({ v, l }) => (
                     <button key={v} onClick={() => set('listType', v)}
-                      style={{ flex: 1, padding: '10px 4px', borderRadius: 12, border: `1.5px solid ${form.listType === v ? C.earth : C.creamDark}`, background: form.listType === v ? C.earth : 'white', color: form.listType === v ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ flex: 1, padding: '10px 4px', borderRadius: 12, border: `1.5px solid ${form.listType === v ? C.earth : C.creamDark}`, background: form.listType === v ? C.earth : 'var(--tm-card-bg)', color: form.listType === v ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                       {l}
                     </button>
                   ))}
@@ -182,7 +187,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {[{ id: 'all', label: '🌿 全體' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
                     <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
-                      style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'white', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                       {opt.label}
                     </button>
                   ))}
@@ -196,7 +201,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                   type="date"
                   value={form.dueDate}
                   onChange={e => set('dueDate', e.target.value)}
-                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'white' }}
+                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'var(--tm-input-bg)' }}
                 />
               </div>
 
@@ -210,7 +215,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                   </button>
                 )}
                 <button onClick={() => { setShowSheet(false); setEditTarget(null); }}
-                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
                   取消
                 </button>
                 <button
@@ -244,7 +249,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
           {[{ id: 'all', label: '🌿 全部' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
             <button key={opt.id} onClick={() => setFilterBy(opt.id)}
-              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${filterBy === opt.id ? C.sageDark : C.creamDark}`, background: filterBy === opt.id ? C.sage : 'white', color: filterBy === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
+              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${filterBy === opt.id ? C.sageDark : C.creamDark}`, background: filterBy === opt.id ? C.sage : 'var(--tm-card-bg)', color: filterBy === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
               {opt.label}
             </button>
           ))}
@@ -254,7 +259,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
           {SECTIONS.map(s => (
             <button key={s.id} onClick={() => setActiveSection(s.id)}
-              style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${activeSection === s.id ? C.earth : C.creamDark}`, background: activeSection === s.id ? C.earth : 'white', color: activeSection === s.id ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
+              style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${activeSection === s.id ? C.earth : C.creamDark}`, background: activeSection === s.id ? C.earth : 'var(--tm-card-bg)', color: activeSection === s.id ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
               {s.label}
               <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.75 }}>
                 ({(s.id === 'todo' ? todos : packing).filter((i: any) => !i.checked).length})
@@ -279,14 +284,14 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                       {filtered.map((item: any) => {
                         const color = MEMBER_COLORS[item.assignedTo] || C.creamDark;
                         const status = getDueStatus(item.dueDate, item.checked);
-                        const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'white';
+                        const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
                         const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : '1.5px solid transparent';
                         return (
                           <div key={item.id}
                             style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: item.checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                             <div
                               onClick={() => toggleItem(item.id, item.checked)}
-                              style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${item.checked ? C.sageDark : C.creamDark}`, background: item.checked ? C.sage : 'white', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
+                              style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${item.checked ? C.sageDark : C.creamDark}`, background: item.checked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
                               {item.checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                             </div>
                             <div onClick={() => toggleItem(item.id, item.checked)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
@@ -296,22 +301,26 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                             <div style={{ background: color, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: C.bark, flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
                               {item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—')}
                             </div>
-                            <button
-                              onClick={e => { e.stopPropagation(); openEdit(item); }}
-                              style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', fontSize: 12, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              ✏️
-                            </button>
+                            {!isReadOnly && (
+                              <button
+                                onClick={e => { e.stopPropagation(); openEdit(item); }}
+                                style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                ✏️
+                              </button>
+                            )}
                           </div>
                         );
                       })}
                     </div>
                   )}
-                  <button
-                    onClick={() => openAdd(s.id)}
-                    style={{ marginTop: 12, width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxSizing: 'border-box' }}>
-                    <span style={{ fontSize: 16 }}>＋</span>
-                    新增{s.id === 'packing' ? '行李' : '待辦'}項目
-                  </button>
+                  {!isReadOnly && (
+                    <button
+                      onClick={() => openAdd(s.id)}
+                      style={{ marginTop: 12, width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxSizing: 'border-box' }}>
+                      <span style={{ fontSize: 16 }}>＋</span>
+                      新增{s.id === 'packing' ? '行李' : '待辦'}項目
+                    </button>
+                  )}
                 </>
               );
             })()}

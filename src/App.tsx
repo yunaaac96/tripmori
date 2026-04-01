@@ -17,15 +17,15 @@ import ProjectHub, {
 
 export const TRIP_ID = "74pfE7RXyEIusEdRV0rZ"; // default / fallback
 export const C = {
-  cream: '#F7F4EB', creamDark: '#EDE8D5',
+  cream: 'var(--tm-cream)', creamDark: 'var(--tm-cream-dark)',
   sage: '#8FAF7E', sageDark: '#6A8F5C', sageLight: '#B5CFA7',
-  earth: '#C4956A', bark: '#6B5C4E', barkLight: '#8C7B6E',
+  earth: '#C4956A', bark: 'var(--tm-bark)', barkLight: 'var(--tm-bark-light)',
   sky: '#A8CADF', blush: '#E8B4B8', honey: '#E8C96A',
-  shadow: '4px 4px 0px #D6D0BE', shadowSm: '3px 3px 0px #D6D0BE',
+  shadow: '3px 3px 0px var(--tm-shadow)', shadowSm: '2px 2px 0px var(--tm-shadow)',
 };
 export const FONT = "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif";
-export const cardStyle: React.CSSProperties = { background: 'white', borderRadius: 20, padding: '14px 16px', boxShadow: C.shadow, marginBottom: 10 };
-export const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: C.cream, fontSize: 16, color: C.bark, outline: 'none', fontFamily: FONT, boxSizing: 'border-box' };
+export const cardStyle: React.CSSProperties = { background: 'var(--tm-card-bg)', borderRadius: 20, padding: '14px 16px', boxShadow: C.shadow, marginBottom: 10, border: '1px solid var(--tm-card-border)' };
+export const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-input-border)', background: 'var(--tm-input-bg)', fontSize: 16, color: 'var(--tm-bark)', outline: 'none', fontFamily: FONT, boxSizing: 'border-box' };
 export const btnPrimary = (color = C.sage): React.CSSProperties => ({ background: color, color: 'white', border: 'none', borderRadius: 14, padding: '12px 24px', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: C.shadowSm, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 });
 export const CATEGORY_MAP: Record<string, { label: string; bg: string; text: string; emoji: string }> = {
   attraction: { label: '景點', bg: '#E0F0D8', text: '#4A7A35', emoji: '🌿' },

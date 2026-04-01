@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -12,7 +12,7 @@ const EMPTY_FORM    = { name: '', role: '', color: PRESET_COLORS[0], avatarUrl: 
 const LS_USER_KEY   = 'tripmori_current_user';
 
 // Note card color palette for sticky notes
-const NOTE_COLORS = ['#FFF8C5', '#D4F1F9', '#E8F8E8', '#FFE4E1', '#F0E6FF', '#FFE8CC'];
+const NOTE_COLORS = ['var(--tm-note-1)', 'var(--tm-note-2)', 'var(--tm-note-3)', 'var(--tm-note-4)', 'var(--tm-note-5)', 'var(--tm-note-6)'];
 
 export default function MembersPage({ members, memberNotes, project, firestore }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, updateDoc, collection, doc, isReadOnly } = firestore;
@@ -29,6 +29,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const [copied, setCopied]             = useState<string | null>(null);
   const [googleUid, setGoogleUid]       = useState<string | null>(null);
   const [googleEmail, setGoogleEmail]   = useState<string | null>(null);
+  const [signingIn, setSigningIn]       = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
@@ -43,11 +44,36 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     return unsub;
   }, []);
 
+  // Auto-detect identity from Google binding
+  useEffect(() => {
+    if (!googleUid || members.length === 0) return;
+    const bound = members.find((m: any) => m.googleUid === googleUid);
+    if (bound && bound.name !== currentUser) {
+      localStorage.setItem(LS_USER_KEY, bound.name);
+      setCurrentUser(bound.name);
+    }
+  }, [googleUid, members]);
+
   const handleCopy = (text: string, key: string) => {
     navigator.clipboard.writeText(text).then(() => {
       setCopied(key);
       setTimeout(() => setCopied(null), 2500);
     });
+  };
+
+  const handleGoogleSignIn = async () => {
+    setSigningIn(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      setGoogleUid(result.user.uid);
+      setGoogleEmail(result.user.email);
+    } catch (e: any) {
+      if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+        console.error('Google sign-in error:', e);
+      }
+    }
+    setSigningIn(false);
   };
 
   // Note input state per member
@@ -204,7 +230,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       {/* "Who am I?" modal */}
       {showWhoAmI && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: 24 }}>
-          <div style={{ background: 'white', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 340, fontFamily: FONT, textAlign: 'center' }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 340, fontFamily: FONT, textAlign: 'center' }}>
             <p style={{ fontSize: 24, margin: '0 0 8px' }}>👤</p>
             <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>你是哪位旅伴？</p>
             <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 20px' }}>選擇後可以在成員卡片下留言</p>
@@ -213,7 +239,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 const m = displayMembers.find((x: any) => x.name === name);
                 return (
                   <button key={name} onClick={() => selectUser(name)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderRadius: 14, border: `2px solid ${currentUser === name ? C.sageDark : C.creamDark}`, background: currentUser === name ? C.sageLight : 'white', cursor: 'pointer', fontFamily: FONT }}>
+                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderRadius: 14, border: `2px solid ${currentUser === name ? C.sageDark : C.creamDark}`, background: currentUser === name ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
                     <div style={{ width: 36, height: 36, borderRadius: '50%', background: m?.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
                       {m?.avatarUrl ? <img src={m.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : name[0].toUpperCase()}
                     </div>
@@ -227,7 +253,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               })}
             </div>
             <button onClick={() => setShowWhoAmI(false)}
-              style={{ marginTop: 16, padding: '10px 24px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
+              style={{ marginTop: 16, padding: '10px 24px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
               稍後再說
             </button>
           </div>
@@ -254,7 +280,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
           onClick={e => { if (e.target === e.currentTarget) { setShowAdd(false); setEditTarget(null); } }}
         >
-          <div style={{ background: 'white', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box' }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
                 {isEdit ? '✏️ 編輯成員' : '➕ 新增旅伴'}
@@ -273,7 +299,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                     }
                   </div>
                   <button onClick={() => fileNewRef.current?.click()} disabled={uploadingFor === 'new'}
-                    style={{ padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+                    style={{ padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
                     {uploadingFor === 'new' ? '上傳中...' : '📷 選擇頭像（可裁切）'}
                   </button>
                 </div>
@@ -281,20 +307,20 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>姓名 *</label>
                 <input ref={nameInputRef} value={form.name} onChange={e => set('name', e.target.value)} placeholder="旅伴名稱"
-                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'white' }} />
+                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '10px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'var(--tm-input-bg)' }} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>身份 / 角色</label>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8 }}>
                   {PRESET_ROLES.map(r => (
                     <button key={r} onClick={() => set('role', r)}
-                      style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${form.role === r ? C.sageDark : C.creamDark}`, background: form.role === r ? C.sage : 'white', color: form.role === r ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${form.role === r ? C.sageDark : C.creamDark}`, background: form.role === r ? C.sage : 'var(--tm-card-bg)', color: form.role === r ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
                       {r}
                     </button>
                   ))}
                 </div>
                 <input value={form.role} onChange={e => set('role', e.target.value)} placeholder="或自訂角色..."
-                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '8px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'white' }} />
+                  style={{ width: '100%', boxSizing: 'border-box', border: `1.5px solid ${C.creamDark}`, borderRadius: 10, padding: '8px 12px', fontSize: 16, fontFamily: FONT, outline: 'none', color: C.bark, background: 'var(--tm-input-bg)' }} />
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>標籤顏色</label>
@@ -307,7 +333,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button onClick={() => { setShowAdd(false); setEditTarget(null); }}
-                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={isEdit ? handleEditSave : handleAdd} disabled={saving || !form.name.trim()}
                   style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: form.name.trim() ? C.earth : C.creamDark, color: 'white', fontWeight: 700, fontSize: 14, cursor: form.name.trim() ? 'pointer' : 'default', fontFamily: FONT, opacity: saving ? 0.7 : 1 }}>
                   {saving ? '儲存中...' : isEdit ? '✓ 儲存' : '➕ 新增'}
@@ -344,7 +370,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
       {/* Share project keys (Owner only) */}
       {project?.role === 'owner' && (
-        <div style={{ margin: '12px 16px 0', background: 'white', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>🔑 分享此旅行</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* 協作金鑰 — tap to copy */}
@@ -367,6 +393,29 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               <p style={{ fontSize: 12, fontWeight: 600, color: C.bark, margin: 0 }}>訪客專屬分享連結</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>對方點擊連結即可直接瀏覽行程（無需登入或輸入代碼）</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Google sign-in card (shown when not yet signed in with Google) */}
+      {!googleUid && !firestore.isReadOnly && (
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
+          <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600 }}>
+            🔐 登入 Google 後可綁定成員卡，以自己的身份留言
+          </p>
+          <button onClick={handleGoogleSignIn} disabled={signingIn}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: signingIn ? '#F5F5F5' : 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
+            <span style={{ fontSize: 16 }}>G</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
+          </button>
+        </div>
+      )}
+      {googleUid && (
+        <div style={{ margin: '12px 16px 0', background: '#E0F0D8', borderRadius: 16, padding: '10px 14px', border: '1.5px solid #C2E0B4', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>✅</span>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
+            <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0' }}>{googleEmail}</p>
           </div>
         </div>
       )}
@@ -398,10 +447,10 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           return (
             <div key={m.id} style={{ marginBottom: 16 }}>
               {/* Member info card */}
-              <div style={{ background: 'white', borderRadius: '20px 20px 0 0', padding: '16px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+              <div style={{ background: 'var(--tm-card-bg)', borderRadius: '20px 20px 0 0', padding: '16px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
                 {canEdit && (
                   <button onClick={() => openEdit(m)}
-                    style={{ position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    style={{ position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     ✏️
                   </button>
                 )}
@@ -433,7 +482,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 </div>
                 {/* Board toggle */}
                 <button onClick={() => setExpandedBoard(isExpanded ? null : m.id)}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 10px', borderRadius: 12, border: `1.5px solid ${isExpanded ? C.sageDark : C.creamDark}`, background: isExpanded ? C.sageLight : 'white', cursor: 'pointer', fontFamily: FONT }}>
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 10px', borderRadius: 12, border: `1.5px solid ${isExpanded ? C.sageDark : C.creamDark}`, background: isExpanded ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
                   <span style={{ fontSize: 14 }}>📝</span>
                   <span style={{ fontSize: 9, fontWeight: 700, color: isExpanded ? C.sageDark : C.barkLight }}>
                     留言{notes.length > 0 ? ` (${notes.length})` : ''}
@@ -476,7 +525,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
                   {/* Add note input */}
                   {currentUser ? (
-                    <div style={{ background: 'white', borderRadius: 14, padding: '10px 12px', boxShadow: '0 1px 6px rgba(107,92,78,0.1)' }}>
+                    <div style={{ background: 'var(--tm-card-bg)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 1px 6px rgba(107,92,78,0.1)' }}>
                       <textarea
                         value={noteInput[m.id] || ''}
                         onChange={e => setNoteInput(p => ({ ...p, [m.id]: e.target.value }))}
@@ -499,7 +548,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                     </div>
                   ) : (
                     <button onClick={() => setShowWhoAmI(true)}
-                      style={{ width: '100%', padding: '10px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'white', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ width: '100%', padding: '10px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
                       👤 選擇身份後即可留言
                     </button>
                   )}
@@ -512,7 +561,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         {/* 新增成員 */}
         <div
           onClick={() => { setShowAdd(true); setEditTarget(null); setForm({ ...EMPTY_FORM }); }}
-          style={{ background: 'white', borderRadius: 20, padding: '20px 14px', textAlign: 'center', border: `2px dashed ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+          style={{ background: 'var(--tm-card-bg)', borderRadius: 20, padding: '20px 14px', textAlign: 'center', border: `2px dashed ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
           <span style={{ fontSize: 28, color: C.creamDark }}>＋</span>
           <span style={{ fontSize: 12, color: C.barkLight, fontWeight: 600 }}>新增成員</span>
         </div>

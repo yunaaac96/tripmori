@@ -116,8 +116,20 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
             {/* 撕票線 */}
             <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
             {/* 下半部 */}
-            <div style={{ background: 'white', padding: '10px 18px 14px' }}>
-              {f.notes && <p style={{ fontSize: 11, color: C.barkLight, margin: '0', fontStyle: 'italic' }}>💡 {f.notes}</p>}
+            <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                <div>
+                  <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>乘客</p>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{f.passengers.join('、')}</p>
+                </div>
+                {f.costPerPerson && (
+                  <div>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>每人票價</p>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {f.costPerPerson.toLocaleString()}</p>
+                  </div>
+                )}
+              </div>
+              {f.notes && <p style={{ fontSize: 11, color: C.barkLight, margin: '8px 0 0', fontStyle: 'italic' }}>💡 {f.notes}</p>}
             </div>
           </div>
         ))}
@@ -211,7 +223,7 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
             style={{
               width: '100%', padding: '11px 14px', borderRadius: 12,
               border: `1.5px solid ${showQR ? C.sageDark : C.creamDark}`,
-              background: showQR ? C.sage : 'white',
+              background: showQR ? C.sage : 'var(--tm-card-bg)',
               color: showQR ? 'white' : C.bark,
               fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT,
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
@@ -223,7 +235,7 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
           </button>
 
           {showQR && (
-            <div style={{ marginTop: 12, padding: 16, background: 'white', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, textAlign: 'center' }}>
+            <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, textAlign: 'center' }}>
               <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>OTS 取車報到 QR Code</p>
               {!qrErr ? (
                 <img
