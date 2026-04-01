@@ -51,19 +51,39 @@ const getLastSeen = (key: string) => Number(localStorage.getItem(key) || '0');
 const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()));
 
 function App() {
-  // ── Google 登入後自動升級 owner 角色 ────────────────────────────
+  // ── Google 登入後自動升級 owner 角色（或清除非 owner 的預設行程）
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       if (user && !user.isAnonymous && user.email) {
         checkOwnerRole(user.email).then(role => {
           if (role === 'owner') {
-            // 若目前顯示的專案是 default trip，同步更新 activeProject state
             setActiveProjectState(prev => {
               if (prev?.id === '74pfE7RXyEIusEdRV0rZ' && prev.role !== 'owner') {
                 return { ...prev, role: 'owner' };
               }
+              // 若 owner 尚未有 activeProject，從 localStorage 載入
+              if (!prev) {
+                const p = loadProjects().find(x => x.id === '74pfE7RXyEIusEdRV0rZ');
+                if (p) {
+                  setActiveProject(p.id);
+                  return p;
+                }
+              }
               return prev;
             });
+          } else {
+            // 非 owner：若 localStorage 存有預設行程（舊版自動加入的），清除它
+            const projects = loadProjects();
+            const idx = projects.findIndex(p => p.id === '74pfE7RXyEIusEdRV0rZ' && p.role === 'visitor');
+            if (idx >= 0) {
+              projects.splice(idx, 1);
+              localStorage.setItem('tripmori_projects', JSON.stringify(projects));
+              // 若正顯示此行程，退回 hub
+              setActiveProjectState(prev =>
+                prev?.id === '74pfE7RXyEIusEdRV0rZ' ? null : prev
+              );
+              localStorage.removeItem('tripmori_active_project');
+            }
           }
         });
       }
@@ -73,7 +93,6 @@ function App() {
 
   // ── Active project state ──────────────────────────────────────
   const [activeProject, setActiveProjectState] = useState<StoredProject | null>(() => {
-    ensureDefaultProject();                        // always register default trip
     // Check for ?visit=TRIP_ID URL param (visitor auto-join via share link)
     const params = new URLSearchParams(window.location.search);
     const visitId = params.get('visit');
