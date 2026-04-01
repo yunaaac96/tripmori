@@ -4,8 +4,8 @@
  */
 import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
-import { collection, doc, getDoc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
-import { GoogleAuthProvider, signInWithRedirect, getRedirectResult, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { collection, doc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
+import { GoogleAuthProvider, signInWithPopup, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
@@ -85,17 +85,14 @@ const ROLE_LABEL: Record<TripRole, { label: string; color: string; bg: string }>
 type View = 'hub' | 'create' | 'join-collab';
 
 const googleProvider = new GoogleAuthProvider();
-const LS_PENDING_ACTION = 'tripmori_pending_google_action';
-
-const triggerGoogleSignIn = () => signInWithRedirect(auth, googleProvider);
 
 export default function ProjectHub({ onEnterProject }: Props) {
   const projects = loadProjects();
   const [view, setView]       = useState<View>('hub');
   const [busy, setBusy]       = useState(false);
+  const [signingIn, setSigningIn] = useState(false);
   const [error, setError]     = useState('');
   const [googleUser, setGoogleUser] = useState<User | null>(null);
-  const [redirecting, setRedirecting] = useState(false);
 
   // Create form
   const [newTitle, setNewTitle]       = useState('');
@@ -107,61 +104,42 @@ export default function ProjectHub({ onEnterProject }: Props) {
   // Join form
   const [keyInput, setKeyInput]       = useState('');
 
-  // Handle redirect result on mount + auth state
+  // Track auth state
   useEffect(() => {
-    // Check for pending redirect result
-    getRedirectResult(auth).then(result => {
-      if (result?.user) {
-        setGoogleUser(result.user);
-        // Execute any pending action stored before redirect
-        const pending = localStorage.getItem(LS_PENDING_ACTION);
-        if (pending) {
-          localStorage.removeItem(LS_PENDING_ACTION);
-          try {
-            const action = JSON.parse(pending);
-            if (action.type === 'create') {
-              // restore form state and go to create view
-              setView('create');
-              if (action.title) setNewTitle(action.title);
-              if (action.emoji) setNewEmoji(action.emoji);
-              if (action.start) setNewStart(action.start);
-              if (action.end) setNewEnd(action.end);
-              if (action.desc) setNewDesc(action.desc);
-            } else if (action.type === 'join') {
-              setView('join-collab');
-              if (action.key) setKeyInput(action.key);
-            }
-          } catch {}
-        }
-      }
-    }).catch(e => {
-      if (e.code !== 'auth/no-auth-event') console.error('Redirect result error:', e);
-    });
-
     const unsub = onAuthStateChanged(auth, user => {
       if (user && !user.isAnonymous) setGoogleUser(user);
+      else setGoogleUser(null);
     });
     return unsub;
   }, []);
+
+  const handleGoogleSignIn = async () => {
+    setSigningIn(true);
+    setError('');
+    try {
+      const result = await signInWithPopup(auth, googleProvider);
+      setGoogleUser(result.user);
+    } catch (e: any) {
+      if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') {
+        // user dismissed — no error needed
+      } else if (e.code === 'auth/popup-blocked') {
+        setError('彈出視窗被封鎖，請允許彈出視窗後再試');
+      } else {
+        console.error('Google sign-in error:', e);
+        setError('登入失敗，請重試');
+      }
+    }
+    setSigningIn(false);
+  };
 
   const EMOJI_OPTS = ['✈️','🌸','🏝','🗾','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡','🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸','⛷️','🏂','❄️','🌨️','🎿','🗻','🏕️','🚂','🎪','🎭','🌅','🌃','🏖️','🎯'];
 
   const handleCreate = async () => {
     if (!newTitle.trim() || !newStart) { setError('請填寫旅行名稱和出發日期'); return; }
+    const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+    if (!user) { setError('請先登入 Google 帳號後再建立旅行'); return; }
     setBusy(true); setError('');
     try {
-      // Require Google sign-in for owner
-      let user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
-      if (!user) {
-        // Save form data and redirect to Google sign-in
-        localStorage.setItem(LS_PENDING_ACTION, JSON.stringify({
-          type: 'create', title: newTitle.trim(), emoji: newEmoji,
-          start: newStart, end: newEnd, desc: newDesc.trim(),
-        }));
-        setRedirecting(true);
-        await triggerGoogleSignIn();
-        return; // page will reload after redirect
-      }
       const ref = await addDoc(collection(db, 'trips'), {
         title: newTitle.trim(), emoji: newEmoji,
         startDate: newStart, endDate: newEnd || newStart,
@@ -187,22 +165,13 @@ export default function ProjectHub({ onEnterProject }: Props) {
   const handleJoinCollab = async () => {
     const key = keyInput.trim().toUpperCase();
     if (!key) { setError('請輸入協作金鑰'); return; }
+    const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+    if (!user) { setError('請先登入 Google 帳號後再加入行程'); return; }
     setBusy(true); setError('');
     try {
-      // Require Google sign-in for editor
-      let user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
-      if (!user) {
-        localStorage.setItem(LS_PENDING_ACTION, JSON.stringify({ type: 'join', key }));
-        setRedirecting(true);
-        await triggerGoogleSignIn();
-        return;
-      }
-      // Key format: COLLAB-{tripId_prefix}-{suffix}
-      // We need to search trips for a matching collaboratorKey
       const existing = projects.find(p => p.collaboratorKey === key);
       if (existing) { onEnterProject({ ...existing, role: 'editor' }); return; }
 
-      // Check default trip
       if (key === DEFAULT_COLLAB) {
         ensureDefaultProject();
         const p = loadProjects().find(x => x.id === DEFAULT_TRIP_ID)!;
@@ -210,13 +179,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
         return;
       }
 
-      // Search Firestore by collaboratorKey (simple approach: query by key embedded in trips)
-      // Since we can't query by field easily without index, we use the key prefix to find tripId
-      // Key format: COLLAB-{id6}-{rand4}  — extract id prefix
       const parts = key.split('-');
       if (parts.length < 3 || parts[0] !== 'COLLAB') { setError('金鑰格式不正確'); setBusy(false); return; }
 
-      // Try to fetch trip directly if we find it in known projects
       setError('找不到符合的專案，請確認金鑰是否正確');
     } catch (e) { setError('加入失敗，請重試'); }
     setBusy(false);
@@ -227,6 +192,11 @@ export default function ProjectHub({ onEnterProject }: Props) {
   if (view === 'create') return (
     <Screen title="✈️ 建立新旅行" onBack={() => { setView('hub'); setError(''); }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!googleUser && (
+          <div style={{ padding: '10px 14px', borderRadius: 12, background: '#FFF8E1', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
+            ⚠️ 請先返回首頁登入 Google 帳號後再建立旅行
+          </div>
+        )}
         {/* Emoji */}
         <div>
           <label style={labelStyle}>旅行表情</label>
@@ -259,9 +229,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
             placeholder="目的地、主要行程..." value={newDesc} onChange={e => setNewDesc(e.target.value)} />
         </div>
         {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
-        <button onClick={handleCreate} disabled={busy || redirecting}
-          style={{ padding: 14, borderRadius: 14, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: (busy || redirecting) ? 0.6 : 1 }}>
-          {redirecting ? '🔐 Google 登入中...' : busy ? '建立中...' : '🌸 建立旅行'}
+        <button onClick={handleCreate} disabled={busy}
+          style={{ padding: 14, borderRadius: 14, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: busy ? 0.6 : 1 }}>
+          {busy ? '建立中...' : '🌸 建立旅行'}
         </button>
       </div>
     </Screen>
@@ -277,9 +247,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
           value={keyInput} onChange={e => setKeyInput(e.target.value.toUpperCase())}
           autoCapitalize="characters" />
         {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
-        <button onClick={handleJoinCollab} disabled={busy || redirecting}
-          style={{ padding: 14, borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: (busy || redirecting) ? 0.6 : 1 }}>
-          {redirecting ? '🔐 Google 登入中...' : busy ? '驗證中...' : '✓ 加入'}
+        <button onClick={handleJoinCollab} disabled={busy}
+          style={{ padding: 14, borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: busy ? 0.6 : 1 }}>
+          {busy ? '驗證中...' : '✓ 加入'}
         </button>
       </div>
     </Screen>
@@ -297,7 +267,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
 
         <div style={{ padding: '24px 20px' }}>
 
-          {/* Google sign-in / user status — shown after hero, before MY TRIPS */}
+          {/* Google sign-in / user status */}
           {googleUser ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 16, background: '#E0F0D8', marginBottom: 20, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
               {googleUser.photoURL && (
@@ -313,11 +283,11 @@ export default function ProjectHub({ onEnterProject }: Props) {
               <div style={{ padding: '10px 14px', borderRadius: 12, background: '#FFF8E1', marginBottom: 10, fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
                 💡 建立或編輯行程需要登入 Google 帳號，訪客可直接使用分享連結進入
               </div>
-              <button onClick={async () => { setRedirecting(true); await triggerGoogleSignIn(); }}
-                disabled={redirecting}
-                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'white', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: redirecting ? 0.6 : 1 }}>
+              {error && <p style={{ fontSize: 12, color: '#C0392B', margin: '0 0 8px' }}>{error}</p>}
+              <button onClick={handleGoogleSignIn} disabled={signingIn}
+                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'white', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
                 <span style={{ fontSize: 18 }}>🔐</span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#1C3461' }}>{redirecting ? '跳轉中...' : '使用 Google 帳號登入'}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
               </button>
             </div>
           )}

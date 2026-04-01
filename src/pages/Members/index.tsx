@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -29,6 +29,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const [copied, setCopied]             = useState<string | null>(null);
   const [googleUid, setGoogleUid]       = useState<string | null>(null);
   const [googleEmail, setGoogleEmail]   = useState<string | null>(null);
+  const [signingIn, setSigningIn]       = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
@@ -58,6 +59,21 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       setCopied(key);
       setTimeout(() => setCopied(null), 2500);
     });
+  };
+
+  const handleGoogleSignIn = async () => {
+    setSigningIn(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      const result = await signInWithPopup(auth, provider);
+      setGoogleUid(result.user.uid);
+      setGoogleEmail(result.user.email);
+    } catch (e: any) {
+      if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+        console.error('Google sign-in error:', e);
+      }
+    }
+    setSigningIn(false);
   };
 
   // Note input state per member
@@ -377,6 +393,29 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               <p style={{ fontSize: 12, fontWeight: 600, color: C.bark, margin: 0 }}>訪客專屬分享連結</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>對方點擊連結即可直接瀏覽行程（無需登入或輸入代碼）</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Google sign-in card (shown when not yet signed in with Google) */}
+      {!googleUid && !firestore.isReadOnly && (
+        <div style={{ margin: '12px 16px 0', background: 'white', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
+          <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600 }}>
+            🔐 登入 Google 後可綁定成員卡，以自己的身份留言
+          </p>
+          <button onClick={handleGoogleSignIn} disabled={signingIn}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: signingIn ? '#F5F5F5' : 'white', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
+            <span style={{ fontSize: 16 }}>G</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
+          </button>
+        </div>
+      )}
+      {googleUid && (
+        <div style={{ margin: '12px 16px 0', background: '#E0F0D8', borderRadius: 16, padding: '10px 14px', border: '1.5px solid #C2E0B4', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>✅</span>
+          <div>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
+            <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0' }}>{googleEmail}</p>
           </div>
         </div>
       )}
