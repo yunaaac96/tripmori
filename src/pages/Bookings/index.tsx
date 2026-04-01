@@ -137,17 +137,14 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
         {/* ── 住宿 ── */}
         <SectionTitle>🏨 住宿安排</SectionTitle>
         {HOTELS.map(h => (
-          <div key={h.id} style={{ ...cardStyle }}>
-            <div style={{ marginBottom: 12 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 6 }}>
-                <div style={{ width: 40, height: 40, borderRadius: 14, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0 }}>🏨</div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, lineHeight: 1.3 }}>{h.name}</p>
-                  <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameJa}</p>
-                </div>
+          <div key={h.id} style={{ ...cardStyle, textAlign: 'left' }}>
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
+              <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
+              <div style={{ flex: 1 }}>
+                <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{h.name}</p>
+                <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameJa}</p>
+                <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>
               </div>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>📍 {h.address}</p>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>🛏 {h.roomType}</p>
             </div>
 
             {/* Check-in / Check-out */}
@@ -162,13 +159,17 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
               </div>
             </div>
 
-            {/* 訂單編號 + PIN */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, marginBottom: 6 }}>
-              <div style={{ background: '#EEF2FF', borderRadius: 12, padding: '7px 10px' }}>
-                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
-                <p style={{ fontSize: 13, fontWeight: 700, color: '#3A4A8A', margin: '2px 0 0', letterSpacing: 0.3, wordBreak: 'break-all' }}>{h.confirmCode}</p>
+            {/* 費用 + 訂單 + PIN */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+              <div style={{ background: C.cream, borderRadius: 12, padding: '7px 8px' }}>
+                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>每人分攤</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {h.costPerPerson.toLocaleString()}</p>
               </div>
-              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px', minWidth: 72 }}>
+              <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 8px' }}>
+                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
+              </div>
+              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 8px' }}>
                 <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
                 <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
               </div>
@@ -241,7 +242,7 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
                 <img
                   src={QR_SRC}
                   alt="OTS QR Code"
-                  style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block', margin: '0 auto' }}
+                  style={{ width: 200, height: 200, imageRendering: 'pixelated' }}
                   onError={() => setQrErr(true)}
                 />
               ) : (

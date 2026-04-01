@@ -22,6 +22,7 @@ export default function JournalPage({ journals, members, journalComments, firest
   const [journalCommentInputs, setJournalCommentInputs] = useState<Record<string, string>>({});
   const [savingComment, setSavingComment] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<string>(() => localStorage.getItem(LS_USER_KEY) || '');
+  const [googleUid, setGoogleUid]     = useState<string | null>(null);
 
   const memberNames: string[] = members.length > 0 ? members.map((m: any) => m.name) : ['uu', 'brian'];
   const set = (key: string, val: any) => setForm(p => ({ ...p, [key]: val }));
@@ -32,15 +33,21 @@ export default function JournalPage({ journals, members, journalComments, firest
     return () => clearTimeout(t);
   }, [showForm]);
 
-  // Auto-detect identity from Google binding
+  // 追蹤 Google 登入狀態＋自動帶入綁定成員身份
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
-      if (user && !user.isAnonymous && members.length > 0) {
-        const bound = members.find((m: any) => m.googleUid === user.uid);
-        if (bound) {
-          localStorage.setItem(LS_USER_KEY, bound.name);
-          setCurrentUser(bound.name);
+      if (user && !user.isAnonymous) {
+        setGoogleUid(user.uid);
+        // 自動帶入對應的成員名稱
+        if (members.length > 0) {
+          const bound = members.find((m: any) => m.googleUid === user.uid);
+          if (bound) {
+            localStorage.setItem(LS_USER_KEY, bound.name);
+            setCurrentUser(bound.name);
+          }
         }
+      } else {
+        setGoogleUid(null);
       }
     });
     return unsub;
@@ -234,11 +241,19 @@ export default function JournalPage({ journals, members, journalComments, firest
       <PageHeader title="旅行日誌" subtitle="記錄美好時刻 📸" emoji="📖" color={C.blush} />
 
       <div style={{ padding: '12px 16px 80px' }}>
-        {/* 訪客不顯示新增按鈕 */}
-        {!isReadOnly && (
+        {/* 需要 Google 登入才能新增日誌 */}
+        {!isReadOnly && googleUid && (
           <button onClick={openForm} style={{ ...btnPrimary(C.earth), width: '100%', marginBottom: 16 }}>
             ＋ 新增日誌
           </button>
+        )}
+        {!isReadOnly && !googleUid && (
+          <div style={{ background: 'var(--tm-note-1)', borderRadius: 14, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
+            <span style={{ fontSize: 18 }}>🔒</span>
+            <p style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>
+              請先至「成員」頁面綁定 Google 帳號，即可新增日誌
+            </p>
+          </div>
         )}
 
         {/* Journal entries */}

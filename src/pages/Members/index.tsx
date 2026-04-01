@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithRedirect } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect } from 'firebase/auth';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -61,16 +61,32 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     });
   };
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
+    const provider = new GoogleAuthProvider();
+    // 同步呼叫（iOS Safari 不允許在 await 之後開 popup）
+    signInWithPopup(auth, provider)
+      .then(result => {
+        setGoogleUid(result.user.uid);
+        setGoogleEmail(result.user.email);
+        setSigningIn(false);
+      })
+      .catch((e: any) => {
+        if (
+          e.code === 'auth/popup-blocked' ||
+          e.code === 'auth/operation-not-supported-in-this-environment'
+        ) {
+          signInWithRedirect(auth, provider);
+        } else if (
+          e.code !== 'auth/popup-closed-by-user' &&
+          e.code !== 'auth/cancelled-popup-request'
+        ) {
+          console.error('Google sign-in error:', e);
+          setSigningIn(false);
+        } else {
+          setSigningIn(false);
+        }
+      });
     setSigningIn(true);
-    try {
-      const provider = new GoogleAuthProvider();
-      await signInWithRedirect(auth, provider);
-      // Page navigates away — code below won't execute
-    } catch (e: any) {
-      console.error('Google sign-in error:', e);
-      setSigningIn(false);
-    }
   };
 
   // Note input state per member
