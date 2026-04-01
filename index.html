@@ -10,19 +10,30 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="TripMori" />
 
+    <!-- Open Graph (分享縮圖) -->
+    <meta property="og:type"        content="website" />
+    <meta property="og:url"         content="https://tripmori.vercel.app/" />
+    <meta property="og:title"       content="TripMori 旅行手帳" />
+    <meta property="og:description" content="團體旅遊規劃手帳，記錄行程、日誌與旅費" />
+    <meta property="og:image"       content="https://tripmori.vercel.app/icons/icon-512-light.png" />
+    <meta property="og:image:width"  content="512" />
+    <meta property="og:image:height" content="512" />
+
+    <!-- Twitter Card -->
+    <meta name="twitter:card"        content="summary" />
+    <meta name="twitter:title"       content="TripMori 旅行手帳" />
+    <meta name="twitter:description" content="團體旅遊規劃手帳，記錄行程、日誌與旅費" />
+    <meta name="twitter:image"       content="https://tripmori.vercel.app/icons/icon-512-light.png" />
+
     <!-- theme-color: light / dark auto-switch -->
     <meta name="theme-color" content="#F7F4EB" media="(prefers-color-scheme: light)" />
     <meta name="theme-color" content="#3A5A3A" media="(prefers-color-scheme: dark)" />
 
-    <!-- Favicon 32px light / dark -->
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-light.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-dark.png"  media="(prefers-color-scheme: dark)" />
+    <!-- SVG favicon (現代瀏覽器，支援深色模式自動切換) -->
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <!-- Favicon 48px light / dark -->
-    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48-light.png" media="(prefers-color-scheme: light)" />
-    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48-dark.png"  media="(prefers-color-scheme: dark)" />
-
-    <!-- Fallback favicon (no media query) for browsers that don't support media on <link> -->
+    <!-- PNG favicon fallback -->
+    <link rel="icon" type="image/png" sizes="48x48" href="/icons/favicon-48-light.png" />
     <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32-light.png" />
 
     <!-- Apple Touch Icons -->
