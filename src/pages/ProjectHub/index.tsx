@@ -132,11 +132,11 @@ export default function ProjectHub({ onEnterProject }: Props) {
     setSigningIn(false);
   };
 
-  // 34 emojis — 3 groups of ~11: transport/nature, country flags, winter/scenery
+  // 42 emojis — 3 groups of 14: transport/nature, country flags, winter/scenery
   const EMOJI_OPTS = [
-    '✈️','🌸','🏝','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡',
-    '🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸',
-    '⛷️','🏂','❄️','🎿','🗻','🏕️','🚂','🌅','🌃','🏖️','🎯',
+    '✈️','🚢','🚞','🌸','🏝','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡','🗾',
+    '🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸','🇩🇪','🇵🇹',
+    '⛷️','🏂','❄️','🎿','🗻','🏕️','🚂','🌅','🌃','🏖️','🌄','🌉','🏯','🎯',
   ];
 
   const handleCreate = async () => {
