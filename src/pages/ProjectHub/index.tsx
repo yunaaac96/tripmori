@@ -54,16 +54,38 @@ const DEFAULT_SHARE    = `SHARE-${DEFAULT_TRIP_ID.slice(0,6).toUpperCase()}-OKI`
 export const ensureDefaultProject = () => {
   const existing = loadProjects().find(p => p.id === DEFAULT_TRIP_ID);
   if (!existing) {
+    // 預設給 visitor 角色；登入後由 checkOwnerRole() 升級
     saveProject({
       id: DEFAULT_TRIP_ID,
       title: '沖繩之旅 2026',
       emoji: '🌸',
-      role: 'owner',
+      role: 'visitor',
       collaboratorKey: DEFAULT_COLLAB,
       shareCode: DEFAULT_SHARE,
       addedAt: Date.now(),
     });
   }
+};
+
+// 檢查登入的 Google user 是否為此 trip 的 owner，是則升級 localStorage role
+export const checkOwnerRole = async (googleEmail: string): Promise<TripRole | null> => {
+  try {
+    const { getFirestore, doc, getDoc } = await import('firebase/firestore');
+    const { db } = await import('../../config/firebase');
+    const snap = await getDoc(doc(db, 'trips', DEFAULT_TRIP_ID));
+    if (!snap.exists()) return null;
+    const data = snap.data();
+    if (data.ownerEmail && data.ownerEmail.toLowerCase() === googleEmail.toLowerCase()) {
+      const projects = loadProjects();
+      const idx = projects.findIndex(p => p.id === DEFAULT_TRIP_ID);
+      if (idx >= 0 && projects[idx].role !== 'owner') {
+        projects[idx].role = 'owner';
+        localStorage.setItem('tripmori_projects', JSON.stringify(projects));
+      }
+      return 'owner';
+    }
+  } catch (e) { console.error(e); }
+  return null;
 };
 
 // ── Firestore: write trip metadata doc ───────────────────────────
