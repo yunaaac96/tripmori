@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc } from 'firebase/firestore';
-import { signInAnonymously } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
 import SchedulePage from './pages/Schedule/index';
@@ -12,7 +12,7 @@ import PlanningPage from './pages/Planning/index';
 import MembersPage from './pages/Members/index';
 import ProjectHub, {
   ensureDefaultProject, loadProjects, saveProject, setActiveProject, getActiveProject,
-  StoredProject, TripRole,
+  checkOwnerRole, StoredProject, TripRole,
 } from './pages/ProjectHub/index';
 
 export const TRIP_ID = "74pfE7RXyEIusEdRV0rZ"; // default / fallback
@@ -51,6 +51,26 @@ const getLastSeen = (key: string) => Number(localStorage.getItem(key) || '0');
 const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()));
 
 function App() {
+  // ── Google 登入後自動升級 owner 角色 ────────────────────────────
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      if (user && !user.isAnonymous && user.email) {
+        checkOwnerRole(user.email).then(role => {
+          if (role === 'owner') {
+            // 若目前顯示的專案是 default trip，同步更新 activeProject state
+            setActiveProjectState(prev => {
+              if (prev?.id === '74pfE7RXyEIusEdRV0rZ' && prev.role !== 'owner') {
+                return { ...prev, role: 'owner' };
+              }
+              return prev;
+            });
+          }
+        });
+      }
+    });
+    return unsub;
+  }, []);
+
   // ── Active project state ──────────────────────────────────────
   const [activeProject, setActiveProjectState] = useState<StoredProject | null>(() => {
     ensureDefaultProject();                        // always register default trip
@@ -85,7 +105,8 @@ function App() {
     // Fetch trip metadata from Firestore
     const lookup = async () => {
       try {
-        await signInAnonymously(auth);
+        await auth.authStateReady();
+        if (!auth.currentUser) await signInAnonymously(auth);
         const tripSnap = await getDoc(doc(db, 'trips', tripId));
         if (!tripSnap.exists()) return;
         const data = tripSnap.data();
@@ -138,7 +159,9 @@ function App() {
     const init = async () => {
       setLoading(true);
       try {
-        // Only sign in anonymously if no user is signed in (preserve Google auth)
+        // 等 Firebase 從 localStorage 還原登入狀態完成後再判斷
+        // （避免 refresh 時 auth.currentUser 瞬間是 null 導致蓋掉 Google 登入）
+        await auth.authStateReady();
         if (!auth.currentUser) await signInAnonymously(auth);
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
