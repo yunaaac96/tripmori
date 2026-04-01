@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -62,52 +62,26 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     });
   };
 
-  const isIOSSafari = () =>
-    /iP(ad|od|hone)/i.test(navigator.userAgent) &&
-    /WebKit/i.test(navigator.userAgent) &&
-    !/(CriOS|FxiOS|OPiOS|mercury)/i.test(navigator.userAgent);
-
+  // 統一用 signInWithPopup，同步呼叫可相容 iOS Safari，避免 redirect sessionStorage 問題
   const handleGoogleSignIn = () => {
     const provider = new GoogleAuthProvider();
-    setSigningIn(true);
-    setAuthError(null);
-    if (isIOSSafari()) {
-      // iOS Safari：在使用者手勢脈絡中直接 redirect
-      signInWithRedirect(auth, provider).catch((e: any) => {
-        console.error('redirect error:', e);
-        setAuthError(`登入失敗：${e.code || e.message}`);
-        setSigningIn(false);
-      });
-    } else {
-      signInWithPopup(auth, provider)
-        .then(result => {
-          setGoogleUid(result.user.uid);
-          setGoogleEmail(result.user.email);
-          setSigningIn(false);
-        })
-        .catch((e: any) => {
-          if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
-            console.error('popup error:', e);
-            setAuthError(`登入失敗：${e.code || e.message}`);
-          }
-          setSigningIn(false);
-        });
-    }
-  };
-
-  // 處理 iOS redirect 回來後的結果
-  useEffect(() => {
-    getRedirectResult(auth).then(result => {
-      if (result?.user) {
+    signInWithPopup(auth, provider)
+      .then(result => {
         setGoogleUid(result.user.uid);
         setGoogleEmail(result.user.email);
-      }
-    }).catch((e: any) => {
-      if (e.code && e.code !== 'auth/null-user') {
-        setAuthError(`登入失敗：${e.code}`);
-      }
-    });
-  }, []);
+        setSigningIn(false);
+        setAuthError(null);
+      })
+      .catch((e: any) => {
+        if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+          console.error('popup error:', e);
+          setAuthError(`登入失敗：${e.code || e.message}`);
+        }
+        setSigningIn(false);
+      });
+    setSigningIn(true);
+    setAuthError(null);
+  };
 
   // Note input state per member
   const [noteInput, setNoteInput]       = useState<Record<string, string>>({});

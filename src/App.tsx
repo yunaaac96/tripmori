@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc } from 'firebase/firestore';
-import { signInAnonymously, getRedirectResult } from 'firebase/auth';
+import { signInAnonymously } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
 import SchedulePage from './pages/Schedule/index';
@@ -51,11 +51,6 @@ const getLastSeen = (key: string) => Number(localStorage.getItem(key) || '0');
 const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()));
 
 function App() {
-  // ── Process Google redirect result on mount (iOS Safari compat) ─
-  useEffect(() => {
-    getRedirectResult(auth).catch(console.error);
-  }, []);
-
   // ── Active project state ──────────────────────────────────────
   const [activeProject, setActiveProjectState] = useState<StoredProject | null>(() => {
     ensureDefaultProject();                        // always register default trip
