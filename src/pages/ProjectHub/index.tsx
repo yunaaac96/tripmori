@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
 import { collection, doc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
-import { GoogleAuthProvider, signInWithRedirect, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInWithRedirect, signInAnonymously, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
@@ -113,17 +113,33 @@ export default function ProjectHub({ onEnterProject }: Props) {
     return unsub;
   }, []);
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = () => {
+    // 呼叫 signInWithPopup 必須在 click handler 同步執行（iOS Safari 需要）
+    signInWithPopup(auth, googleProvider)
+      .then(result => {
+        setGoogleUser(result.user);
+        setSigningIn(false);
+      })
+      .catch((e: any) => {
+        if (
+          e.code === 'auth/popup-blocked' ||
+          e.code === 'auth/operation-not-supported-in-this-environment'
+        ) {
+          // iOS Safari 不支援 popup → 改用 redirect
+          signInWithRedirect(auth, googleProvider);
+        } else if (
+          e.code !== 'auth/popup-closed-by-user' &&
+          e.code !== 'auth/cancelled-popup-request'
+        ) {
+          console.error('Google sign-in error:', e);
+          setError('登入失敗，請重試');
+          setSigningIn(false);
+        } else {
+          setSigningIn(false);
+        }
+      });
     setSigningIn(true);
     setError('');
-    try {
-      await signInWithRedirect(auth, googleProvider);
-      // Page navigates away — code below won't execute
-    } catch (e: any) {
-      console.error('Google sign-in error:', e);
-      setError('登入失敗，請重試');
-      setSigningIn(false);
-    }
   };
 
   // 42 emojis — 3 groups of 14: transport/nature, country flags, winter/scenery

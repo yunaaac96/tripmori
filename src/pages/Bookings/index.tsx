@@ -137,7 +137,7 @@ export default function BookingsPage({ bookings: _b }: { bookings: any[] }) {
         {/* ── 住宿 ── */}
         <SectionTitle>🏨 住宿安排</SectionTitle>
         {HOTELS.map(h => (
-          <div key={h.id} style={{ ...cardStyle }}>
+          <div key={h.id} style={{ ...cardStyle, textAlign: 'left' }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
               <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
               <div style={{ flex: 1 }}>
