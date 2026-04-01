@@ -25,7 +25,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
   // Identity: who is the current user? Stored in localStorage
   const [currentUser, setCurrentUser]   = useState<string>(() => localStorage.getItem(LS_USER_KEY) || '');
-  const [showWhoAmI, setShowWhoAmI]     = useState(false);
   const [copied, setCopied]             = useState<string | null>(null);
   const [googleUid, setGoogleUid]       = useState<string | null>(null);
   const [googleEmail, setGoogleEmail]   = useState<string | null>(null);
@@ -213,12 +212,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     catch (e) { console.error(e); }
   };
 
-  const selectUser = (name: string) => {
-    localStorage.setItem(LS_USER_KEY, name);
-    setCurrentUser(name);
-    setShowWhoAmI(false);
-  };
-
   const displayMembers = members.length > 0 ? members : [
     { id: 'uu',    name: 'uu',    color: '#ebcef5', role: '行程規劃', avatarUrl: '' },
     { id: 'brian', name: 'brian', color: '#aaa9ab', role: '交通達人', avatarUrl: '' },
@@ -232,39 +225,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       {/* Crop modal */}
       {cropFile && (
         <CropModal file={cropFile} onCrop={handleCropDone} onCancel={() => setCropFile(null)} />
-      )}
-
-      {/* "Who am I?" modal */}
-      {showWhoAmI && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: 24 }}>
-          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 340, fontFamily: FONT, textAlign: 'center' }}>
-            <p style={{ fontSize: 24, margin: '0 0 8px' }}>👤</p>
-            <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>你是哪位旅伴？</p>
-            <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 20px' }}>選擇後可以在成員卡片下留言</p>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {memberNames.map((name: string) => {
-                const m = displayMembers.find((x: any) => x.name === name);
-                return (
-                  <button key={name} onClick={() => selectUser(name)}
-                    style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 16px', borderRadius: 14, border: `2px solid ${currentUser === name ? C.sageDark : C.creamDark}`, background: currentUser === name ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
-                    <div style={{ width: 36, height: 36, borderRadius: '50%', background: m?.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
-                      {m?.avatarUrl ? <img src={m.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : name[0].toUpperCase()}
-                    </div>
-                    <div style={{ textAlign: 'left' }}>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{name}</p>
-                      <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>{m?.role || '旅伴'}</p>
-                    </div>
-                    {currentUser === name && <span style={{ marginLeft: 'auto', color: C.sageDark, fontSize: 14 }}>✓</span>}
-                  </button>
-                );
-              })}
-            </div>
-            <button onClick={() => setShowWhoAmI(false)}
-              style={{ marginTop: 16, padding: '10px 24px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
-              稍後再說
-            </button>
-          </div>
-        </div>
       )}
 
       {/* Hidden file inputs */}
@@ -430,20 +390,20 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
-      {/* Identity bar */}
-      <div style={{ padding: '10px 16px 0', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        <span style={{ fontSize: 12, color: C.barkLight, fontWeight: 600 }}>
-          {currentUser ? `👤 你是：${currentUser}` : '👤 尚未選擇身份'}
-        </span>
-        <button onClick={() => setShowWhoAmI(true)}
-          style={{ fontSize: 11, color: C.sageDark, fontWeight: 700, background: C.sageLight + '55', border: `1px solid ${C.sageDark}33`, borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT }}>
-          {currentUser ? '切換' : '選擇身份'}
-        </button>
-      </div>
-
       {/* Member cards + note boards */}
       <div style={{ padding: '12px 16px 80px' }}>
-        {displayMembers.map((m: any) => {
+        {firestore.isReadOnly ? (
+          /* Visitor lock screen */
+          <div style={{ textAlign: 'center', padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+            <div style={{ fontSize: 52 }}>🔒</div>
+            <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>成員資訊僅限協作者查看</p>
+            <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.7 }}>
+              請聯繫行程擁有者取得協作金鑰，<br />即可以編輯者身份加入並查看所有成員資訊
+            </p>
+          </div>
+        ) : (
+          <>
+          {displayMembers.map((m: any) => {
           const isUploading  = uploadingFor === m.id;
           const notes        = getNotesFor(m.id);
           const isExpanded   = expandedBoard === m.id;
@@ -452,7 +412,9 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
           const canEdit = firestore.role === 'owner' || (firestore.role === 'editor' && googleUid && m.googleUid === googleUid);
           const isMyCard = googleUid && m.googleUid === googleUid;
-          const canBind = googleUid && !m.googleUid && !firestore.isReadOnly;
+          // 一個 Google 帳號只能綁定一張成員卡
+          const alreadyBound = members.some((mem: any) => mem.googleUid === googleUid);
+          const canBind = googleUid && !m.googleUid && !firestore.isReadOnly && !alreadyBound;
 
           return (
             <div key={m.id} style={{ marginBottom: 16 }}>
@@ -517,7 +479,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                           <div key={note.id} style={{ background: stickyColor, borderRadius: 12, padding: '10px 12px', minWidth: 130, maxWidth: 180, boxShadow: '2px 2px 6px rgba(107,92,78,0.15)', position: 'relative', flex: '1 1 130px' }}>
                             {/* Visibility badge */}
                             <span style={{ fontSize: 9, fontWeight: 700, color: note.visibility === 'private' ? '#9A3A3A' : '#4A7A35', background: note.visibility === 'private' ? '#FAE0E0' : '#E0F0D8', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 6 }}>
-                              {note.visibility === 'private' ? '🔒 協作者限定' : '🌍 公開'}
+                              {note.visibility === 'private' ? '🔒 私人' : '👥 旅伴'}
                             </span>
                             <p style={{ fontSize: 13, color: C.bark, margin: '0 0 6px', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note.content}</p>
                             <p style={{ fontSize: 10, color: C.barkLight, margin: 0, fontWeight: 600 }}>— {note.authorName} {timeStr}</p>
@@ -543,10 +505,10 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                         style={{ width: '100%', boxSizing: 'border-box', border: 'none', outline: 'none', fontSize: 14, fontFamily: FONT, color: C.bark, resize: 'none', minHeight: 60, background: 'transparent', lineHeight: 1.6 }}
                       />
                       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
-                        {/* Visibility toggle */}
+                        {/* Visibility toggle：旅伴（所有人可見） / 私人（僅自己看） */}
                         <button onClick={() => setNoteVis(p => ({ ...p, [m.id]: p[m.id] === 'private' ? 'public' : 'private' }))}
                           style={{ fontSize: 11, fontWeight: 700, color: noteVis[m.id] === 'private' ? '#9A3A3A' : '#4A7A35', background: noteVis[m.id] === 'private' ? '#FAE0E0' : '#E0F0D8', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT }}>
-                          {noteVis[m.id] === 'private' ? '🔒 協作者限定' : '🌍 公開'}
+                          {noteVis[m.id] === 'private' ? '🔒 私人' : '👥 旅伴'}
                         </button>
                         <button
                           onClick={() => handleAddNote(m.id)}
@@ -557,10 +519,9 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                       </div>
                     </div>
                   ) : (
-                    <button onClick={() => setShowWhoAmI(true)}
-                      style={{ width: '100%', padding: '10px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                      👤 選擇身份後即可留言
-                    </button>
+                    <div style={{ padding: '10px', borderRadius: 12, background: 'var(--tm-note-1)', color: '#9A6800', fontWeight: 600, fontSize: 12, textAlign: 'center' }}>
+                      🔐 請先登入 Google 並綁定成員卡後即可留言
+                    </div>
                   )}
                 </div>
               )}
@@ -569,12 +530,16 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         })}
 
         {/* 新增成員 */}
-        <div
-          onClick={() => { setShowAdd(true); setEditTarget(null); setForm({ ...EMPTY_FORM }); }}
-          style={{ background: 'var(--tm-card-bg)', borderRadius: 20, padding: '20px 14px', textAlign: 'center', border: `2px dashed ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
-          <span style={{ fontSize: 28, color: C.creamDark }}>＋</span>
-          <span style={{ fontSize: 12, color: C.barkLight, fontWeight: 600 }}>新增成員</span>
-        </div>
+        {!firestore.isReadOnly && (
+          <div
+            onClick={() => { setShowAdd(true); setEditTarget(null); setForm({ ...EMPTY_FORM }); }}
+            style={{ background: 'var(--tm-card-bg)', borderRadius: 20, padding: '20px 14px', textAlign: 'center', border: `2px dashed ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>
+            <span style={{ fontSize: 28, color: C.creamDark }}>＋</span>
+            <span style={{ fontSize: 12, color: C.barkLight, fontWeight: 600 }}>新增成員</span>
+          </div>
+        )}
+          </>
+        )}
       </div>
     </div>
   );
