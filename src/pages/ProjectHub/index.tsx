@@ -86,6 +86,12 @@ type View = 'hub' | 'create' | 'join-collab';
 
 const googleProvider = new GoogleAuthProvider();
 
+// iOS Safari 不支援 signInWithPopup（popup 被封鎖），需用 redirect
+const isIOSSafari = () =>
+  /iP(ad|od|hone)/i.test(navigator.userAgent) &&
+  /WebKit/i.test(navigator.userAgent) &&
+  !/(CriOS|FxiOS|OPiOS|mercury)/i.test(navigator.userAgent);
+
 export default function ProjectHub({ onEnterProject }: Props) {
   const projects = loadProjects();
   const [view, setView]       = useState<View>('hub');
@@ -114,32 +120,30 @@ export default function ProjectHub({ onEnterProject }: Props) {
   }, []);
 
   const handleGoogleSignIn = () => {
-    // 呼叫 signInWithPopup 必須在 click handler 同步執行（iOS Safari 需要）
-    signInWithPopup(auth, googleProvider)
-      .then(result => {
-        setGoogleUser(result.user);
-        setSigningIn(false);
-      })
-      .catch((e: any) => {
-        if (
-          e.code === 'auth/popup-blocked' ||
-          e.code === 'auth/operation-not-supported-in-this-environment'
-        ) {
-          // iOS Safari 不支援 popup → 改用 redirect
-          signInWithRedirect(auth, googleProvider);
-        } else if (
-          e.code !== 'auth/popup-closed-by-user' &&
-          e.code !== 'auth/cancelled-popup-request'
-        ) {
-          console.error('Google sign-in error:', e);
-          setError('登入失敗，請重試');
-          setSigningIn(false);
-        } else {
-          setSigningIn(false);
-        }
-      });
     setSigningIn(true);
     setError('');
+    if (isIOSSafari()) {
+      // iOS Safari：在使用者手勢脈絡中直接呼叫 redirect（不能放在 catch 裡）
+      signInWithRedirect(auth, googleProvider).catch((e: any) => {
+        console.error('redirect error:', e);
+        setError(`登入失敗：${e.code || e.message}`);
+        setSigningIn(false);
+      });
+    } else {
+      // 其他瀏覽器：用 popup
+      signInWithPopup(auth, googleProvider)
+        .then(result => {
+          setGoogleUser(result.user);
+          setSigningIn(false);
+        })
+        .catch((e: any) => {
+          if (e.code !== 'auth/popup-closed-by-user' && e.code !== 'auth/cancelled-popup-request') {
+            console.error('popup error:', e);
+            setError(`登入失敗：${e.code || e.message}`);
+          }
+          setSigningIn(false);
+        });
+    }
   };
 
   // 42 emojis — 3 groups of 14: transport/nature, country flags, winter/scenery
