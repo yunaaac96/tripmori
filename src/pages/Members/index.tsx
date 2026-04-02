@@ -410,6 +410,29 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           </div>
         ) : (
           <>
+          {/* ── Owner-only: Google binding summary ── */}
+          {firestore.role === 'owner' && members.length > 0 && (
+            <div style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 16px', marginBottom: 14, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 8px' }}>🔐 帳號綁定總覽（擁有者）</p>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {members.map((m: any) => (
+                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, flexShrink: 0, overflow: 'hidden' }}>
+                      {m.avatarUrl
+                        ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : m.name?.[0]?.toUpperCase()
+                      }
+                    </div>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: C.bark, minWidth: 60 }}>{m.name}</span>
+                    {m.googleEmail
+                      ? <span style={{ fontSize: 11, color: '#2A6A9A', background: '#D8EDF8', borderRadius: 8, padding: '2px 8px', fontWeight: 600 }}>📧 {m.googleEmail}</span>
+                      : <span style={{ fontSize: 11, color: '#9A8A7A', background: '#F5F5F5', borderRadius: 8, padding: '2px 8px' }}>尚未綁定</span>
+                    }
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           {displayMembers.map((m: any) => {
           const isUploading  = uploadingFor === m.id;
           const notes        = getNotesFor(m.id);
@@ -446,11 +469,18 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   </div>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>
                     {isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 6, padding: '1px 6px' }}>我</span>}
                     {m.googleUid && !isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px' }}>🔗 已綁定</span>}
+                    {!m.googleUid && <span style={{ fontSize: 10, fontWeight: 600, background: '#F5F5F5', color: '#9A8A7A', borderRadius: 6, padding: '1px 6px' }}>未綁定</span>}
                   </div>
+                  {/* 擁有者可看到綁定的 Google 帳號 email */}
+                  {firestore.role === 'owner' && m.googleEmail && (
+                    <p style={{ fontSize: 10, color: '#2A6A9A', margin: '2px 0 0', fontWeight: 600 }}>
+                      📧 {m.googleEmail}
+                    </p>
+                  )}
                   <p style={{ fontSize: 12, color: C.barkLight, margin: '3px 0 0' }}>{m.role || '旅伴'}</p>
                   {canBind && (
                     <button onClick={() => handleBindGoogle(m.id)}
