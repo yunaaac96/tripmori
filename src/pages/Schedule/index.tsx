@@ -347,7 +347,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
                   <div style={{ width: 12, height: 12, borderRadius: '50%', background: cat.bg, border: `2.5px solid ${cat.text}`, boxShadow: `0 0 0 3px ${C.cream}`, flexShrink: 0 }} />
                 </div>
                 {/* Card */}
-                <div style={{ flex: 1, marginLeft: 8, background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px 12px 18px', boxShadow: C.shadowSm }}>
+                <div style={{ flex: 1, marginLeft: 8, background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px 12px 24px', boxShadow: C.shadowSm }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-block', marginBottom: 4 }}>{cat.emoji} {cat.label}</span>
