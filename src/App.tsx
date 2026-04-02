@@ -4,6 +4,7 @@ import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, g
 import { signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
+import SplashScreen from './components/SplashScreen';
 import SchedulePage from './pages/Schedule/index';
 import BookingsPage from './pages/Bookings/index';
 import ExpensePage from './pages/Expense/index';
@@ -157,7 +158,16 @@ function App() {
   const [journalComments, setJournalComments] = useState<any[]>([]);
   const [activeTab, setActiveTab]   = useState('行程');
   const [loading, setLoading]       = useState(false);
+  // 啟動 Splash：短暫顯示品牌畫面，等 Firebase auth 就緒後消失
+  const [splashDone, setSplashDone] = useState(false);
   const [notifications, setNotifications] = useState<Record<string, boolean>>({ '成員': false, '日誌': false });
+
+  useEffect(() => {
+    // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 1.4 秒）
+    const minDelay = new Promise<void>(r => setTimeout(r, 1400));
+    const authReady = auth.authStateReady();
+    Promise.all([minDelay, authReady]).then(() => setSplashDone(true));
+  }, []);
 
   const activeTripId = activeProject?.id || TRIP_ID;
 
@@ -234,12 +244,7 @@ function App() {
     return <ProjectHub onEnterProject={handleEnterProject} />;
   }
 
-  if (loading) return (
-    <div style={{ minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', background: '#F7F4EB', fontFamily: FONT }}>
-      <div style={{ fontSize: 48, marginBottom: 16 }}>🍃</div>
-      <p style={{ fontWeight: 700, color: '#8FAF7E', fontSize: 16 }}>同步資料中...</p>
-    </div>
-  );
+  if (!splashDone || loading) return <SplashScreen />;
 
   const isReadOnly = activeProject.role === 'visitor';
   const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly };
