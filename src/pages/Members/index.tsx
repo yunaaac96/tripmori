@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -171,6 +171,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     setEditTarget(m);
     setForm({ name: m.name, role: m.role || '', color: m.color || PRESET_COLORS[0], avatarUrl: m.avatarUrl || '' });
     setShowAdd(false);
+  };
+
+  const handleDeleteMember = async (memberId: string, memberName: string) => {
+    if (firestore.role !== 'owner') return;
+    if (!window.confirm(`確定要刪除成員「${memberName}」？此操作無法復原。`)) return;
+    try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'members', memberId)); }
+    catch (e) { console.error(e); }
   };
 
   const handleBindGoogle = async (memberId: string) => {
@@ -390,10 +397,14 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       {googleUid && (
         <div style={{ margin: '12px 16px 0', background: '#E0F0D8', borderRadius: 16, padding: '10px 14px', border: '1.5px solid #C2E0B4', display: 'flex', alignItems: 'center', gap: 8 }}>
           <span style={{ fontSize: 14 }}>✅</span>
-          <div>
+          <div style={{ flex: 1 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
             <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0' }}>{googleEmail}</p>
           </div>
+          <button onClick={() => signOut(auth).catch(console.error)}
+            style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
+            登出
+          </button>
         </div>
       )}
 
@@ -451,10 +462,18 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               {/* Member info card */}
               <div style={{ background: 'var(--tm-card-bg)', borderRadius: '20px 20px 0 0', padding: '16px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
                 {canEdit && (
-                  <button onClick={() => openEdit(m)}
-                    style={{ position: 'absolute', top: 10, right: 10, width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    ✏️
-                  </button>
+                  <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
+                    {firestore.role === 'owner' && (
+                      <button onClick={() => handleDeleteMember(m.id, m.name)}
+                        style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        🗑
+                      </button>
+                    )}
+                    <button onClick={() => openEdit(m)}
+                      style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      ✏️
+                    </button>
+                  </div>
                 )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: C.bark, border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>

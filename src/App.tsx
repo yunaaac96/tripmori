@@ -72,9 +72,9 @@ function App() {
               return prev;
             });
           } else {
-            // 非 owner：若 localStorage 存有預設行程（舊版自動加入的），清除它
+            // 非 owner：清除 localStorage 裡的預設行程（無論 role 為何）
             const projects = loadProjects();
-            const idx = projects.findIndex(p => p.id === '74pfE7RXyEIusEdRV0rZ' && p.role === 'visitor');
+            const idx = projects.findIndex(p => p.id === '74pfE7RXyEIusEdRV0rZ');
             if (idx >= 0) {
               projects.splice(idx, 1);
               localStorage.setItem('tripmori_projects', JSON.stringify(projects));
@@ -252,10 +252,16 @@ function App() {
         {isReadOnly && (
           <div style={{ background: '#D8EDF8', padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
-            <button onClick={handleExitToHub}
-              style={{ fontSize: 11, color: '#2A6A9A', fontWeight: 700, background: 'none', border: `1px solid #2A6A9A55`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
-              切換專案
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => signOut(auth).catch(console.error)}
+                style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: `1px solid #E8C4C4`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                登出
+              </button>
+              <button onClick={handleExitToHub}
+                style={{ fontSize: 11, color: '#2A6A9A', fontWeight: 700, background: 'none', border: `1px solid #2A6A9A55`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                切換
+              </button>
+            </div>
           </div>
         )}
 
