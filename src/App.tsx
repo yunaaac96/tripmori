@@ -284,7 +284,7 @@ function App() {
         )}
 
         {activeTab === '行程' && <SchedulePage events={events} members={members} firestore={firestore} />}
-        {activeTab === '預訂' && <BookingsPage bookings={bookings} />}
+        {activeTab === '預訂' && <BookingsPage bookings={bookings} firestore={firestore} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}
