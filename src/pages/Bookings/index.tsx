@@ -153,15 +153,54 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
   const [carQrErr, setCarQrErr]   = useState(false);
 
   // ── Custom bookings ──────────────────────────────────────
-  const [showAdd, setShowAdd]     = useState(false);
-  const [customForm, setCustomForm] = useState({ ...EMPTY_CUSTOM_FORM });
-  const [saving, setSaving]       = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [showQrFor, setShowQrFor] = useState<string | null>(null);
-  const [deleting, setDeleting]   = useState<string | null>(null);
+  const [showAdd, setShowAdd]           = useState(false);
+  const [editBookingId, setEditBookingId] = useState<string | null>(null);
+  const [customForm, setCustomForm]     = useState({ ...EMPTY_CUSTOM_FORM });
+  const [saving, setSaving]             = useState(false);
+  const [uploading, setUploading]       = useState(false);
+  const [showQrFor, setShowQrFor]       = useState<string | null>(null);
+  const [deleting, setDeleting]         = useState<string | null>(null);
+  const [toggling, setToggling]         = useState<string | null>(null);
 
   const qrFileRef = useRef<HTMLInputElement>(null);
   const setC = (k: string, v: string) => setCustomForm(p => ({ ...p, [k]: v }));
+
+  const openEditBooking = (b: any) => {
+    setEditBookingId(b.id);
+    setCustomForm({
+      title: b.title || '', type: b.type || 'activity',
+      confirmCode: b.confirmCode || '', notes: b.notes || '',
+      date: b.date || '', cost: b.cost ? String(b.cost) : '',
+      currency: b.currency || 'JPY', qrUrl: b.qrUrl || '',
+    });
+    setShowAdd(true);
+  };
+
+  const closeCustomForm = () => {
+    setShowAdd(false); setEditBookingId(null); setCustomForm({ ...EMPTY_CUSTOM_FORM });
+  };
+
+  const handleToggleUsed = async (b: any) => {
+    if (!updateDoc || !doc || !db || !TRIP_ID) return;
+    setToggling(b.id);
+    try { await updateDoc(doc(db, 'trips', TRIP_ID, 'bookings', b.id), { used: !b.used }); }
+    catch (e) { console.error(e); }
+    setToggling(null);
+  };
+
+  const handleMoveOrder = async (b: any, dir: 'up' | 'down', sortedList: any[]) => {
+    if (!updateDoc || !doc || !db || !TRIP_ID) return;
+    const idx = sortedList.findIndex((x: any) => x.id === b.id);
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= sortedList.length) return;
+    const swapItem = sortedList[swapIdx];
+    const bOrder   = b.sortOrder        ?? (b.createdAt?.toMillis?.()        || 0);
+    const swpOrder = swapItem.sortOrder ?? (swapItem.createdAt?.toMillis?.() || 0);
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'bookings', b.id),        { sortOrder: swpOrder });
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'bookings', swapItem.id), { sortOrder: bOrder });
+    } catch (e) { console.error(e); }
+  };
 
   const handleUploadQR = async (file: File) => {
     if (!TRIP_ID) return;
@@ -177,19 +216,24 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
   };
 
   const handleCustomSave = async () => {
-    if (!customForm.title.trim() || !addDoc || !TRIP_ID) return;
+    if (!customForm.title.trim() || !TRIP_ID) return;
     setSaving(true);
+    const payload = {
+      title: customForm.title.trim(), type: customForm.type,
+      confirmCode: customForm.confirmCode.trim(), notes: customForm.notes.trim(),
+      date: customForm.date, cost: customForm.cost ? parseFloat(customForm.cost) : null,
+      currency: customForm.currency, qrUrl: customForm.qrUrl,
+    };
     try {
-      await addDoc(collection(db, 'trips', TRIP_ID, 'bookings'), {
-        title: customForm.title.trim(), type: customForm.type,
-        confirmCode: customForm.confirmCode.trim(), notes: customForm.notes.trim(),
-        date: customForm.date, cost: customForm.cost ? parseFloat(customForm.cost) : null,
-        currency: customForm.currency, qrUrl: customForm.qrUrl,
-        createdAt: Timestamp.now(),
-      });
-      setCustomForm({ ...EMPTY_CUSTOM_FORM });
-      setShowAdd(false);
-    } catch (e) { console.error(e); alert('新增失敗，請重試'); }
+      if (editBookingId && updateDoc && doc) {
+        await updateDoc(doc(db, 'trips', TRIP_ID, 'bookings', editBookingId), payload);
+      } else if (addDoc) {
+        await addDoc(collection(db, 'trips', TRIP_ID, 'bookings'), {
+          ...payload, createdAt: Timestamp.now(), sortOrder: Date.now(),
+        });
+      }
+      closeCustomForm();
+    } catch (e) { console.error(e); alert('儲存失敗，請重試'); }
     setSaving(false);
   };
 
@@ -201,13 +245,15 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
     setDeleting(null);
   };
 
-  const sortedBookings = [...(bookings || [])].sort((a, b) =>
-    (a.date || '').localeCompare(b.date || '')
-  );
+  const sortedBookings = [...(bookings || [])].sort((a: any, b: any) => {
+    const ao = a.sortOrder ?? (a.createdAt?.toMillis?.() || 0);
+    const bo = b.sortOrder ?? (b.createdAt?.toMillis?.() || 0);
+    return ao - bo;
+  });
 
   return (
     <div style={{ fontFamily: FONT }}>
-      <PageHeader title="旅行預訂" subtitle="機票 · 住宿 · 租車" emoji="✈️" color={C.sky} />
+      <PageHeader title="旅行預訂" subtitle="機票 · 住宿 · 租車 · 票券" emoji="✈️" color={C.sky} />
 
       <div style={{ padding: '8px 16px 80px' }}>
 
@@ -247,15 +293,11 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
               </div>
             </div>
             <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
-            <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
-              {f.costPerPerson && (
-                <div style={{ marginBottom: 6 }}>
-                  <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>每人票價</p>
-                  <p style={{ fontSize: 13, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {Number(f.costPerPerson).toLocaleString()}</p>
-                </div>
-              )}
-              {f.notes && <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0', fontStyle: 'italic' }}>💡 {f.notes}</p>}
-            </div>
+            {f.notes && (
+              <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
+                <p style={{ fontSize: 11, color: C.barkLight, margin: 0, fontStyle: 'italic' }}>💡 {f.notes}</p>
+              </div>
+            )}
           </div>
         ))}
 
@@ -282,16 +324,12 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkOut}</p>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
-              <div style={{ background: C.cream, borderRadius: 12, padding: '7px 8px' }}>
-                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>每人分攤</p>
-                <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>NT$ {Number(h.costPerPerson).toLocaleString()}</p>
-              </div>
-              <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 8px' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+              <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
                 <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
                 <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
               </div>
-              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 8px' }}>
+              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
                 <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
                 <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
               </div>
@@ -376,26 +414,47 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
           </div>
         )}
 
-        {sortedBookings.map(b => {
+        {sortedBookings.map((b, bIdx) => {
           const typeInfo = BOOKING_TYPES[b.type] || BOOKING_TYPES.other;
           const isQrOpen = showQrFor === b.id;
           return (
-            <div key={b.id} style={{ ...cardStyle, textAlign: 'left' }}>
-              <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ width: 46, height: 46, borderRadius: 14, background: typeInfo.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>
+            <div key={b.id} style={{ ...cardStyle, textAlign: 'left', opacity: b.used ? 0.72 : 1 }}>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+                <div style={{ width: 46, height: 46, borderRadius: 14, background: b.used ? '#E0E0E0' : typeInfo.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, position: 'relative' }}>
                   {typeInfo.emoji}
+                  {b.used && <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: 10, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 4px', fontWeight: 700 }}>✓</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{b.title}</p>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: typeInfo.color, background: typeInfo.bg, borderRadius: 6, padding: '1px 6px' }}>{typeInfo.label}</span>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none' }}>{b.title}</p>
+                  <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: typeInfo.color, background: typeInfo.bg, borderRadius: 6, padding: '1px 6px' }}>{typeInfo.label}</span>
+                    {b.used && <span style={{ fontSize: 10, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', borderRadius: 6, padding: '1px 6px' }}>✅ 已使用</span>}
+                  </div>
                 </div>
                 {!isReadOnly && (
-                  <button onClick={() => handleDelete(b.id)} disabled={deleting === b.id}
-                    style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 8, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 13, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: deleting === b.id ? 0.5 : 1 }}>
-                    🗑
-                  </button>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => handleMoveOrder(b, 'up', sortedBookings)} disabled={bIdx === 0}
+                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: bIdx === 0 ? 'default' : 'pointer', opacity: bIdx === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▲</button>
+                      <button onClick={() => handleMoveOrder(b, 'down', sortedBookings)} disabled={bIdx === sortedBookings.length - 1}
+                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: bIdx === sortedBookings.length - 1 ? 'default' : 'pointer', opacity: bIdx === sortedBookings.length - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▼</button>
+                    </div>
+                    <div style={{ display: 'flex', gap: 4 }}>
+                      <button onClick={() => openEditBooking(b)}
+                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✏️</button>
+                      <button onClick={() => handleDelete(b.id)} disabled={deleting === b.id}
+                        style={{ width: 26, height: 26, borderRadius: 6, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: deleting === b.id ? 0.5 : 1 }}>🗑</button>
+                    </div>
+                  </div>
                 )}
               </div>
+              {/* Mark used button */}
+              {!isReadOnly && (
+                <button onClick={() => handleToggleUsed(b)} disabled={toggling === b.id}
+                  style={{ marginBottom: 8, padding: '5px 12px', borderRadius: 10, border: `1.5px solid ${b.used ? '#4A7A35' : C.creamDark}`, background: b.used ? '#E0F0D8' : 'var(--tm-card-bg)', color: b.used ? '#4A7A35' : C.barkLight, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                  {b.used ? '↩ 標記為未使用' : '✅ 標記為已使用'}
+                </button>
+              )}
               {(b.date || b.confirmCode || b.cost) && (
                 <div style={{ display: 'grid', gridTemplateColumns: [b.date, b.confirmCode, b.cost].filter(Boolean).length >= 3 ? '1fr 1fr 1fr' : [b.date, b.confirmCode, b.cost].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr', gap: 6, marginBottom: 8 }}>
                   {b.date && (
@@ -554,11 +613,11 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
       {/* ── 新增自訂預訂底部面板 ── */}
       {showAdd && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
-          onClick={e => { if (e.target === e.currentTarget) setShowAdd(false); }}>
+          onClick={e => { if (e.target === e.currentTarget) closeCustomForm(); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>📋 新增預訂</p>
-              <button onClick={() => setShowAdd(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>{editBookingId ? '✏️ 修改預訂' : '📋 新增預訂'}</p>
+              <button onClick={closeCustomForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
@@ -607,13 +666,13 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
                 )}
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                <button onClick={() => { setShowAdd(false); setCustomForm({ ...EMPTY_CUSTOM_FORM }); }}
+                <button onClick={closeCustomForm}
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
                   取消
                 </button>
                 <button onClick={handleCustomSave} disabled={saving || !customForm.title.trim()}
                   style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 14, cursor: saving || !customForm.title.trim() ? 'default' : 'pointer', fontFamily: FONT, opacity: saving || !customForm.title.trim() ? 0.6 : 1 }}>
-                  {saving ? '儲存中...' : '✓ 新增預訂'}
+                  {saving ? '儲存中...' : editBookingId ? '✓ 儲存修改' : '✓ 新增預訂'}
                 </button>
               </div>
             </div>

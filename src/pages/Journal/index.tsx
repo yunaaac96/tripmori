@@ -59,19 +59,24 @@ export default function JournalPage({ journals, members, journalComments, firest
     setShowForm(true);
   };
 
-  const handlePhotoUpload = async (file: File) => {
-    if (form.photos.length >= MAX_PHOTOS) {
-      alert(`最多只能上傳 ${MAX_PHOTOS} 張照片`);
-      return;
+  const handlePhotoUpload = async (files: FileList | File[]) => {
+    const fileArr = Array.from(files);
+    const remaining = MAX_PHOTOS - form.photos.length;
+    const toUpload = fileArr.slice(0, remaining);
+    if (fileArr.length > remaining) {
+      alert(`最多只能上傳 ${MAX_PHOTOS} 張照片，已自動截取前 ${remaining} 張`);
     }
+    if (toUpload.length === 0) return;
     setUploading(true);
     try {
       const storage = getStorage();
-      const path    = `journals/${TRIP_ID}/${Date.now()}_${file.name}`;
-      const sRef    = storageRef(storage, path);
-      await uploadBytes(sRef, file);
-      const url = await getDownloadURL(sRef);
-      setForm(p => ({ ...p, photos: [...p.photos, url] }));
+      const urls = await Promise.all(toUpload.map(async file => {
+        const path  = `journals/${TRIP_ID}/${Date.now()}_${Math.random().toString(36).slice(2)}_${file.name}`;
+        const sRef  = storageRef(storage, path);
+        await uploadBytes(sRef, file);
+        return getDownloadURL(sRef);
+      }));
+      setForm(p => ({ ...p, photos: [...p.photos, ...urls] }));
     } catch (e) {
       console.error('上傳失敗:', e);
       alert('圖片上傳失敗，請確認 Firebase Storage 設定');
@@ -151,20 +156,22 @@ export default function JournalPage({ journals, members, journalComments, firest
               <button onClick={closeForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--tm-bark-light)' }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* 作者 — 已知身份時顯示標籤，否則選擇 */}
+              {/* 作者 — 已綁定 Google 的成員直接顯示，否則選擇 */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--tm-bark-light)', display: 'block', marginBottom: 6 }}>誰的日誌 *</label>
-                {currentUser ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ flex: 1, padding: '10px 14px', borderRadius: 12, background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, textAlign: 'center' }}>
-                      {form.author || currentUser}
+                {/* 已綁定 Google 的用戶：直接顯示身份，不允許切換 */}
+                {googleUid && currentUser ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: C.sage }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: 'white', flexShrink: 0 }}>
+                      {currentUser[0]?.toUpperCase()}
                     </div>
-                    <button onClick={() => set('author', '')}
-                      style={{ padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontWeight: 600, cursor: 'pointer', fontFamily: FONT, fontSize: 12, whiteSpace: 'nowrap' }}>
-                      切換
-                    </button>
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'white', margin: 0 }}>{currentUser}</p>
+                      <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Google 帳號已驗證</p>
+                    </div>
                   </div>
-                ) : (
+                ) : !googleUid ? (
+                  /* 未登入 Google：選擇身份 */
                   <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                     {memberNames.map(name => (
                       <button key={name} onClick={() => set('author', name)}
@@ -173,19 +180,8 @@ export default function JournalPage({ journals, members, journalComments, firest
                       </button>
                     ))}
                   </div>
-                )}
+                ) : null}
               </div>
-              {/* 切換作者模式（currentUser 設定後仍可改） */}
-              {currentUser && !form.author && (
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {memberNames.map(name => (
-                    <button key={name} onClick={() => set('author', name)}
-                      style={{ flex: '1 1 auto', minWidth: 64, padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${form.author===name?C.sageDark:C.creamDark}`, background: form.author===name?C.sage:'var(--tm-card-bg)', color: form.author===name?'white':'var(--tm-bark)', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              )}
               {/* 日期 */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--tm-bark-light)', display: 'block', marginBottom: 4 }}>日期</label>
@@ -206,12 +202,12 @@ export default function JournalPage({ journals, members, journalComments, firest
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--tm-bark-light)', display: 'block', marginBottom: 6 }}>
                   照片（{form.photos.length}/{MAX_PHOTOS}）
                 </label>
-                <input ref={fileRef} type="file" accept="image/*" style={{ display: 'none' }}
-                  onChange={e => { if (e.target.files?.[0]) handlePhotoUpload(e.target.files[0]); e.target.value = ''; }} />
+                <input ref={fileRef} type="file" accept="image/*" multiple style={{ display: 'none' }}
+                  onChange={e => { if (e.target.files && e.target.files.length > 0) handlePhotoUpload(e.target.files); e.target.value = ''; }} />
                 {form.photos.length < MAX_PHOTOS && (
                   <button onClick={() => fileRef.current?.click()} disabled={uploading}
                     style={{ padding: '10px 16px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-input-bg)', color: 'var(--tm-bark-light)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6, opacity: uploading ? 0.6 : 1 }}>
-                    📷 {uploading ? '上傳中...' : `選擇照片`}
+                    📷 {uploading ? '上傳中...' : `一次選取最多 ${MAX_PHOTOS - form.photos.length} 張照片`}
                   </button>
                 )}
                 {form.photos.length > 0 && (
