@@ -88,12 +88,13 @@ export default function JournalPage({ journals, members, journalComments, firest
     setForm(p => ({ ...p, photos: p.photos.filter((_, i) => i !== idx) }));
 
   const handleSave = async () => {
-    if (!form.content || !form.author) return;
+    const authorToSave = form.author || currentUser;
+    if (!form.content || !authorToSave) return;
     setSaving(true);
     try {
       await addDoc(collection(db, 'trips', TRIP_ID, 'journals'), {
         content: form.content, date: form.date || new Date().toISOString().slice(0,10),
-        authorName: form.author, photos: form.photos,
+        authorName: authorToSave, photos: form.photos,
         createdAt: Timestamp.now(),
       });
     } catch(e) { console.error(e); }
@@ -224,7 +225,7 @@ export default function JournalPage({ journals, members, journalComments, firest
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button onClick={closeForm} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
-                <button onClick={handleSave} disabled={saving||!form.content||!(form.author||currentUser)}
+                <button onClick={handleSave} disabled={saving || !form.content || !(form.author || currentUser)}
                   style={{ ...btnPrimary(), flex: 2, opacity: saving||!form.content||!(form.author||currentUser)?0.6:1 }}>
                   {saving ? '儲存中...' : '✓ 新增'}
                 </button>
