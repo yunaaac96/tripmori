@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc } from 'firebase/firestore';
-import { signInAnonymously, onAuthStateChanged } from 'firebase/auth';
+import { signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
 import SchedulePage from './pages/Schedule/index';
@@ -269,10 +269,17 @@ function App() {
                 {activeProject.role === 'owner' ? '擁有者' : '編輯者'}
               </span>
             </div>
-            <button onClick={handleExitToHub}
-              style={{ fontSize: 11, color: C.barkLight, background: 'none', border: `1px solid ${C.creamDark}`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
-              切換
-            </button>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button
+                onClick={() => signOut(auth).catch(console.error)}
+                style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: `1px solid #E8C4C4`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                登出
+              </button>
+              <button onClick={handleExitToHub}
+                style={{ fontSize: 11, color: C.barkLight, background: 'none', border: `1px solid ${C.creamDark}`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                切換
+              </button>
+            </div>
           </div>
         )}
 
