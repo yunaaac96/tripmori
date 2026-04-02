@@ -375,8 +375,8 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
                     {isQrOpen ? '收起 QR Code' : '📱 展開 QR Code'}
                   </button>
                   {isQrOpen && (
-                    <div style={{ marginTop: 10, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, textAlign: 'center' }}>
-                      <img src={b.qrUrl} alt="QR Code" style={{ maxWidth: 220, width: '100%', height: 'auto', borderRadius: 8 }} />
+                    <div style={{ marginTop: 10, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', justifyContent: 'center' }}>
+                      <img src={b.qrUrl} alt="QR Code" style={{ maxWidth: 220, width: 'auto', height: 'auto', maxHeight: 220, borderRadius: 8, display: 'block' }} />
                     </div>
                   )}
                 </>
