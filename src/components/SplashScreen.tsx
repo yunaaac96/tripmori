@@ -23,19 +23,19 @@ export default function SplashScreen() {
           40%            { transform: translateY(-7px); opacity: 1;   }
         }
         .tm-splash-logo {
-          animation: tm-logo-pop 0.7s cubic-bezier(0.34, 1.56, 0.64, 1) both;
+          animation: tm-logo-pop 1.1s cubic-bezier(0.34, 1.56, 0.64, 1) both;
         }
         .tm-splash-title {
-          animation: tm-fade-up 0.5s ease both;
-          animation-delay: 0.45s;
+          animation: tm-fade-up 0.75s ease both;
+          animation-delay: 0.75s;
         }
         .tm-splash-sub {
-          animation: tm-fade-up 0.5s ease both;
-          animation-delay: 0.6s;
+          animation: tm-fade-up 0.75s ease both;
+          animation-delay: 1.1s;
         }
         .tm-splash-dots {
-          animation: tm-fade-up 0.5s ease both;
-          animation-delay: 0.75s;
+          animation: tm-fade-up 0.6s ease both;
+          animation-delay: 1.45s;
         }
         .tm-dot {
           display: inline-block;
@@ -43,11 +43,11 @@ export default function SplashScreen() {
           height: 7px;
           border-radius: 50%;
           background: #8FAF7E;
-          animation: tm-dot-bounce 1.3s infinite ease-in-out;
+          animation: tm-dot-bounce 1.6s infinite ease-in-out;
         }
         .tm-dot:nth-child(1) { animation-delay: 0s; }
-        .tm-dot:nth-child(2) { animation-delay: 0.18s; }
-        .tm-dot:nth-child(3) { animation-delay: 0.36s; }
+        .tm-dot:nth-child(2) { animation-delay: 0.25s; }
+        .tm-dot:nth-child(3) { animation-delay: 0.5s; }
 
         @media (prefers-color-scheme: dark) {
           .tm-splash-root { background: #141C12 !important; }

@@ -120,15 +120,18 @@
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: left;
-  border-inline: 1px solid var(--border);
+  width: 100%;
   min-height: 100svh;
-  display: flex;
-  flex-direction: column;
   box-sizing: border-box;
+}
+
+/* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
+.tm-hscroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.tm-hscroll::-webkit-scrollbar {
+  display: none;
 }
 
 body {

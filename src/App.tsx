@@ -163,8 +163,8 @@ function App() {
   const [notifications, setNotifications] = useState<Record<string, boolean>>({ '成員': false, '日誌': false });
 
   useEffect(() => {
-    // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 1.4 秒）
-    const minDelay = new Promise<void>(r => setTimeout(r, 1400));
+    // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 2.2 秒以完整播放動畫）
+    const minDelay = new Promise<void>(r => setTimeout(r, 2200));
     const authReady = auth.authStateReady();
     Promise.all([minDelay, authReady]).then(() => setSplashDone(true));
   }, []);

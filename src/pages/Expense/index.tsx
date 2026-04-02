@@ -5,9 +5,10 @@ import PageHeader from '../../components/layout/PageHeader';
 
 type SplitMode = 'equal' | 'weighted' | 'amount';
 type SortMode = 'newest' | 'oldest' | 'largest';
+type Currency = 'JPY' | 'TWD' | 'KRW' | 'IDR' | 'EUR' | 'USD';
 
 const EMPTY_FORM = {
-  description: '', amount: '', currency: 'JPY' as 'JPY' | 'TWD',
+  description: '', amount: '', currency: 'JPY' as Currency,
   category: 'food', payer: '',
   paymentMethod: 'cash' as 'cash' | 'card',
   splitMode: 'equal' as SplitMode,
@@ -18,22 +19,129 @@ const EMPTY_FORM = {
   date: '', notes: '',
 };
 
-// ── Improved OCR parse ─────────────────────────────────────────────────────
-const parseReceiptText = (text: string) => {
+// ── Multi-language OCR config ───────────────────────────────────────────────
+type LangKey = 'ja' | 'ko' | 'en' | 'id' | 'fr';
+
+const OCR_LANGS: Record<LangKey, {
+  flag: string; label: string; tessCode: string[];
+  totalRx: RegExp; descRx: RegExp; currencyHint: Currency;
+  currencySymbolRx: RegExp;
+  keywords: Record<string, string>;
+}> = {
+  ja: {
+    flag: '🇯🇵', label: '日文', tessCode: ['jpn', 'eng'],
+    currencyHint: 'JPY', currencySymbolRx: /[¥￥]/,
+    totalRx: /合計|総合計|合計金額|税込合計|お支払|ご請求|お会計|小計/,
+    descRx: /[\u3040-\u9FFF]{2,}/,
+    keywords: {
+      '合計': '合計', '税込': '含稅', '税抜': '未稅', '小計': '小計',
+      '消費税': '消費稅', '割引': '折扣', '値引': '折扣',
+      'ポイント': '點數', 'お釣り': '找零', 'お預かり': '收到',
+    },
+  },
+  ko: {
+    flag: '🇰🇷', label: '韓文', tessCode: ['kor', 'eng'],
+    currencyHint: 'KRW', currencySymbolRx: /[₩]/,
+    totalRx: /합계|총액|결제금액|소계|총합계|결제|금액|합산/,
+    descRx: /[\uAC00-\uD7AF]{2,}/,
+    keywords: {
+      '합계': '合計', '소계': '小計', '부가세': '附加稅',
+      '할인': '折扣', '결제': '結帳', '주문': '訂單',
+      '영수증': '收據', '포인트': '點數', '잔액': '餘額',
+    },
+  },
+  en: {
+    flag: '🇺🇸', label: '英文', tessCode: ['eng'],
+    currencyHint: 'USD', currencySymbolRx: /[$£€]/,
+    totalRx: /\b(total|grand\s*total|amount\s*due|balance\s*due|amount\s*payable|net\s*total)\b/i,
+    descRx: /[A-Za-z]{3,}/,
+    keywords: {
+      'total': '合計', 'subtotal': '小計', 'tax': '稅',
+      'discount': '折扣', 'change': '找零', 'cash': '現金',
+      'card': '刷卡', 'receipt': '收據', 'amount': '金額',
+    },
+  },
+  id: {
+    flag: '🇮🇩', label: '印尼文', tessCode: ['ind', 'eng'],
+    currencyHint: 'IDR', currencySymbolRx: /Rp\.?\s*/i,
+    totalRx: /\b(total|jumlah|jumlah\s*bayar|total\s*bayar|tagihan|pembayaran)\b/i,
+    descRx: /[A-Za-z]{3,}/,
+    keywords: {
+      'total': '合計', 'jumlah': '金額', 'bayar': '付款',
+      'pajak': '稅', 'diskon': '折扣', 'kembalian': '找零',
+      'tunai': '現金', 'nota': '收據',
+    },
+  },
+  fr: {
+    flag: '🇫🇷', label: '法文', tessCode: ['fra', 'eng'],
+    currencyHint: 'EUR', currencySymbolRx: /€/,
+    totalRx: /\b(total|total\s*ttc|montant|net\s*à\s*payer|à\s*payer|sous-total|total\s*ht)\b/i,
+    descRx: /[A-Za-zÀ-ÿ]{3,}/,
+    keywords: {
+      'total': '合計', 'sous-total': '小計', 'tva': '增值稅',
+      'remise': '折扣', 'espèces': '現金', 'reçu': '收據',
+      'montant': '金額', 'rendu': '找零',
+    },
+  },
+};
+
+// Currency display helpers
+const CURRENCY_DISPLAY: Record<Currency, { symbol: string; label: string }> = {
+  JPY: { symbol: '¥',   label: 'JPY 日圓'    },
+  TWD: { symbol: 'NT$', label: 'TWD 台幣'    },
+  KRW: { symbol: '₩',   label: 'KRW 韓圓'   },
+  IDR: { symbol: 'Rp',  label: 'IDR 印尼盾' },
+  EUR: { symbol: '€',   label: 'EUR 歐元'    },
+  USD: { symbol: '$',   label: 'USD 美元'    },
+};
+
+// ── Multi-language OCR parse ────────────────────────────────────────────────
+const parseReceiptText = (text: string, lang: LangKey) => {
+  const cfg = OCR_LANGS[lang];
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-  const totalPatterns = /合計|総合計|合計金額|小計|お支払い|ご請求|tax.*total/i;
-  const totalLine = lines.find(l => totalPatterns.test(l));
+
+  // 1. Find total line using language-specific pattern
+  const totalLine = lines.find(l => cfg.totalRx.test(l));
   let amount = '';
   if (totalLine) {
-    const match = totalLine.match(/[\d,]+/);
-    if (match) amount = match[0].replace(/,/g, '');
+    // Remove currency symbols then grab number
+    const cleaned = totalLine.replace(cfg.currencySymbolRx, '').replace(/Rp/i, '');
+    const match = cleaned.match(/[\d,.]+/);
+    if (match) {
+      // Handle comma-as-decimal (EU) vs comma-as-thousands (US/JP)
+      const raw = match[0];
+      amount = raw.replace(/,(?=\d{3}(?:[.,]|$))/g, '').replace(',', '.');
+      // Keep only integer for most Asian currencies
+      if (['JPY', 'KRW', 'IDR'].includes(cfg.currencyHint)) {
+        amount = String(Math.round(parseFloat(amount)));
+      }
+    }
   }
-  if (!amount) {
-    const nums = text.match(/[\d,]+/g)?.map(n => parseInt(n.replace(/,/g, ''), 10)).filter(n => n >= 100) ?? [];
+  // 2. Fallback: largest number ≥ 100
+  if (!amount || amount === 'NaN') {
+    const nums = text.replace(cfg.currencySymbolRx, '').match(/[\d,]+/g)
+      ?.map(n => parseInt(n.replace(/,/g, ''), 10))
+      .filter(n => n >= 100) ?? [];
     if (nums.length) amount = String(Math.max(...nums));
   }
-  const desc = lines.find(l => /[\u3040-\u9FFF\w]{2,}/.test(l) && !/^[\d,¥￥]+$/.test(l) && !totalPatterns.test(l)) || '';
-  return { amount, description: desc, rawText: text };
+
+  // 3. Description: first meaningful line (language-appropriate characters)
+  const desc = lines.find(l =>
+    cfg.descRx.test(l) &&
+    !/^[\d,¥￥₩€$Rp.\s]+$/.test(l) &&
+    !cfg.totalRx.test(l)
+  ) || '';
+
+  // 4. Keyword translation lookup (show matched Chinese meanings)
+  const foundKeywords: { original: string; zh: string }[] = [];
+  Object.entries(cfg.keywords).forEach(([kw, zh]) => {
+    const rx = new RegExp(kw, 'i');
+    if (rx.test(text) && !foundKeywords.some(f => f.zh === zh)) {
+      foundKeywords.push({ original: kw, zh });
+    }
+  });
+
+  return { amount, description: desc, rawText: text, foundKeywords, detectedCurrency: cfg.currencyHint };
 };
 
 // ── SVG Pie Chart ──────────────────────────────────────────────────────────
@@ -185,6 +293,8 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
   const [ocrState, setOcrState] = useState<'idle' | 'scanning' | 'done'>('idle');
   const [ocrPreview, setOcrPreview] = useState<string | null>(null);
   const [ocrRawText, setOcrRawText] = useState<string>('');
+  const [ocrLang, setOcrLang] = useState<LangKey>('ja');
+  const [ocrKeywords, setOcrKeywords] = useState<{ original: string; zh: string }[]>([]);
 
   useEffect(() => {
     if (showForm) {
@@ -195,8 +305,12 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
 
   const memberNames: string[] = members.length > 0 ? members.map((m: any) => m.name) : ['uu', 'brian'];
 
+  // Approximate exchange rates to TWD (for display convenience)
+  const CURRENCY_TO_TWD: Record<string, number> = {
+    JPY: JPY_TO_TWD, TWD: 1, KRW: 0.024, IDR: 0.0021, EUR: 34, USD: 32,
+  };
   const toTWD = (amount: number, currency: string) =>
-    Math.round(amount * (currency === 'JPY' ? JPY_TO_TWD : 1));
+    Math.round(amount * (CURRENCY_TO_TWD[currency] ?? 1));
 
   // ── Percentage split helpers ─────────────────────────────────────────────
   const getEqualPcts = (names: string[]) => {
@@ -264,17 +378,21 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
 
   // ── OCR ─────────────────────────────────────────────────────────────────
   const handleOCR = async (file: File) => {
+    const langCfg = OCR_LANGS[ocrLang];
     setOcrState('scanning');
     setOcrPreview(URL.createObjectURL(file));
     setOcrRawText('');
+    setOcrKeywords([]);
     try {
-      const worker = await createWorker(['jpn', 'eng']);
+      const worker = await createWorker(langCfg.tessCode);
       const { data: { text } } = await worker.recognize(file);
       await worker.terminate();
-      const parsed = parseReceiptText(text);
+      const parsed = parseReceiptText(text, ocrLang);
       setOcrRawText(parsed.rawText);
+      setOcrKeywords(parsed.foundKeywords);
       if (parsed.amount) set('amount', parsed.amount);
       if (parsed.description) set('description', parsed.description);
+      set('currency', parsed.detectedCurrency);
       setOcrState('done');
     } catch (e) {
       console.error('OCR 失敗:', e);
@@ -322,6 +440,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
     setOcrState('idle');
     setOcrPreview(null);
     setOcrRawText('');
+    setOcrKeywords([]);
     setEditingId(null);
   };
 
@@ -426,7 +545,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
 
   // ── Stats ────────────────────────────────────────────────────────────────
   const toTWDCalc = (amount: number, currency: string) =>
-    Math.round(amount * (currency === 'JPY' ? JPY_TO_TWD : 1));
+    Math.round(amount * (CURRENCY_TO_TWD[currency] ?? 1));
 
   const memberStats = memberNames.map(name => {
     const paid = expenses
@@ -439,12 +558,12 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
       const eAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
       if (e.splitMode === 'weighted' && e.percentages && Object.keys(e.percentages).length > 0) {
         const pct = e.percentages[name] ?? Math.floor(100 / sw.length);
-        return s + Math.round(eAmt * pct / 100);
+        return s + Math.ceil(eAmt * pct / 100);
       }
       if (e.splitMode === 'amount' && e.customAmounts && e.customAmounts[name] != null) {
         return s + toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency || 'JPY');
       }
-      return s + Math.round(eAmt / sw.length);
+      return s + Math.ceil(eAmt / sw.length);
     }, 0);
 
     const net = paid - owed; // positive = should receive, negative = should pay
@@ -469,6 +588,14 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
     if (cAmts[ci] < 1) ci++;
     if (dAmts[di] < 1) di++;
   }
+
+  // Build per-member settlement totals for card display (consistent with suggestion row)
+  const settlementReceive: Record<string, number> = {};
+  const settlementPay: Record<string, number> = {};
+  settlements.forEach(s => {
+    settlementReceive[s.to]   = (settlementReceive[s.to]   || 0) + s.amount;
+    settlementPay[s.from]     = (settlementPay[s.from]     || 0) + s.amount;
+  });
 
   // ── Category breakdown ───────────────────────────────────────────────────
   const nonSettlementExpenses = expenses.filter((e: any) => e.category !== 'settlement');
@@ -556,6 +683,16 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
 
               {/* OCR */}
               <div>
+                {/* Language selector */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
+                  {(Object.keys(OCR_LANGS) as LangKey[]).map(lang => (
+                    <button key={lang} onClick={() => setOcrLang(lang)}
+                      style={{ padding: '5px 10px', borderRadius: 10, border: `1.5px solid ${ocrLang === lang ? C.sageDark : C.creamDark}`, background: ocrLang === lang ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: ocrLang === lang ? 700 : 500, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      {OCR_LANGS[lang].flag} {OCR_LANGS[lang].label}
+                    </button>
+                  ))}
+                </div>
+
                 <input ref={ocrRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
                   onChange={e => { if (e.target.files?.[0]) handleOCR(e.target.files[0]); }} />
                 <button
@@ -565,21 +702,34 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                   {ocrState === 'scanning' ? (
                     <><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>🔄</span> 識別中，請稍候...</>
                   ) : ocrState === 'done' ? (
-                    <>✅ 識別完成，已自動填入</>
+                    <>✅ 識別完成（{OCR_LANGS[ocrLang].flag} {OCR_LANGS[ocrLang].label}）</>
                   ) : (
-                    <>📷 拍照識別發票（自動填入）</>
+                    <>📷 拍照識別發票（{OCR_LANGS[ocrLang].flag} {OCR_LANGS[ocrLang].label}）</>
                   )}
                 </button>
+
                 {ocrPreview && ocrState !== 'scanning' && (
                   <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                     <img src={ocrPreview} alt="發票預覽" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}` }} />
-                    <button onClick={() => { setOcrPreview(null); setOcrState('idle'); setOcrRawText(''); }}
+                    <button onClick={() => { setOcrPreview(null); setOcrState('idle'); setOcrRawText(''); setOcrKeywords([]); }}
                       style={{ fontSize: 11, color: C.barkLight, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>✕ 清除</button>
                   </div>
                 )}
+
+                {/* Keyword translation */}
+                {ocrKeywords.length > 0 && (
+                  <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                    {ocrKeywords.map((kw, i) => (
+                      <span key={i} style={{ fontSize: 10, background: C.sageLight + '55', color: C.sageDark, borderRadius: 6, padding: '2px 6px' }}>
+                        {kw.original} → {kw.zh}
+                      </span>
+                    ))}
+                  </div>
+                )}
+
                 {ocrRawText ? (
                   <div style={{ marginTop: 6 }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>OCR 原始文字（含翻譯為近似值）</p>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>OCR 原始識別文字</p>
                     <div style={{ background: C.cream, borderRadius: 8, padding: '6px 8px', maxHeight: 80, overflowY: 'auto', fontSize: 10, color: C.bark, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
                       {ocrRawText}
                     </div>
@@ -601,9 +751,10 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                 </div>
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>幣別</label>
-                  <select style={{ ...iStyle, width: 80 }} value={form.currency} onChange={e => set('currency', e.target.value as 'JPY' | 'TWD')}>
-                    <option value="JPY">JPY</option>
-                    <option value="TWD">TWD</option>
+                  <select style={{ ...iStyle, width: 90 }} value={form.currency} onChange={e => set('currency', e.target.value as Currency)}>
+                    {(Object.keys(CURRENCY_DISPLAY) as Currency[]).map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -813,8 +964,11 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
         {/* ── Member stats ── */}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
           {memberStats.map(ms => {
+            const toReceive = settlementReceive[ms.name] || 0;
+            const toPay     = settlementPay[ms.name]     || 0;
             const isCreditor = ms.net >= 0;
-            const displayAmt = isCreditor ? ms.net : Math.ceil(Math.abs(ms.net));
+            // Use settlement amounts so the card matches the "建議結算" row exactly
+            const displayAmt = isCreditor ? toReceive : toPay;
             return (
               <div key={ms.name} style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm }}>
                 <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>{ms.name}</p>
@@ -824,7 +978,11 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                 <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 6px' }}>NT$ {ms.owed.toLocaleString()}</p>
                 <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '4px 8px' }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
-                    {isCreditor ? `應收 NT$ ${displayAmt.toLocaleString()}` : `應補 NT$ ${displayAmt.toLocaleString()}`}
+                    {displayAmt > 0
+                      ? (isCreditor
+                          ? `應收 NT$ ${displayAmt.toLocaleString()}`
+                          : `應補 NT$ ${displayAmt.toLocaleString()}`)
+                      : '已結清 ✓'}
                   </p>
                 </div>
               </div>

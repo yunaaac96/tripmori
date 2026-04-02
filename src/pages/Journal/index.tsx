@@ -212,7 +212,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                   </button>
                 )}
                 {form.photos.length > 0 && (
-                  <div style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
+                  <div className="tm-hscroll" style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
                     {form.photos.map((url, idx) => (
                       <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
                         <img src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
@@ -289,7 +289,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                     <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{j.content}</p>
                     {/* 照片 — 左右滑動 */}
                     {j.photos?.length > 0 && (
-                      <div style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap', marginBottom: 8, paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
+                      <div className="tm-hscroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap', marginBottom: 8, paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
                         {j.photos.map((url: string, i: number) => (
                           <img key={i} src={url} alt="" style={{ width: 110, height: 110, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} />
                         ))}
