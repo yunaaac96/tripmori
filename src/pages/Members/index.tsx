@@ -195,9 +195,17 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   };
 
   // ── Notes (message board) ─────────────────────────────────────
-  const getNotesFor = (memberId: string) =>
+  // Private notes: only visible to the note author or the card owner
+  const getNotesFor = (memberId: string, memberGoogleUid?: string | null) =>
     (memberNotes || [])
-      .filter((n: any) => n.memberId === memberId)
+      .filter((n: any) => {
+        if (n.memberId !== memberId) return false;
+        if (n.visibility !== 'private') return true; // public: all see it
+        // private: only the author or the person whose card it is
+        if (n.authorName === currentUser) return true;
+        if (googleUid && memberGoogleUid && memberGoogleUid === googleUid) return true;
+        return false;
+      })
       .sort((a: any, b: any) => {
         const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -224,6 +232,26 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const handleDeleteNote = async (noteId: string) => {
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'memberNotes', noteId)); }
     catch (e) { console.error(e); }
+  };
+
+  // ── Editor revocation (owner only) ───────────────────────────
+  const [allowedEditorUids, setAllowedEditorUids] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!TRIP_ID || firestore.role !== 'owner') return;
+    const { getDoc: _getDoc, doc: _doc } = require('firebase/firestore') as any;
+    _getDoc(_doc(db, 'trips', TRIP_ID)).then((snap: any) => {
+      if (snap.exists()) setAllowedEditorUids(snap.data().allowedEditorUids || []);
+    }).catch(() => {});
+  }, [TRIP_ID, firestore.role]);
+
+  const handleRevokeEditor = async (uid: string) => {
+    if (!window.confirm('確定要移除此成員的編輯權限？對方將立即切換為訪客模式。')) return;
+    try {
+      const { updateDoc: _updateDoc, arrayRemove: _arrayRemove, doc: _doc } = require('firebase/firestore') as any;
+      await _updateDoc(_doc(db, 'trips', TRIP_ID), { allowedEditorUids: _arrayRemove(uid) });
+      setAllowedEditorUids(prev => prev.filter(u => u !== uid));
+    } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 
   // ── Team name (editable by owner) ────────────────────────────
@@ -513,7 +541,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           )}
           {displayMembers.map((m: any) => {
           const isUploading  = uploadingFor === m.id;
-          const notes        = getNotesFor(m.id);
+          const notes        = getNotesFor(m.id, m.googleUid);
           const isExpanded   = expandedBoard === m.id;
           const isSavingNote = savingNote === m.id;
           const colorIdx     = displayMembers.indexOf(m) % NOTE_COLORS.length;
@@ -579,6 +607,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                     <button onClick={() => handleUnbindGoogle(m.id)}
                       style={{ marginTop: 4, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
                       ✕ 解除綁定
+                    </button>
+                  )}
+                  {/* 移除編輯權限：owner 對有 googleUid 且在 allowedEditorUids 的成員 */}
+                  {firestore.role === 'owner' && m.googleUid && allowedEditorUids.includes(m.googleUid) && (
+                    <button onClick={() => handleRevokeEditor(m.googleUid)}
+                      style={{ marginTop: 4, fontSize: 10, color: '#9A4A00', background: '#FFF2CC', border: '1px solid #E8C96A', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 700 }}>
+                      🚫 移除編輯權限
                     </button>
                   )}
                 </div>

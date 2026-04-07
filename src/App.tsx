@@ -227,6 +227,24 @@ function App() {
           checkNotification(items, LS_SEEN_JOURNAL, '日誌');
         }));
         // 站內通知（@標記、日誌留言）
+        // ── Real-time editor revocation: watch trip doc allowedEditorUids ──
+        const currentUid = auth.currentUser?.uid;
+        if (activeProject.role === 'editor' && currentUid) {
+          unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
+            if (!tripSnap.exists()) return;
+            const allowed: string[] = tripSnap.data().allowedEditorUids || [];
+            if (!allowed.includes(currentUid)) {
+              // Owner removed this editor — downgrade to visitor in-place
+              setActiveProjectState(prev => {
+                if (!prev || prev.role !== 'editor') return prev;
+                const updated = { ...prev, role: 'visitor' as TripRole };
+                saveProject(updated);
+                return updated;
+              });
+            }
+          }));
+        }
+
         unsubs.push(onSnapshot(collection(tripRef, 'notifications'), snap => {
           const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setTripNotifications(items);

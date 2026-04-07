@@ -268,7 +268,8 @@ function SettlementForm({ memberNames, onAdd, onClose, firestore }: {
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ExpensePage({ expenses, members, firestore }: any) {
-  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc } = firestore;
+  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role } = firestore;
+  const isVisitor = isReadOnly;
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -281,8 +282,9 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
   const [filterCat, setFilterCat] = useState<string>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
 
-  // Pie chart
+  // Pie chart — auto-expand for visitors
   const [showPie, setShowPie] = useState(false);
+  useEffect(() => { if (isVisitor) setShowPie(true); }, [isVisitor]);
 
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
@@ -1050,22 +1052,32 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
           </div>
         )}
 
-        {/* ── Filter / Sort bar ── */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
-          {FILTER_CATS.map(fc => (
-            <button key={fc.key} onClick={() => setFilterCat(fc.key)}
-              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${filterCat === fc.key ? C.sageDark : C.creamDark}`, background: filterCat === fc.key ? C.sage : 'var(--tm-card-bg)', color: filterCat === fc.key ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-              {fc.label}
-            </button>
-          ))}
-          <button onClick={() => setSortMode(nextSort[sortMode])}
-            style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-            {sortLabels[sortMode]}
-          </button>
-        </div>
+        {/* ── Visitor note: only category breakdown visible ── */}
+        {isVisitor && (
+          <div style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <span style={{ fontSize: 14 }}>🔒</span>
+            <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訪客模式：僅顯示分類佔比，明細資料僅旅伴可查看</span>
+          </div>
+        )}
 
-        {/* ── Expense list ── */}
-        {filteredExpenses.length === 0 ? (
+        {/* ── Filter / Sort bar (hidden for visitors) ── */}
+        {!isVisitor && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
+            {FILTER_CATS.map(fc => (
+              <button key={fc.key} onClick={() => setFilterCat(fc.key)}
+                style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${filterCat === fc.key ? C.sageDark : C.creamDark}`, background: filterCat === fc.key ? C.sage : 'var(--tm-card-bg)', color: filterCat === fc.key ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+                {fc.label}
+              </button>
+            ))}
+            <button onClick={() => setSortMode(nextSort[sortMode])}
+              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+              {sortLabels[sortMode]}
+            </button>
+          </div>
+        )}
+
+        {/* ── Expense list (hidden for visitors) ── */}
+        {!isVisitor && (filteredExpenses.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '30px 0', color: C.barkLight }}>
             <div style={{ fontSize: 32, marginBottom: 8 }}>💰</div>
             <p style={{ fontSize: 13 }}>沒有符合的支出記錄</p>
@@ -1154,7 +1166,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
               );
             })}
           </div>
-        )}
+        ))}
       </div>
     </div>
   );

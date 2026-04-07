@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
-import { collection, doc, setDoc, addDoc, Timestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, addDoc, updateDoc, arrayUnion, Timestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 
@@ -335,7 +335,17 @@ export default function ProjectHub({ onEnterProject }: Props) {
     setBusy(true); setError('');
     try {
       const existing = projects.find(p => p.collaboratorKey === key);
-      if (existing) { onEnterProject({ ...existing, role: 'editor' }); return; }
+      if (existing) {
+        // Register editor UID in allowedEditorUids so owner can revoke
+        if (user.uid) {
+          try { await updateDoc(doc(db, 'trips', existing.id), { allowedEditorUids: arrayUnion(user.uid) }); }
+          catch (e) { console.error('Failed to register editor UID:', e); }
+        }
+        const editorProject = { ...existing, role: 'editor' as TripRole };
+        saveProject(editorProject);
+        onEnterProject(editorProject);
+        return;
+      }
 
       if (key === DEFAULT_COLLAB) {
         ensureDefaultProject();

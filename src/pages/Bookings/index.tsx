@@ -90,7 +90,8 @@ function EditBtn({ onClick }: { onClick: () => void }) {
 // ── Main component ───────────────────────────────────────
 export default function BookingsPage({ bookings, firestore }: { bookings: any[]; firestore?: any }) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore || {};
-  const isOwner = role === 'owner';
+  const isOwner   = role === 'owner';
+  const isVisitor = isReadOnly; // 訪客：隱藏訂單編號/PIN/費用/QR Code
 
   // ── Static data state ──
   // null = not yet loaded / new project (show "待更新")
@@ -360,16 +361,23 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkOut}</p>
               </div>
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
-              <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
-                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
-                <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
+            {isVisitor ? (
+              <div style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14 }}>🔒</span>
+                <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訂單詳細資訊僅旅伴可查看</span>
               </div>
-              <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
-                <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
-                <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
+                <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
+                  <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
+                  <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
+                </div>
+                <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
+                  <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
+                  <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
+                </div>
               </div>
-            </div>
+            )}
             {h.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '4px 0 6px' }}>💡 {h.notes}</p>}
             {h.mapUrl && (
               <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
@@ -400,7 +408,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
             <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🚗</div>
             <div style={{ flex: 1 }}>
               <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{car.company}　{car.carType}</p>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>
+              {!isVisitor && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
             </div>
             {isOwner && <EditBtn onClick={() => openEdit('car')} />}
           </div>
@@ -416,31 +424,42 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
               <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.returnTime}</p>
             </div>
           </div>
-          <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
-            <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
-              {car.currency === 'JPY' ? '¥' : 'NT$'} {Number(car.totalCost).toLocaleString()}
-            </span>
-          </div>
+          {isVisitor ? (
+            <div style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <span style={{ fontSize: 14 }}>🔒</span>
+              <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用與訂單詳情僅旅伴可查看</span>
+            </div>
+          ) : (
+            <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
+              <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
+                {car.currency === 'JPY' ? '¥' : 'NT$'} {Number(car.totalCost).toLocaleString()}
+              </span>
+            </div>
+          )}
           <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: '0 0 10px' }}>⚠️ {car.notes}</p>
-          <button onClick={() => setShowCarQR(v => !v)}
-            style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <span>{showCarQR ? '▲' : '▼'}</span>
-            {showCarQR ? '收起 QR Code' : '📱 展開報到 QR Code'}
-          </button>
-          {showCarQR && (
-            <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, textAlign: 'center' }}>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>OTS 取車報到 QR Code</p>
-              {!carQrErr ? (
-                <img src={QR_SRC} alt="OTS QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated' }} onError={() => setCarQrErr(true)} />
-              ) : (
-                <div style={{ padding: '20px 16px', background: '#FAE0E0', borderRadius: 10 }}>
-                  <p style={{ fontSize: 12, color: '#9A3A3A', margin: 0, fontWeight: 600 }}>QR Code 圖片未找到</p>
-                  <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>請將圖片命名為 ots-qr.png<br/>放入 public/ 資料夾</p>
+          {!isVisitor && (
+            <>
+              <button onClick={() => setShowCarQR(v => !v)}
+                style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                <span>{showCarQR ? '▲' : '▼'}</span>
+                {showCarQR ? '收起 QR Code' : '📱 展開報到 QR Code'}
+              </button>
+              {showCarQR && (
+                <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, textAlign: 'center' }}>
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>OTS 取車報到 QR Code</p>
+                  {!carQrErr ? (
+                    <img src={QR_SRC} alt="OTS QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated' }} onError={() => setCarQrErr(true)} />
+                  ) : (
+                    <div style={{ padding: '20px 16px', background: '#FAE0E0', borderRadius: 10 }}>
+                      <p style={{ fontSize: 12, color: '#9A3A3A', margin: 0, fontWeight: 600 }}>QR Code 圖片未找到</p>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>請將圖片命名為 ots-qr.png<br/>放入 public/ 資料夾</p>
+                    </div>
+                  )}
+                  <p style={{ fontSize: 10, color: C.barkLight, margin: '10px 0 0' }}>{car.confirmCode}　{car.pickupLocation}</p>
                 </div>
               )}
-              <p style={{ fontSize: 10, color: C.barkLight, margin: '10px 0 0' }}>{car.confirmCode}　{car.pickupLocation}</p>
-            </div>
+            </>
           )}
         </div>
         )}
@@ -505,32 +524,42 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
                   {b.used ? '↩ 標記為未使用' : '✅ 標記為已使用'}
                 </button>
               )}
-              {(b.date || b.confirmCode || b.cost) && (
-                <div style={{ display: 'grid', gridTemplateColumns: [b.date, b.confirmCode, b.cost].filter(Boolean).length >= 3 ? '1fr 1fr 1fr' : [b.date, b.confirmCode, b.cost].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr', gap: 6, marginBottom: 8 }}>
-                  {b.date && (
-                    <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px' }}>
-                      <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📅 日期</p>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
-                    </div>
-                  )}
-                  {b.confirmCode && (
-                    <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
-                      <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>訂單編號</p>
-                      <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{b.confirmCode}</p>
-                    </div>
-                  )}
-                  {b.cost && (
-                    <div style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
-                      <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>費用</p>
-                      <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>
-                        {b.currency === 'TWD' ? 'NT$' : b.currency === 'USD' ? '$' : '¥'} {Number(b.cost).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-                </div>
+              {isVisitor ? (
+                /* Visitor: show date only, hide confirmCode/cost/qr */
+                b.date && (
+                  <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px', marginBottom: 8, display: 'inline-block' }}>
+                    <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📅 日期</p>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
+                  </div>
+                )
+              ) : (
+                (b.date || b.confirmCode || b.cost) && (
+                  <div style={{ display: 'grid', gridTemplateColumns: [b.date, b.confirmCode, b.cost].filter(Boolean).length >= 3 ? '1fr 1fr 1fr' : [b.date, b.confirmCode, b.cost].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr', gap: 6, marginBottom: 8 }}>
+                    {b.date && (
+                      <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px' }}>
+                        <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📅 日期</p>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
+                      </div>
+                    )}
+                    {b.confirmCode && (
+                      <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
+                        <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>訂單編號</p>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{b.confirmCode}</p>
+                      </div>
+                    )}
+                    {b.cost && (
+                      <div style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
+                        <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>費用</p>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>
+                          {b.currency === 'TWD' ? 'NT$' : b.currency === 'USD' ? '$' : '¥'} {Number(b.cost).toLocaleString()}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                )
               )}
               {b.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '0 0 8px' }}>💡 {b.notes}</p>}
-              {b.qrUrl && (
+              {!isVisitor && b.qrUrl && (
                 <>
                   <button onClick={() => setShowQrFor(isQrOpen ? null : b.id)}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${isQrOpen ? C.sageDark : C.creamDark}`, background: isQrOpen ? C.sage : 'var(--tm-card-bg)', color: isQrOpen ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 2 }}>
