@@ -107,6 +107,32 @@ const writeTripMeta = async (id: string, data: object) => {
   await setDoc(doc(db, 'trips', id), data, { merge: true });
 };
 
+// ── Common travel currencies ──────────────────────────────────
+export const CURRENCY_OPTIONS = [
+  { code: 'JPY', label: '日圓 ¥' },
+  { code: 'KRW', label: '韓圜 ₩' },
+  { code: 'THB', label: '泰銖 ฿' },
+  { code: 'SGD', label: '新加坡幣 S$' },
+  { code: 'HKD', label: '港幣 HK$' },
+  { code: 'USD', label: '美元 $' },
+  { code: 'EUR', label: '歐元 €' },
+  { code: 'AUD', label: '澳幣 A$' },
+  { code: 'GBP', label: '英鎊 £' },
+  { code: 'MYR', label: '馬來幣 RM' },
+  { code: 'VND', label: '越南盾 ₫' },
+  { code: 'TWD', label: '台幣 NT$' },
+];
+
+// ── Default packing list (Japanese trip standard) ───────────────
+const DEFAULT_PACKING: string[] = [
+  '護照 / 證件', '機票 / 訂位確認單', '訂房確認單',
+  '現金（當地貨幣）', '信用卡', '旅遊保險',
+  '換洗衣物', '盥洗用品', '毛巾',
+  '充電器', '行動電源', '變壓器 / 轉接頭',
+  '防曬乳', '雨傘', '藥品（感冒、止痛、腸胃）',
+  '眼鏡 / 隱形眼鏡', '耳機', '相機',
+];
+
 // ─────────────────────────────────────────────────────────────────
 interface Props {
   onEnterProject: (project: StoredProject) => void;
@@ -136,6 +162,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
   const [newStart, setNewStart]       = useState('');
   const [newEnd, setNewEnd]           = useState('');
   const [newDesc, setNewDesc]         = useState('');
+  const [newCurrency, setNewCurrency] = useState('JPY');
+  const [newRate, setNewRate]         = useState('');
+  const [fetchingRate, setFetchingRate] = useState(false);
 
   // Join form
   const [keyInput, setKeyInput]       = useState('');
@@ -175,6 +204,22 @@ export default function ProjectHub({ onEnterProject }: Props) {
     '⛷️','🏂','❄️','🎿','🗻','🏕️','🚂','🌅','🌃','🏖️','🌄','🌉','🏯','🎯',
   ];
 
+  const handleFetchRate = async () => {
+    setFetchingRate(true);
+    try {
+      const res = await fetch(`https://open.er-api.com/v6/latest/TWD`);
+      const data = await res.json();
+      if (data?.rates?.[newCurrency]) {
+        setNewRate(String(Math.round(1 / data.rates[newCurrency] * 100) / 100));
+      } else {
+        setError('無法取得匯率，請手動輸入');
+      }
+    } catch {
+      setError('匯率查詢失敗，請手動輸入');
+    }
+    setFetchingRate(false);
+  };
+
   const handleCreate = async () => {
     if (!newTitle.trim() || !newStart) { setError('請填寫旅行名稱和出發日期'); return; }
     const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
@@ -185,6 +230,8 @@ export default function ProjectHub({ onEnterProject }: Props) {
         title: newTitle.trim(), emoji: newEmoji,
         startDate: newStart, endDate: newEnd || newStart,
         description: newDesc.trim(),
+        currency: newCurrency,
+        exchangeRate: newRate ? parseFloat(newRate) : null,
         ownerUid: user.uid,
         ownerEmail: user.email || '',
         collaboratorKey: '', shareCode: '',
@@ -193,6 +240,15 @@ export default function ProjectHub({ onEnterProject }: Props) {
       const cKey = makeCollabKey(ref.id);
       const sCode = makeShareCode(ref.id);
       await writeTripMeta(ref.id, { collaboratorKey: cKey, shareCode: sCode });
+      // 植入預設行李清單
+      const listsCol = collection(doc(db, 'trips', ref.id), 'lists');
+      await Promise.all(DEFAULT_PACKING.map(text =>
+        addDoc(listsCol, {
+          text, listType: 'packing', assignedTo: 'all',
+          dueDate: '', checked: false,
+          createdAt: new Date().toISOString(),
+        })
+      ));
       const p: StoredProject = {
         id: ref.id, title: newTitle.trim(), emoji: newEmoji,
         role: 'owner', collaboratorKey: cKey, shareCode: sCode, addedAt: Date.now(),
@@ -272,6 +328,30 @@ export default function ProjectHub({ onEnterProject }: Props) {
           <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>
             此欄位內容將顯示在行程標題下方小字
           </p>
+        </div>
+        {/* ── 旅遊貨幣 + 匯率 ── */}
+        <div>
+          <label style={labelStyle}>主要旅遊貨幣</label>
+          <select value={newCurrency} onChange={e => { setNewCurrency(e.target.value); setNewRate(''); }}
+            style={{ ...inputSt, appearance: 'none' as const }}>
+            {CURRENCY_OPTIONS.map(c => (
+              <option key={c.code} value={c.code}>{c.label}</option>
+            ))}
+          </select>
+        </div>
+        <div>
+          <label style={labelStyle}>對台幣匯率（1 {newCurrency} = ? TWD）</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={{ ...inputSt, flex: 1 }}
+              type="number" min="0" step="0.01"
+              placeholder="例：0.22"
+              value={newRate} onChange={e => setNewRate(e.target.value)} />
+            <button onClick={handleFetchRate} disabled={fetchingRate}
+              style={{ padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, opacity: fetchingRate ? 0.6 : 1 }}>
+              {fetchingRate ? '查詢中' : '📡 即時查詢'}
+            </button>
+          </div>
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>留空或稍後在記帳頁更新</p>
         </div>
         {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
         <button onClick={handleCreate} disabled={busy}
