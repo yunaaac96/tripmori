@@ -107,6 +107,16 @@ const writeTripMeta = async (id: string, data: object) => {
   await setDoc(doc(db, 'trips', id), data, { merge: true });
 };
 
+// ── Country code → default currency mapping ───────────────────
+const COUNTRY_CURRENCY: Record<string, string> = {
+  JP: 'JPY', KR: 'KRW', TH: 'THB', SG: 'SGD', HK: 'HKD',
+  US: 'USD', CA: 'USD', GB: 'GBP', AU: 'AUD', NZ: 'AUD',
+  FR: 'EUR', DE: 'EUR', IT: 'EUR', ES: 'EUR', PT: 'EUR',
+  NL: 'EUR', AT: 'EUR', BE: 'EUR', GR: 'EUR',
+  MY: 'MYR', VN: 'VND', TW: 'TWD', MO: 'HKD',
+  ID: 'USD', PH: 'USD', MM: 'USD',
+};
+
 // ── Common travel currencies ──────────────────────────────────
 export const CURRENCY_OPTIONS = [
   { code: 'JPY', label: '日圓 ¥' },
@@ -144,7 +154,7 @@ const ROLE_LABEL: Record<TripRole, { label: string; color: string; bg: string }>
   visitor: { label: '訪客',   color: '#2A6A9A', bg: '#D8EDF8' },
 };
 
-type View = 'hub' | 'create' | 'join-collab';
+type View = 'hub' | 'create' | 'create-step2' | 'create-step3' | 'join-collab';
 
 const googleProvider = new GoogleAuthProvider();
 
@@ -165,6 +175,31 @@ export default function ProjectHub({ onEnterProject }: Props) {
   const [newCurrency, setNewCurrency] = useState('JPY');
   const [newRate, setNewRate]         = useState('');
   const [fetchingRate, setFetchingRate] = useState(false);
+
+  // Destination geocoding
+  const [newDestination, setNewDestination] = useState('');
+  const [geocoding, setGeocoding]           = useState(false);
+  const [geoResult, setGeoResult]           = useState<{ lat: number; lng: number; timezone: string; name: string } | null>(null);
+
+  // Created project (used across step 2 / step 3)
+  const [createdProject, setCreatedProject] = useState<StoredProject | null>(null);
+
+  // Step-2 member card form
+  const [memberName, setMemberName]       = useState('');
+  const [memberColor, setMemberColor]     = useState('#ebcef5');
+  const [savingMember, setSavingMember]   = useState(false);
+  const [memberError, setMemberError]     = useState('');
+
+  // Step-2 extra members (other travellers)
+  const [extraMembers, setExtraMembers]   = useState<{ id: string; name: string; color: string }[]>([]);
+  const [extraName, setExtraName]         = useState('');
+  const [extraColor, setExtraColor]       = useState('#C8E6C9');
+  const [showExtraForm, setShowExtraForm] = useState(false);
+
+  // Step-3 bulk import
+  const [bulkText, setBulkText]           = useState('');
+  const [bulkImporting, setBulkImporting] = useState(false);
+  const [bulkError, setBulkError]         = useState('');
 
   // Join form
   const [keyInput, setKeyInput]       = useState('');
@@ -220,6 +255,28 @@ export default function ProjectHub({ onEnterProject }: Props) {
     setFetchingRate(false);
   };
 
+  const handleGeocode = async () => {
+    const q = newDestination.trim();
+    if (!q) return;
+    setGeocoding(true); setGeoResult(null); setError('');
+    try {
+      const res = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=zh&format=json`);
+      const data = await res.json();
+      const r = data?.results?.[0];
+      if (r) {
+        setGeoResult({ lat: r.latitude, lng: r.longitude, timezone: r.timezone || 'Asia/Tokyo', name: r.name || q });
+        // Auto-set currency if country is known
+        const detectedCurrency = COUNTRY_CURRENCY[r.country_code?.toUpperCase()];
+        if (detectedCurrency) setNewCurrency(detectedCurrency);
+      } else {
+        setError('找不到此地點，請嘗試英文地名');
+      }
+    } catch {
+      setError('地點查詢失敗，請稍後重試');
+    }
+    setGeocoding(false);
+  };
+
   const handleCreate = async () => {
     if (!newTitle.trim() || !newStart) { setError('請填寫旅行名稱和出發日期'); return; }
     const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
@@ -236,6 +293,11 @@ export default function ProjectHub({ onEnterProject }: Props) {
         ownerEmail: user.email || '',
         collaboratorKey: '', shareCode: '',
         createdAt: Timestamp.now(),
+        // Location for weather
+        locationLat:      geoResult?.lat      ?? null,
+        locationLng:      geoResult?.lng      ?? null,
+        locationTimezone: geoResult?.timezone ?? null,
+        locationName:     geoResult?.name     ?? newDestination.trim() || null,
       });
       const cKey = makeCollabKey(ref.id);
       const sCode = makeShareCode(ref.id);
@@ -255,7 +317,12 @@ export default function ProjectHub({ onEnterProject }: Props) {
         startDate: newStart, endDate: newEnd || newStart, description: newDesc.trim(),
       };
       saveProject(p);
-      onEnterProject(p);
+      setCreatedProject(p);
+      // Pre-fill member name from Google display name
+      const displayFirst = user.displayName?.split(/[\s_]+/)[0] || '';
+      setMemberName(displayFirst);
+      setMemberError('');
+      setView('create-step2');
     } catch (e: any) { console.error(e); setError('建立失敗，請重試'); }
     setBusy(false);
   };
@@ -285,7 +352,209 @@ export default function ProjectHub({ onEnterProject }: Props) {
     setBusy(false);
   };
 
+  // ── Member card create helper ──────────────────────────────────
+  const MEMBER_COLORS = ['#ebcef5', '#C8E6C9', '#B3E5FC', '#FFF9C4', '#FFD0B0', '#F8BBD9', '#D1C4E9', '#B2EBF2', '#aaa9ab'];
+
+  const handleCreateMemberCard = async () => {
+    if (!createdProject) return;
+    setSavingMember(true); setMemberError('');
+    try {
+      const user = auth.currentUser;
+      const membersCol = collection(db, 'trips', createdProject.id, 'members');
+      // Save own card
+      if (memberName.trim()) {
+        await addDoc(membersCol, {
+          name: memberName.trim(), color: memberColor,
+          googleUid: user?.uid || null, email: user?.email || null,
+          createdAt: Timestamp.now(),
+        });
+      }
+      // Save extra members
+      await Promise.all(extraMembers.map(m =>
+        addDoc(membersCol, {
+          name: m.name, color: m.color,
+          googleUid: null, email: null,
+          createdAt: Timestamp.now(),
+        })
+      ));
+      setView('create-step3');
+    } catch (e) { console.error(e); setMemberError('儲存失敗，請重試'); }
+    setSavingMember(false);
+  };
+
+  // ── Bulk import parser ─────────────────────────────────────────
+  // Format: YYYY-MM-DD,HH:MM,名稱[,類別][,地點]
+  // Lines starting with # are comments
+  const CATEGORY_ALIASES: Record<string, string> = {
+    attraction: 'attraction', 景點: 'attraction', 活動: 'attraction',
+    food: 'food', 餐廳: 'food', 飲食: 'food', 用餐: 'food',
+    transport: 'transport', 交通: 'transport',
+    hotel: 'hotel', 住宿: 'hotel', 飯店: 'hotel',
+    shopping: 'shopping', 購物: 'shopping',
+    misc: 'misc', 其他: 'misc',
+  };
+
+  const handleBulkImport = async () => {
+    if (!createdProject || !bulkText.trim()) { onEnterProject(createdProject!); return; }
+    setBulkImporting(true); setBulkError('');
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    const eventsToAdd: any[] = [];
+    const errors: string[] = [];
+    lines.forEach((line, idx) => {
+      const parts = line.split(',').map(s => s.trim());
+      if (parts.length < 3) { errors.push(`第 ${idx + 1} 行格式不正確`); return; }
+      const [date, time, title, catRaw = '', location = ''] = parts;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors.push(`第 ${idx + 1} 行日期格式錯誤`); return; }
+      if (!/^\d{2}:\d{2}$/.test(time)) { errors.push(`第 ${idx + 1} 行時間格式錯誤`); return; }
+      if (!title) { errors.push(`第 ${idx + 1} 行缺少名稱`); return; }
+      const category = CATEGORY_ALIASES[catRaw] || 'attraction';
+      eventsToAdd.push({ date, startTime: time, endTime: '', title, category, location, notes: '', mapUrl: '', cost: 0, currency: createdProject.id ? 'JPY' : 'JPY', travelTime: '' });
+    });
+    if (errors.length > 0) { setBulkError(errors.slice(0, 3).join('\n') + (errors.length > 3 ? `\n⋯ 共 ${errors.length} 個錯誤` : '')); setBulkImporting(false); return; }
+    try {
+      const eventsCol = collection(db, 'trips', createdProject.id, 'events');
+      await Promise.all(eventsToAdd.map(ev => addDoc(eventsCol, { ...ev, createdAt: Timestamp.now() })));
+      onEnterProject(createdProject);
+    } catch (e) { console.error(e); setBulkError('匯入失敗，請重試'); }
+    setBulkImporting(false);
+  };
+
   // ── Views ──────────────────────────────────────────────────────
+
+  if (view === 'create-step2') return (
+    <Screen title="👤 建立旅伴名單" onBack={() => {}} hideBack stepLabel="步驟 2 / 3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+        {/* ── 自己的卡片 ── */}
+        <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: 0.5 }}>我的卡片</p>
+        <div>
+          <label style={labelStyle}>你的名稱（暱稱）</label>
+          <input style={inputSt} placeholder="例：小明、Uu、Brian"
+            value={memberName} onChange={e => setMemberName(e.target.value)} />
+        </div>
+        <div>
+          <label style={labelStyle}>卡片顏色</label>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+            {MEMBER_COLORS.map(c => (
+              <button key={c} onClick={() => setMemberColor(c)}
+                style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${memberColor === c ? C.sageDark : 'transparent'}`, background: c, cursor: 'pointer', flexShrink: 0 }} />
+            ))}
+          </div>
+        </div>
+
+        {/* ── 其他旅伴 ── */}
+        <div style={{ borderTop: `1px solid ${C.creamDark}`, paddingTop: 14 }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: '0 0 10px', letterSpacing: 0.5 }}>其他旅伴</p>
+          {extraMembers.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 10 }}>
+              {extraMembers.map(m => (
+                <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 12px', borderRadius: 12, background: 'var(--tm-card-bg)', border: `1.5px solid ${C.creamDark}` }}>
+                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.color, flexShrink: 0 }} />
+                  <span style={{ flex: 1, fontSize: 14, fontWeight: 600, color: C.bark }}>{m.name}</span>
+                  <button onClick={() => setExtraMembers(prev => prev.filter(x => x.id !== m.id))}
+                    style={{ background: 'none', border: 'none', color: C.barkLight, fontSize: 16, cursor: 'pointer', padding: '0 4px' }}>✕</button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {showExtraForm ? (
+            <div style={{ background: 'var(--tm-card-bg)', borderRadius: 14, padding: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              <input style={inputSt} placeholder="旅伴名稱"
+                value={extraName} onChange={e => setExtraName(e.target.value)} />
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                {MEMBER_COLORS.map(c => (
+                  <button key={c} onClick={() => setExtraColor(c)}
+                    style={{ width: 30, height: 30, borderRadius: '50%', border: `3px solid ${extraColor === c ? C.sageDark : 'transparent'}`, background: c, cursor: 'pointer', flexShrink: 0 }} />
+                ))}
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => { setShowExtraForm(false); setExtraName(''); setExtraColor('#C8E6C9'); }}
+                  style={{ flex: 1, padding: '9px 12px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'transparent', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>取消</button>
+                <button onClick={() => {
+                  if (!extraName.trim()) return;
+                  setExtraMembers(prev => [...prev, { id: Date.now().toString(), name: extraName.trim(), color: extraColor }]);
+                  setExtraName(''); setExtraColor('#C8E6C9'); setShowExtraForm(false);
+                }} disabled={!extraName.trim()}
+                  style={{ flex: 2, padding: '9px 12px', borderRadius: 12, border: 'none', background: extraName.trim() ? C.sage : C.creamDark, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                  ＋ 加入
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button onClick={() => setShowExtraForm(true)}
+              style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px dashed ${C.creamDark}`, background: 'transparent', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+              ＋ 新增其他旅伴
+            </button>
+          )}
+        </div>
+
+        {memberError && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{memberError}</p>}
+        <button onClick={handleCreateMemberCard} disabled={savingMember}
+          style={{ padding: 14, borderRadius: 14, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: savingMember ? 0.6 : 1 }}>
+          {savingMember ? '儲存中...' : `✓ 完成（${[memberName.trim(), ...extraMembers.map(m => m.name)].filter(Boolean).length} 位旅伴）`}
+        </button>
+        <button onClick={() => setView('create-step3')}
+          style={{ padding: 12, borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+          跳過，稍後再建
+        </button>
+      </div>
+    </Screen>
+  );
+
+  const BULK_TEMPLATE =
+`# 格式：日期,時間,名稱,類別(可選),地點(可選)
+# 類別可填：attraction / food / transport / hotel / shopping / misc
+# 以 # 開頭的行為註解，會被忽略
+${createdProject?.startDate || 'YYYY-MM-DD'},09:00,早餐,food,飯店附近
+${createdProject?.startDate || 'YYYY-MM-DD'},10:30,景點名稱,attraction,地點
+${createdProject?.startDate || 'YYYY-MM-DD'},13:00,午餐,food,
+${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,地點`;
+
+  if (view === 'create-step3') return (
+    <Screen title="📅 匯入行程（選填）" onBack={() => setView('create-step2')} stepLabel="步驟 3 / 3">
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.6 }}>
+          若已有行程規劃，可貼上資料一次匯入。留空直接跳過即可。
+        </p>
+
+        {/* 格式說明 */}
+        <div style={{ background: 'var(--tm-note-2)', borderRadius: 14, padding: '12px 14px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>📋 格式範本</p>
+            <button
+              onClick={() => { setBulkText(BULK_TEMPLATE); }}
+              style={{ fontSize: 11, fontWeight: 700, color: C.sky, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
+              套用範本 →
+            </button>
+          </div>
+          <pre style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{BULK_TEMPLATE}</pre>
+        </div>
+
+        <textarea
+          value={bulkText}
+          onChange={e => { setBulkText(e.target.value); setBulkError(''); }}
+          placeholder="貼上行程資料…"
+          rows={8}
+          style={{ ...inputSt, resize: 'vertical' as const, lineHeight: 1.7, fontFamily: 'monospace', fontSize: 12 }}
+        />
+
+        {bulkError && (
+          <div style={{ background: '#FAE0E0', borderRadius: 12, padding: '10px 14px' }}>
+            <p style={{ fontSize: 12, color: '#9A3A3A', margin: 0, whiteSpace: 'pre-line' }}>{bulkError}</p>
+          </div>
+        )}
+
+        <button onClick={handleBulkImport} disabled={bulkImporting}
+          style={{ padding: 14, borderRadius: 14, border: 'none', background: bulkText.trim() ? C.earth : C.sage, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: bulkImporting ? 0.6 : 1 }}>
+          {bulkImporting ? '匯入中...' : bulkText.trim() ? '📥 匯入並進入行程' : '🌸 開始規劃旅行 →'}
+        </button>
+        <button onClick={() => createdProject && onEnterProject(createdProject)}
+          style={{ padding: 12, borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+          跳過，直接進入
+        </button>
+      </div>
+    </Screen>
+  );
 
   if (view === 'create') return (
     <Screen title="✈️ 建立新旅行" onBack={() => { setView('hub'); setError(''); }}>
@@ -311,6 +580,27 @@ export default function ProjectHub({ onEnterProject }: Props) {
           <label style={labelStyle}>旅行名稱 *</label>
           <input style={inputSt} placeholder="例：沖繩親子遊 2026" value={newTitle} onChange={e => setNewTitle(e.target.value)} />
         </div>
+        <div>
+          <label style={labelStyle}>目的地城市（用於天氣預報）</label>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input style={{ ...inputSt, flex: 1 }}
+              placeholder="例：那霸、首爾、Bangkok"
+              value={newDestination}
+              onChange={e => { setNewDestination(e.target.value); setGeoResult(null); }} />
+            <button onClick={handleGeocode} disabled={geocoding || !newDestination.trim()}
+              style={{ padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, opacity: (geocoding || !newDestination.trim()) ? 0.5 : 1 }}>
+              {geocoding ? '查詢中' : '📍 定位'}
+            </button>
+          </div>
+          {geoResult && (
+            <p style={{ fontSize: 11, color: '#4A7A35', margin: '5px 0 0', fontWeight: 600 }}>
+              ✓ {geoResult.name}　{geoResult.lat.toFixed(2)}, {geoResult.lng.toFixed(2)}　時區：{geoResult.timezone}
+            </p>
+          )}
+          {!geoResult && newDestination.trim() && (
+            <p style={{ fontSize: 11, color: C.barkLight, margin: '5px 0 0' }}>請按「📍 定位」取得座標以啟用即時天氣功能</p>
+          )}
+        </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <div style={{ flex: 1 }}>
             <label style={labelStyle}>出發日期 *</label>
@@ -331,13 +621,21 @@ export default function ProjectHub({ onEnterProject }: Props) {
         </div>
         {/* ── 旅遊貨幣 + 匯率 ── */}
         <div>
-          <label style={labelStyle}>主要旅遊貨幣</label>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+            <label style={{ ...labelStyle, margin: 0 }}>主要旅遊貨幣</label>
+            {geoResult && COUNTRY_CURRENCY[geoResult.name] === newCurrency && (
+              <span style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700 }}>✓ 依目的地自動填入</span>
+            )}
+          </div>
           <select value={newCurrency} onChange={e => { setNewCurrency(e.target.value); setNewRate(''); }}
             style={{ ...inputSt, appearance: 'none' as const }}>
             {CURRENCY_OPTIONS.map(c => (
               <option key={c.code} value={c.code}>{c.label}</option>
             ))}
           </select>
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>
+            依目的地自動建議，可手動更換為其他幣值
+          </p>
         </div>
         <div>
           <label style={labelStyle}>對台幣匯率（1 {newCurrency} = ? TWD）</label>
@@ -461,12 +759,17 @@ export default function ProjectHub({ onEnterProject }: Props) {
 
 // ── Helper sub-components (top-level so they don't remount) ───────
 
-function Screen({ title, onBack, children }: { title: string; onBack: () => void; children: React.ReactNode }) {
+function Screen({ title, onBack, children, hideBack, stepLabel }: { title: string; onBack: () => void; children: React.ReactNode; hideBack?: boolean; stepLabel?: string }) {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 430 }}>
         <div style={{ background: 'linear-gradient(150deg, #EDF5F4 0%, #F5EDE6 100%)', padding: '20px 20px 24px', borderBottom: '1px solid #E0D9CF' }}>
-          <button onClick={onBack} style={{ background: 'rgba(28,52,97,0.08)', border: 'none', borderRadius: 10, padding: '6px 12px', color: '#1C3461', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, marginBottom: 16 }}>‹ 返回</button>
+          {!hideBack && (
+            <button onClick={onBack} style={{ background: 'rgba(28,52,97,0.08)', border: 'none', borderRadius: 10, padding: '6px 12px', color: '#1C3461', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, marginBottom: 16 }}>‹ 返回</button>
+          )}
+          {stepLabel && (
+            <p style={{ fontSize: 11, fontWeight: 700, color: '#9A8C80', margin: hideBack ? '0 0 8px' : '0 0 8px', letterSpacing: 1 }}>{stepLabel}</p>
+          )}
           <h2 style={{ fontSize: 20, fontWeight: 900, color: '#1C3461', margin: 0, fontFamily: FONT }}>{title}</h2>
         </div>
         <div style={{ padding: '24px 20px' }}>{children}</div>

@@ -92,20 +92,32 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore || {};
   const isOwner = role === 'owner';
 
-  // ── Static data state (loaded from Firestore, fallback to defaults) ──
-  const [flights, setFlights] = useState<any[]>(DEFAULT_FLIGHTS);
-  const [hotels,  setHotels]  = useState<any[]>(DEFAULT_HOTELS);
-  const [car,     setCar]     = useState<any>(DEFAULT_CAR);
+  // ── Static data state ──
+  // null = not yet loaded / new project (show "待更新")
+  // [] or array = loaded from Firestore (may be empty)
+  // DEFAULT_* = fallback for the hardcoded demo trip only
+  const [flights, setFlights] = useState<any[] | null>(null);
+  const [hotels,  setHotels]  = useState<any[] | null>(null);
+  const [car,     setCar]     = useState<any | null>(null);
+  const [staticLoaded, setStaticLoaded] = useState(false);
 
   useEffect(() => {
     if (!db || !TRIP_ID) return;
     getDoc(doc(db, 'trips', TRIP_ID)).then(snap => {
-      if (!snap.exists()) return;
+      if (!snap.exists()) { setStaticLoaded(true); return; }
       const d = snap.data();
-      if (d.staticFlights) setFlights(d.staticFlights);
-      if (d.staticHotels)  setHotels(d.staticHotels);
-      if (d.staticCar)     setCar(d.staticCar);
-    }).catch(console.error);
+      // 若欄位存在（含空陣列）就用 Firestore 資料，否則視為待更新
+      setFlights('staticFlights' in d ? d.staticFlights : null);
+      setHotels ('staticHotels'  in d ? d.staticHotels  : null);
+      setCar    ('staticCar'     in d ? d.staticCar     : null);
+      // 舊版預設行程沿用 hardcoded 資料（保持相容）
+      if (!('staticFlights' in d) && TRIP_ID === '74pfE7RXyEIusEdRV0rZ') {
+        setFlights(DEFAULT_FLIGHTS);
+        setHotels (DEFAULT_HOTELS);
+        setCar    (DEFAULT_CAR);
+      }
+      setStaticLoaded(true);
+    }).catch(() => setStaticLoaded(true));
   }, [db, TRIP_ID]);
 
   // ── Static edit modal state ──────────────────────────────
@@ -258,8 +270,20 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
       <div style={{ padding: '8px 16px 80px' }}>
 
         {/* ── 航班 ── */}
-        <SectionTitle>✈️ 航班資訊</SectionTitle>
-        {flights.map((f, idx) => (
+        <SectionTitle action={isOwner && flights !== null && <EditBtn onClick={() => openEdit('flight', 0)} />}>✈️ 航班資訊</SectionTitle>
+        {!staticLoaded ? null : flights === null || flights.length === 0 ? (
+          <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
+            <p style={{ fontSize: 28, margin: '0 0 8px' }}>✈️</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>航班資訊待更新</p>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊右上方 ✏️ 填入航班資料</p>
+            {isOwner && (
+              <button onClick={() => { setEditType('flight'); setEditIndex(0); setEditForm({ id: 'f1', direction: '去程', airline: '', flightNo: '', dep: { airport: '', name: '', time: '' }, arr: { airport: '', name: '', time: '' }, date: '', notes: '', costPerPerson: '' }); }}
+                style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                ＋ 新增航班
+              </button>
+            )}
+          </div>
+        ) : (flights || []).map((f, idx) => (
           <div key={f.id || idx} style={{ borderRadius: 24, overflow: 'hidden', boxShadow: C.shadow, marginBottom: 14 }}>
             <div style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 20px', position: 'relative' }}>
               {isOwner && (
@@ -303,7 +327,19 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
 
         {/* ── 住宿 ── */}
         <SectionTitle>🏨 住宿安排</SectionTitle>
-        {hotels.map((h, idx) => (
+        {!staticLoaded ? null : hotels === null || hotels.length === 0 ? (
+          <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
+            <p style={{ fontSize: 28, margin: '0 0 8px' }}>🏨</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>住宿安排待更新</p>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 ✏️ 填入訂房資訊</p>
+            {isOwner && (
+              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameJa: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: 'TWD', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
+                style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                ＋ 新增住宿
+              </button>
+            )}
+          </div>
+        ) : (hotels || []).map((h, idx) => (
           <div key={h.id || idx} style={{ ...cardStyle, textAlign: 'left' }}>
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
               <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
@@ -345,7 +381,20 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
         ))}
 
         {/* ── 租車 ── */}
-        <SectionTitle>🚗 租車資訊</SectionTitle>
+        <SectionTitle action={isOwner && car !== null && <EditBtn onClick={() => openEdit('car')} />}>🚗 租車資訊</SectionTitle>
+        {!staticLoaded ? null : car === null ? (
+          <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
+            <p style={{ fontSize: 28, margin: '0 0 8px' }}>🚗</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>此行程未安排租車</p>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>如有租車需求，擁有者可點擊下方按鈕新增</p>
+            {isOwner && (
+              <button onClick={() => { setEditType('car'); setEditForm({ company: '', carType: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: 'JPY', confirmCode: '', notes: '' }); }}
+                style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: '#FFC107', color: '#333', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                ＋ 新增租車
+              </button>
+            )}
+          </div>
+        ) : (
         <div style={cardStyle}>
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
             <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🚗</div>
@@ -394,6 +443,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
             </div>
           )}
         </div>
+        )}
 
         {/* ── 其他預訂（動態）── */}
         <SectionTitle action={
