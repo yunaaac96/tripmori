@@ -138,6 +138,9 @@ function App() {
           collaboratorKey: data.collaboratorKey || '',
           shareCode: data.shareCode || '',
           addedAt: Date.now(),
+          startDate: data.startDate || '',
+          endDate: data.endDate || '',
+          description: data.description || '',
         };
         saveProject(p);
         setActiveProject(p.id);
@@ -164,7 +167,7 @@ function App() {
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 2.2 秒以完整播放動畫）
-    const minDelay = new Promise<void>(r => setTimeout(r, 2200));
+    const minDelay = new Promise<void>(r => setTimeout(r, 3000));
     const authReady = auth.authStateReady();
     Promise.all([minDelay, authReady]).then(() => setSplashDone(true));
   }, []);
@@ -294,7 +297,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === '行程' && <SchedulePage events={events} members={members} firestore={firestore} />}
+        {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} firestore={firestore} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} />}

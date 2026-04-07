@@ -18,6 +18,9 @@ export interface StoredProject {
   collaboratorKey: string;
   shareCode: string;
   addedAt: number;
+  startDate?: string;
+  endDate?: string;
+  description?: string;
 }
 
 const LS_PROJECTS  = 'tripmori_projects';
@@ -193,6 +196,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
       const p: StoredProject = {
         id: ref.id, title: newTitle.trim(), emoji: newEmoji,
         role: 'owner', collaboratorKey: cKey, shareCode: sCode, addedAt: Date.now(),
+        startDate: newStart, endDate: newEnd || newStart, description: newDesc.trim(),
       };
       saveProject(p);
       onEnterProject(p);
@@ -265,6 +269,9 @@ export default function ProjectHub({ onEnterProject }: Props) {
           <label style={labelStyle}>旅行簡介（選填）</label>
           <textarea style={{ ...inputSt, minHeight: 72, resize: 'vertical' as const, lineHeight: 1.6 }}
             placeholder="目的地、主要行程..." value={newDesc} onChange={e => setNewDesc(e.target.value)} />
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>
+            此欄位內容將顯示在行程標題下方小字
+          </p>
         </div>
         {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
         <button onClick={handleCreate} disabled={busy}
