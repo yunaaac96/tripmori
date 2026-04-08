@@ -9,6 +9,13 @@
 }
 :root {
   /* TripMori theme tokens — light mode defaults */
+  --tm-sage: #8FAF7E;
+  --tm-sage-dark: #6A8F5C;
+  --tm-sage-light: #B5CFA7;
+  --tm-earth: #C4956A;
+  --tm-sky: #A8CADF;
+  --tm-blush: #E8B4B8;
+  --tm-honey: #E8C96A;
   --tm-page-bg: #F7F4EB;
   --tm-dot-color: #C8C0AD;
   --tm-nav-bg: #FFFFFF;
@@ -69,6 +76,14 @@
     /* TripMori dark theme — warm charcoal, readable & cohesive
      * Base: deep warm neutral, not green-tinted; text is warm off-white
      */
+    /* Header / accent colors — deeper, muted to harmonize with dark base */
+    --tm-sage: #4E7A60;
+    --tm-sage-dark: #3A5E48;
+    --tm-sage-light: #5E9070;
+    --tm-earth: #8C5E3A;
+    --tm-sky: #3A6882;
+    --tm-blush: #7A4050;
+    --tm-honey: #8A6A20;
     --tm-page-bg: #1C1A17;
     --tm-dot-color: #252320;
     --tm-nav-bg: #201E1B;

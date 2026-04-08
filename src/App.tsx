@@ -19,9 +19,9 @@ import ProjectHub, {
 export const TRIP_ID = "74pfE7RXyEIusEdRV0rZ"; // default / fallback
 export const C = {
   cream: 'var(--tm-cream)', creamDark: 'var(--tm-cream-dark)',
-  sage: '#8FAF7E', sageDark: '#6A8F5C', sageLight: '#B5CFA7',
-  earth: '#C4956A', bark: 'var(--tm-bark)', barkLight: 'var(--tm-bark-light)',
-  sky: '#A8CADF', blush: '#E8B4B8', honey: '#E8C96A',
+  sage: 'var(--tm-sage)', sageDark: 'var(--tm-sage-dark)', sageLight: 'var(--tm-sage-light)',
+  earth: 'var(--tm-earth)', bark: 'var(--tm-bark)', barkLight: 'var(--tm-bark-light)',
+  sky: 'var(--tm-sky)', blush: 'var(--tm-blush)', honey: 'var(--tm-honey)',
   shadow: '3px 3px 0px var(--tm-shadow)', shadowSm: '2px 2px 0px var(--tm-shadow)',
 };
 export const FONT = "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif";
