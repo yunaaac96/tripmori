@@ -253,27 +253,15 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 
-  // ── Team name (editable by owner) ────────────────────────────
-  const defaultTeamName = project?.title ? `${project.title.slice(0, 10)} 小隊` : '旅伴小隊';
-  const [teamName, setTeamName] = useState<string>('');
+  // ── Project name (editable by owner, writes back to trip title) ──
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
 
-  // Fetch teamName from Firestore trip doc
-  useEffect(() => {
-    if (!TRIP_ID) return;
-    getDoc(doc(db, 'trips', TRIP_ID)).then((snap: any) => {
-      if (snap.exists()) {
-        setTeamName(snap.data().teamName || '');
-      }
-    }).catch(() => {});
-  }, [TRIP_ID]);
-
   const handleSaveTeamName = async () => {
-    const val = teamNameInput.trim() || defaultTeamName;
+    const val = teamNameInput.trim();
+    if (!val) { setEditingTeamName(false); return; }
     try {
-      await setDoc(doc(db, 'trips', TRIP_ID), { teamName: val }, { merge: true });
-      setTeamName(val);
+      await updateDoc(doc(db, 'trips', TRIP_ID), { title: val });
     } catch (e) { console.error(e); }
     setEditingTeamName(false);
   };
@@ -294,7 +282,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const startLabel = startDate
     ? `${new Date(startDate).getMonth()+1}/${new Date(startDate).getDate()}`
     : '—';
-  const displayTeamName = teamName || defaultTeamName;
+  const displayTeamName = project?.title || '旅行';
 
   return (
     <div style={{ fontFamily: FONT }}>
@@ -397,7 +385,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 value={teamNameInput}
                 onChange={e => setTeamNameInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
-                placeholder={defaultTeamName}
+                placeholder={project?.title || '行程名稱'}
                 style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
               />
               <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
@@ -424,9 +412,9 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 )}
               </div>
               {firestore.role === 'owner' && (
-                <button onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
-                  style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                  ✏️ 命名
+                <button onClick={() => { setTeamNameInput(project?.title || ''); setEditingTeamName(true); }}
+                  style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 16, cursor: 'pointer', fontFamily: FONT, lineHeight: 1 }}>
+                  ✏️
                 </button>
               )}
             </div>
