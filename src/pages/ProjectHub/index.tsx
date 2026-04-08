@@ -297,7 +297,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
         locationLat:      geoResult?.lat      ?? null,
         locationLng:      geoResult?.lng      ?? null,
         locationTimezone: geoResult?.timezone ?? null,
-        locationName:     geoResult?.name     ?? newDestination.trim() || null,
+        locationName:     (geoResult?.name ?? newDestination.trim()) || null,
       });
       const cKey = makeCollabKey(ref.id);
       const sCode = makeShareCode(ref.id);
