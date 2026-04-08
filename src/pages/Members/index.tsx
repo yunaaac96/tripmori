@@ -260,13 +260,16 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
 
-  // Fetch teamName from Firestore trip doc
+  const [firestoreCollaboratorKey, setFirestoreCollaboratorKey] = useState<string>('');
+
+  // Fetch teamName + collaboratorKey from Firestore trip doc
   useEffect(() => {
     if (!TRIP_ID) return;
     const { getDoc: _getDoc, doc: _doc } = require('firebase/firestore') as any;
     _getDoc(_doc(db, 'trips', TRIP_ID)).then((snap: any) => {
       if (snap.exists()) {
         setTeamName(snap.data().teamName || '');
+        setFirestoreCollaboratorKey(snap.data().collaboratorKey || '');
       }
     }).catch(() => {});
   }, [TRIP_ID]);
@@ -391,50 +394,32 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
-      <PageHeader title="旅伴" subtitle={`${displayTeamName}・${displayMembers.length} 人`} emoji="👥" color={C.earth}>
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
-          {editingTeamName ? (
-            <div style={{ flex: 1, display: 'flex', gap: 6 }}>
-              <input
-                autoFocus
-                value={teamNameInput}
-                onChange={e => setTeamNameInput(e.target.value)}
-                onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
-                placeholder={defaultTeamName}
-                style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
-              />
-              <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
-              <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
-            </div>
-          ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-              <div style={{ background: 'rgba(255,255,255,0.22)', borderRadius: 14, padding: '8px 14px', display: 'flex', gap: 18 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>成員</p>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{displayMembers.length} 人</p>
-                </div>
-                {startLabel !== '—' && (
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>出發</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{startLabel}</p>
-                  </div>
-                )}
-                {tripDays > 0 && (
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>天數</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{tripDays} 天</p>
-                  </div>
-                )}
-              </div>
-              {firestore.role === 'owner' && (
-                <button onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
-                  style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                  ✏️ 命名
-                </button>
-              )}
-            </div>
-          )}
-        </div>
+      <PageHeader
+        title="旅伴"
+        subtitle={`${displayTeamName}・${displayMembers.length}人`}
+        subtitleAction={firestore.role === 'owner' && !editingTeamName ? (
+          <button
+            onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
+            style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 13, cursor: 'pointer', lineHeight: 1, color: 'rgba(255,255,255,0.85)' }}
+          >✏️</button>
+        ) : undefined}
+        emoji="👥"
+        color={C.earth}
+      >
+        {editingTeamName && (
+          <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
+            <input
+              autoFocus
+              value={teamNameInput}
+              onChange={e => setTeamNameInput(e.target.value)}
+              onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
+              placeholder={defaultTeamName}
+              style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
+            />
+            <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
+            <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
+          </div>
+        )}
       </PageHeader>
 
       {/* Copy toast */}
@@ -450,13 +435,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>🔑 分享此旅行</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* 協作金鑰 — tap to copy */}
-            <div onClick={() => handleCopy(project.collaboratorKey, 'collab')}
+            <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
               style={{ background: copied === 'collab' ? '#E0F0D8' : '#FFF2CC', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                 <p style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : '#9A6800', margin: 0 }}>協作金鑰（編輯者）</p>
                 <span style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : '#9A6800', fontWeight: 700 }}>{copied === 'collab' ? '✅ 已複製' : '點擊複製 📋'}</span>
               </div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{project.collaboratorKey}</p>
+              <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{firestoreCollaboratorKey || project?.collaboratorKey || '—'}</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
             </div>
             {/* 訪客連結 — tap to copy */}
