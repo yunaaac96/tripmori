@@ -88,7 +88,7 @@ function EditBtn({ onClick }: { onClick: () => void }) {
 }
 
 // ── Main component ───────────────────────────────────────
-export default function BookingsPage({ bookings, firestore }: { bookings: any[]; firestore?: any }) {
+export default function BookingsPage({ bookings, firestore, project }: { bookings: any[]; firestore?: any; project?: any }) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore || {};
   const isOwner   = role === 'owner';
   const isVisitor = isReadOnly; // 訪客：隱藏訂單編號/PIN/費用/QR Code
@@ -334,7 +334,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>住宿安排待更新</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 ✏️ 填入訂房資訊</p>
             {!isReadOnly && (
-              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameJa: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: 'TWD', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
+              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameJa: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                 ＋ 新增住宿
               </button>
@@ -627,28 +627,31 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
 
               {/* ── Hotel form ── */}
               {editType === 'hotel' && (<>
-                <Field label="飯店名稱"><input style={inSt} value={editForm.name || ''} onChange={e => setF('name', e.target.value)} /></Field>
-                <Field label="日文名稱"><input style={inSt} value={editForm.nameJa || ''} onChange={e => setF('nameJa', e.target.value)} /></Field>
-                <Field label="地址"><input style={inSt} value={editForm.address || ''} onChange={e => setF('address', e.target.value)} /></Field>
+                <Field label="飯店名稱 *"><input style={inSt} value={editForm.name || ''} onChange={e => setF('name', e.target.value)} /></Field>
+                <Field label="當地名稱（選填）"><input style={inSt} value={editForm.nameJa || ''} onChange={e => setF('nameJa', e.target.value)} /></Field>
                 <Row>
-                  <Field label="Check-in"><input style={inSt} placeholder="2026-04-23  14:00" value={editForm.checkIn || ''} onChange={e => setF('checkIn', e.target.value)} /></Field>
-                  <Field label="Check-out"><input style={inSt} placeholder="2026-04-24  11:00" value={editForm.checkOut || ''} onChange={e => setF('checkOut', e.target.value)} /></Field>
+                  <Field label="Check-in *"><input style={inSt} placeholder="2026-04-23  14:00" value={editForm.checkIn || ''} onChange={e => setF('checkIn', e.target.value)} /></Field>
+                  <Field label="Check-out *"><input style={inSt} placeholder="2026-04-24  11:00" value={editForm.checkOut || ''} onChange={e => setF('checkOut', e.target.value)} /></Field>
                 </Row>
+                <Field label="訂單編號 *"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
                 <Row>
                   <Field label="幣別">
-                    <select style={selSt} value={editForm.currency || 'TWD'} onChange={e => setF('currency', e.target.value)}>
-                      <option value="TWD">TWD</option><option value="JPY">JPY</option>
+                    <select style={selSt} value={editForm.currency || project?.currency || 'JPY'} onChange={e => setF('currency', e.target.value)}>
+                      {project?.currency && project.currency !== 'TWD' && <option value={project.currency}>{project.currency}</option>}
+                      <option value="TWD">TWD</option>
+                      {(!project?.currency || project.currency === 'TWD') && <option value="JPY">JPY</option>}
                     </select>
                   </Field>
-                  <Field label="總費用"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
-                  <Field label="每人分攤"><input style={inSt} type="number" value={editForm.costPerPerson || ''} onChange={e => setF('costPerPerson', e.target.value)} /></Field>
+                  <Field label="總費用（選填）"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
+                  <Field label="每人分攤（選填）"><input style={inSt} type="number" value={editForm.costPerPerson || ''} onChange={e => setF('costPerPerson', e.target.value)} /></Field>
                 </Row>
+                <Field label="地址（選填）"><input style={inSt} value={editForm.address || ''} onChange={e => setF('address', e.target.value)} /></Field>
                 <Row>
-                  <Field label="訂單編號"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
-                  <Field label="PIN 碼"><input style={inSt} value={editForm.pin || ''} onChange={e => setF('pin', e.target.value)} /></Field>
+                  <Field label="房型（選填）"><input style={inSt} value={editForm.roomType || ''} onChange={e => setF('roomType', e.target.value)} /></Field>
+                  <Field label="PIN 碼（選填）"><input style={inSt} value={editForm.pin || ''} onChange={e => setF('pin', e.target.value)} /></Field>
                 </Row>
-                <Field label="備註"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} value={editForm.notes || ''} onChange={e => setF('notes', e.target.value)} /></Field>
-                <Field label="地圖連結"><input style={inSt} placeholder="https://..." value={editForm.mapUrl || ''} onChange={e => setF('mapUrl', e.target.value)} /></Field>
+                <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} value={editForm.notes || ''} onChange={e => setF('notes', e.target.value)} /></Field>
+                <Field label="地圖連結（選填）"><input style={inSt} placeholder="https://..." value={editForm.mapUrl || ''} onChange={e => setF('mapUrl', e.target.value)} /></Field>
               </>)}
 
               {/* ── Car form ── */}

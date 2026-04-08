@@ -77,6 +77,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [saving, setSaving]         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
+  const [tripPhase, setTripPhase]   = useState<'before' | 'during' | 'after'>('before');
   const [weather, setWeather]       = useState<Record<string, WeatherDay>>({});
   const [weatherSubtitle, setWeatherSubtitle] = useState('氣象資訊載入中…');
   const [weatherLocationKey, setWeatherLocationKey] = useState(0); // increments to re-trigger fetch
@@ -181,22 +182,40 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [metaForm, setMetaForm] = useState({ startDate: '', endDate: '', description: '', currency: '' });
   const [savingMeta, setSavingMeta]   = useState(false);
 
-  // Countdown timer
+  // Countdown timer — counts to start, then to end, then shows ended
   useEffect(() => {
-    const target = new Date(`${project?.startDate || '2026-04-23'}T00:00:00`).getTime();
+    const startMs = new Date(`${project?.startDate || '2026-04-23'}T00:00:00`).getTime();
+    // End of trip = endDate 23:59:59
+    const endMs   = new Date(`${project?.endDate || project?.startDate || '2026-04-23'}T23:59:59`).getTime();
     const tick = () => {
-      const diff = target - Date.now();
-      if (diff > 0) setCountdown({
-        d: Math.floor(diff / 86400000),
-        h: Math.floor((diff % 86400000) / 3600000),
-        m: Math.floor((diff % 3600000) / 60000),
-        s: Math.floor((diff % 60000) / 1000),
-      });
+      const now = Date.now();
+      if (now < startMs) {
+        setTripPhase('before');
+        const diff = startMs - now;
+        setCountdown({
+          d: Math.floor(diff / 86400000),
+          h: Math.floor((diff % 86400000) / 3600000),
+          m: Math.floor((diff % 3600000) / 60000),
+          s: Math.floor((diff % 60000) / 1000),
+        });
+      } else if (now <= endMs) {
+        setTripPhase('during');
+        const diff = endMs - now;
+        setCountdown({
+          d: Math.floor(diff / 86400000),
+          h: Math.floor((diff % 86400000) / 3600000),
+          m: Math.floor((diff % 3600000) / 60000),
+          s: Math.floor((diff % 60000) / 1000),
+        });
+      } else {
+        setTripPhase('after');
+        setCountdown({ d: 0, h: 0, m: 0, s: 0 });
+      }
     };
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, []);
+  }, [project?.startDate, project?.endDate]);
 
   // Weather fetch — reads project location from Firestore, then calls Open-Meteo
   useEffect(() => {
@@ -529,17 +548,28 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
             ✏️ 編輯旅行設定
           </button>
         )}
-        <div style={{ marginTop: 14, background: C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
-          <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>⏰ 距離出發</span>
-          <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>
-            {([['d', '天', countdown.d], ['h', '時', countdown.h], ['m', '分', countdown.m], ['s', '秒', countdown.s]] as [string, string, number][]).map(([k, u, v], i) => (
-              <span key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                {i > 0 && <span style={{ opacity: 0.4, marginRight: 2 }}>:</span>}
-                <span style={{ fontSize: 18 }}>{String(v).padStart(2, '0')}</span>
-                <span style={{ fontSize: 9, opacity: 0.65 }}>{u}</span>
+        <div style={{ marginTop: 14, background: tripPhase === 'after' ? '#E8F5E2' : C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
+          {tripPhase === 'after' ? (
+            <>
+              <span style={{ fontWeight: 700, fontSize: 12, color: '#4A7A35' }}>✈️ 旅程已結束</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', opacity: 0.75 }}>回憶珍藏中 🌸</span>
+            </>
+          ) : (
+            <>
+              <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>
+                {tripPhase === 'during' ? '🌟 距離旅程結束' : '⏰ 距離出發'}
               </span>
-            ))}
-          </div>
+              <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>
+                {([['d', '天', countdown.d], ['h', '時', countdown.h], ['m', '分', countdown.m], ['s', '秒', countdown.s]] as [string, string, number][]).map(([k, u, v], i) => (
+                  <span key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                    {i > 0 && <span style={{ opacity: 0.4, marginRight: 2 }}>:</span>}
+                    <span style={{ fontSize: 18 }}>{String(v).padStart(2, '0')}</span>
+                    <span style={{ fontSize: 9, opacity: 0.65 }}>{u}</span>
+                  </span>
+                ))}
+              </div>
+            </>
+          )}
         </div>
       </PageHeader>
 

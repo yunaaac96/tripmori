@@ -205,7 +205,8 @@ export default function ProjectHub({ onEnterProject }: Props) {
   // Join form
   const [keyInput, setKeyInput]       = useState('');
 
-  // Double-click delete
+  // Edit mode (project management)
+  const [isEditMode, setIsEditMode]         = useState(false);
   const [deleteTarget, setDeleteTarget]     = useState<StoredProject | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [deletingProject, setDeletingProject] = useState(false);
@@ -777,7 +778,14 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
           {/* My projects */}
           {projects.length > 0 && (
             <>
-              <p style={{ fontSize: 13, fontWeight: 700, color: C.barkLight, margin: '0 0 10px', letterSpacing: 0.5 }}>MY TRIPS</p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '0 0 10px' }}>
+                <p style={{ fontSize: 13, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: 0.5 }}>MY TRIPS</p>
+                {projects.some(p => p.role === 'owner') && (
+                  isEditMode
+                    ? <button onClick={() => setIsEditMode(false)} style={{ fontSize: 11, fontWeight: 700, color: C.sage, background: '#E8F5E2', border: '1.5px solid #B5CFA7', borderRadius: 8, padding: '3px 12px', cursor: 'pointer', fontFamily: FONT }}>完成</button>
+                    : <button onClick={() => setIsEditMode(true)} style={{ fontSize: 14, background: 'none', border: 'none', cursor: 'pointer', padding: '2px 6px', color: C.barkLight }}>✏️</button>
+                )}
+              </div>
               {deleteTarget && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 24 }}>
                   <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 340, fontFamily: FONT, textAlign: 'center' }}>
@@ -809,20 +817,23 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
                 {projects.map(p => {
                   const rl = ROLE_LABEL[p.role];
                   return (
-                    <div key={p.id} style={{ position: 'relative' }}>
+                    <div key={p.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                      {isEditMode && p.role === 'owner' && (
+                        <button
+                          onClick={() => { setDeleteTarget(p); setDeleteConfirmInput(''); }}
+                          style={{ width: 32, height: 32, borderRadius: '50%', background: '#E76F51', border: 'none', color: 'white', fontSize: 16, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          −
+                        </button>
+                      )}
                       <button
-                        onClick={() => onEnterProject(p)}
-                        onDoubleClick={p.role === 'owner' ? (e) => { e.preventDefault(); setDeleteTarget(p); setDeleteConfirmInput(''); } : undefined}
-                        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm, width: '100%' }}>
+                        onClick={() => { if (!isEditMode) onEnterProject(p); }}
+                        style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${isEditMode && p.role === 'owner' ? '#E76F51' : C.creamDark}`, cursor: isEditMode ? 'default' : 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
                         <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                            <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px' }}>{rl.label}</span>
-                            {p.role === 'owner' && <span style={{ fontSize: 9, color: C.barkLight, opacity: 0.6 }}>長按兩下可刪除</span>}
-                          </div>
+                          <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px', display: 'inline-block', marginTop: 4 }}>{rl.label}</span>
                         </div>
-                        <span style={{ fontSize: 20, color: C.barkLight }}>›</span>
+                        {!isEditMode && <span style={{ fontSize: 20, color: C.barkLight }}>›</span>}
                       </button>
                     </div>
                   );
