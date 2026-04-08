@@ -275,6 +275,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
   const startDate       = project?.startDate || '';
   const displayTeamName = project?.title || '旅行';
+  const defaultTeamName = displayTeamName;
 
   // Dynamic group label by member count
   const groupLabel = (n: number) =>
@@ -286,6 +287,15 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     : '';
   const headerSubtitle = [tripYearMonth, displayTeamName].filter(Boolean).join(' ')
     + `・${displayMembers.length}人${groupLabel(displayMembers.length)}`;
+
+  // Start label and trip days for stats panel
+  const startLabel = startDate
+    ? `${new Date(startDate).getMonth() + 1}/${new Date(startDate).getDate()}`
+    : '—';
+  const endDate = project?.endDate || '';
+  const tripDays = startDate && endDate
+    ? Math.round((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1
+    : 0;
 
   return (
     <div style={{ fontFamily: FONT }}>
@@ -380,30 +390,49 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       )}
 
       <PageHeader title="旅伴" subtitle={headerSubtitle} emoji="👥" color={C.earth}>
-        {/* Owner can rename the project title inline */}
-        {firestore.role === 'owner' && (
-          <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            {editingTeamName ? (
-              <>
-                <input
-                  autoFocus
-                  value={teamNameInput}
-                  onChange={e => setTeamNameInput(e.target.value)}
-                  onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
-                  placeholder={project?.title || '行程名稱'}
-                  style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
-                />
-                <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
-                <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
-              </>
-            ) : (
-              <button onClick={() => { setTeamNameInput(project?.title || ''); setEditingTeamName(true); }}
-                style={{ padding: '5px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 15, cursor: 'pointer', fontFamily: FONT, lineHeight: 1, display: 'flex', alignItems: 'center', gap: 5 }}>
-                ✏️ <span style={{ fontSize: 12, fontWeight: 600 }}>更改名稱</span>
-              </button>
-            )}
-          </div>
-        )}
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {editingTeamName ? (
+            <div style={{ flex: 1, display: 'flex', gap: 6 }}>
+              <input
+                autoFocus
+                value={teamNameInput}
+                onChange={e => setTeamNameInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
+                placeholder={defaultTeamName}
+                style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
+              />
+              <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
+              <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+              <div style={{ background: 'rgba(255,255,255,0.22)', borderRadius: 14, padding: '8px 14px', display: 'flex', gap: 18 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>成員</p>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{displayMembers.length} 人</p>
+                </div>
+                {startLabel !== '—' && (
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>出發</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{startLabel}</p>
+                  </div>
+                )}
+                {tripDays > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>天數</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{tripDays} 天</p>
+                  </div>
+                )}
+              </div>
+              {firestore.role === 'owner' && (
+                <button onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
+                  style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                  ✏️ 命名
+                </button>
+              )}
+            </div>
+          )}
+        </div>
       </PageHeader>
 
       {/* Copy toast */}
@@ -617,7 +646,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                             </span>
                             <p style={{ fontSize: 13, color: C.bark, margin: '0 0 6px', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note.content}</p>
                             <p style={{ fontSize: 10, color: C.barkLight, margin: 0, fontWeight: 600 }}>— {note.authorName} {timeStr}</p>
-                            {isOwn && (
+                            {(isOwn || isMyCard) && (
                               <button onClick={() => handleDeleteNote(note.id)}
                                 style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
                                 ✕

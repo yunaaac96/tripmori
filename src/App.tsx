@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
-import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
@@ -54,12 +54,56 @@ const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()
 function App() {
   const wasGoogleSignedIn = useRef(false);
 
+  // ── Sync all trips for logged-in user from Firestore ─────────
+  const syncUserTrips = async (uid: string, email: string) => {
+    try {
+      const ownedQ  = query(collection(db, 'trips'), where('ownerUid',         '==',             uid));
+      const emailQ  = query(collection(db, 'trips'), where('ownerEmail',       '==',             email.toLowerCase()));
+      const editorQ = query(collection(db, 'trips'), where('allowedEditorUids','array-contains', uid));
+      const [ownedSnap, emailSnap, editorSnap] = await Promise.all([
+        getDocs(ownedQ), getDocs(emailQ), getDocs(editorQ),
+      ]);
+      const existing = loadProjects();
+      const map = new Map(existing.map(p => [p.id, p]));
+      const merge = (snap: any, role: TripRole) => {
+        snap.forEach((d: any) => {
+          const data = d.data();
+          const prev = map.get(d.id);
+          const p: StoredProject = {
+            id:             d.id,
+            title:          data.title       || '旅行行程',
+            emoji:          data.emoji       || '✈️',
+            role:           prev?.role === 'owner' ? 'owner' : role,
+            collaboratorKey: data.collaboratorKey || '',
+            shareCode:      data.shareCode   || '',
+            addedAt:        prev?.addedAt    || Date.now(),
+            startDate:      data.startDate   || '',
+            endDate:        data.endDate     || '',
+            description:    data.description || '',
+          };
+          map.set(d.id, p);
+        });
+      };
+      merge(ownedSnap,  'owner');
+      merge(emailSnap,  'owner');
+      merge(editorSnap, 'editor');
+      const updated = Array.from(map.values());
+      localStorage.setItem('tripmori_projects', JSON.stringify(updated));
+      setActiveProjectState(prev => {
+        if (!prev) return prev;
+        const synced = updated.find(p => p.id === prev.id);
+        return synced ? synced : prev;
+      });
+    } catch (e) { console.error('syncUserTrips:', e); }
+  };
+
   // ── Google 登入後自動升級 owner 角色（或清除非 owner 的預設行程）
   // ── 登出時：清除 localStorage 並回到 hub
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       if (user && !user.isAnonymous && user.email) {
         wasGoogleSignedIn.current = true;
+        syncUserTrips(user.uid, user.email);
         checkOwnerRole(user.email).then(role => {
           if (role === 'owner') {
             setActiveProjectState(prev => {
@@ -102,6 +146,21 @@ function App() {
     return unsub;
   }, []);
 
+  // ── Cross-tab localStorage sync ─────────────────────────────
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'tripmori_projects') {
+        const activeId = getActiveProject();
+        if (activeId) {
+          const p = loadProjects().find(x => x.id === activeId);
+          if (p) setActiveProjectState(p);
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
+  }, []);
+
   // ── Active project state ──────────────────────────────────────
   const [activeProject, setActiveProjectState] = useState<StoredProject | null>(() => {
     // Check for ?visit=TRIP_ID URL param (visitor auto-join via share link)
@@ -111,7 +170,9 @@ function App() {
       const existing = loadProjects().find(p => p.id === visitId);
       if (existing) {
         setActiveProject(existing.id);
-        return { ...existing, role: 'visitor' as TripRole };
+        // Preserve editor/owner role if already granted via collaborator key
+        const role: TripRole = (existing.role === 'editor' || existing.role === 'owner') ? existing.role : 'visitor';
+        return { ...existing, role };
       }
       // Will be resolved async in useEffect
     }
@@ -129,7 +190,9 @@ function App() {
     const stored = loadProjects().find(p => p.id === tripId);
     if (stored) {
       setActiveProject(stored.id);
-      setActiveProjectState({ ...stored, role: 'visitor' });
+      // Preserve editor/owner role if already granted via collaborator key
+      const role: TripRole = (stored.role === 'editor' || stored.role === 'owner') ? stored.role : 'visitor';
+      setActiveProjectState({ ...stored, role });
       return;
     }
     // Fetch trip metadata from Firestore
@@ -175,6 +238,10 @@ function App() {
   // 啟動 Splash：每次 App mount（含桌機首次開啟）都先顯示動畫
   const [splashDone, setSplashDone] = useState(false);
   const [notifications, setNotifications] = useState<Record<string, boolean>>({ '成員': false, '日誌': false });
+  const [visitorKeyInput, setVisitorKeyInput] = useState('');
+  const [visitorKeyError, setVisitorKeyError] = useState('');
+  const [visitorKeyBusy, setVisitorKeyBusy]   = useState(false);
+  const [showKeyUpgrade, setShowKeyUpgrade]   = useState(false);
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）
@@ -298,6 +365,32 @@ function App() {
     setActiveProjectState(null);
   };
 
+  const handleUpgradeToEditor = async () => {
+    const key = visitorKeyInput.trim().toUpperCase();
+    if (!key) { setVisitorKeyError('請輸入協作金鑰'); return; }
+    if (!activeProject) return;
+    setVisitorKeyBusy(true); setVisitorKeyError('');
+    try {
+      // Validate against stored collaboratorKey
+      const expected = activeProject.collaboratorKey?.toUpperCase();
+      if (!expected || key !== expected) {
+        setVisitorKeyError('金鑰不正確，請確認後再試');
+        setVisitorKeyBusy(false); return;
+      }
+      // Register editor UID in Firestore
+      const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+      if (user?.uid) {
+        try { await updateDoc(doc(db, 'trips', activeProject.id), { allowedEditorUids: arrayUnion(user.uid) }); }
+        catch (e) { console.error('Failed to register editor UID:', e); }
+      }
+      const upgraded: StoredProject = { ...activeProject, role: 'editor' };
+      saveProject(upgraded);
+      setActiveProject(upgraded.id);
+      setActiveProjectState(upgraded);
+    } catch (e) { setVisitorKeyError('升級失敗，請重試'); }
+    setVisitorKeyBusy(false);
+  };
+
   // ── Splash screen：每次 App 啟動都先顯示（含桌機首次開啟）
   if (!splashDone) return <SplashScreen />;
 
@@ -318,7 +411,33 @@ function App() {
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (
           <div className="tm-visitor-banner" style={{ background: '#D8EDF8', padding: '8px 16px' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
+              <button
+                onClick={() => { setShowKeyUpgrade(v => !v); setVisitorKeyError(''); setVisitorKeyInput(''); }}
+                style={{ fontSize: 11, fontWeight: 700, color: '#2A6A9A', background: 'white', border: '1.5px solid #A8CADF', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                {showKeyUpgrade ? '取消' : '輸入金鑰升級'}
+              </button>
+            </div>
+            {showKeyUpgrade && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    value={visitorKeyInput}
+                    onChange={e => setVisitorKeyInput(e.target.value.toUpperCase())}
+                    placeholder="輸入協作金鑰"
+                    style={{ flex: 1, padding: '7px 12px', borderRadius: 10, border: '1.5px solid #A8CADF', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none', color: '#2A6A9A', letterSpacing: 1 }}
+                  />
+                  <button
+                    onClick={handleUpgradeToEditor}
+                    disabled={visitorKeyBusy}
+                    style={{ padding: '7px 14px', borderRadius: 10, border: 'none', background: '#2A6A9A', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: visitorKeyBusy ? 0.6 : 1 }}>
+                    {visitorKeyBusy ? '…' : '確認'}
+                  </button>
+                </div>
+                {visitorKeyError && <span style={{ fontSize: 11, color: '#9A3A3A' }}>{visitorKeyError}</span>}
+              </div>
+            )}
           </div>
         )}
 
@@ -346,7 +465,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} />}
+        {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} firestore={firestore} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
