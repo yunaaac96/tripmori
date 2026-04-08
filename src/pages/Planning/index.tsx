@@ -104,8 +104,14 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   };
 
   const applyFilter = (items: any[]) => {
-    if (filterBy === 'all') return items;
-    return items.filter((i: any) => i.assignedTo === filterBy || i.assignedTo === 'all');
+    const filtered = filterBy === 'all' ? items : items.filter((i: any) => i.assignedTo === filterBy || i.assignedTo === 'all');
+    // 未勾選 → 上方（依建立時間舊→新），已勾選 → 下方（依建立時間舊→新）
+    return [...filtered].sort((a, b) => {
+      if (a.checked !== b.checked) return a.checked ? 1 : -1;
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
+    });
   };
 
   const isEdit = !!editTarget;

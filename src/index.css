@@ -66,69 +66,80 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* TripMori dark theme
-     * Palette: deep forest night — navy-green base, muted teal accents
-     * --tm-page-bg   : main page background (dark forest green-black)
-     * --tm-dot-color : dot pattern (subtle, barely visible)
-     * --tm-nav-bg    : bottom nav background
-     * --tm-nav-border: top border of nav
-     * --tm-card-bg   : card/sheet surface color
-     * --tm-text      : primary text
-     * --tm-text-sub  : secondary/muted text
-     * --tm-card-border: subtle card border
+    /* TripMori dark theme — warm forest night, high readability
+     * Base palette: deep olive-charcoal, warm off-white text, muted sage accents
      */
-    --tm-page-bg: #141C12;
-    --tm-dot-color: #1E2A1A;
-    --tm-nav-bg: #1A2418;
-    --tm-nav-border: #283422;
-    --tm-card-bg: #1F2B1C;
-    --tm-card-border: #2A3825;
-    --tm-sheet-bg: #243220;
-    --tm-input-bg: #1A2416;
-    --tm-input-border: #344830;
-    --tm-cream: #1A2018;
-    --tm-cream-dark: #243220;
-    --tm-bark: #D4C9BC;
-    --tm-bark-light: #A09080;
+    --tm-page-bg: #1A2018;
+    --tm-dot-color: #222A1E;
+    --tm-nav-bg: #1E2820;
+    --tm-nav-border: #2E3E2A;
+    --tm-card-bg: #263024;
+    --tm-card-border: #32403A;
+    --tm-sheet-bg: #2A3628;
+    --tm-input-bg: #202A1E;
+    --tm-input-border: #3E5438;
+    --tm-cream: #202A1E;
+    --tm-cream-dark: #2E3E2A;
+    --tm-bark: #E8DDD0;
+    --tm-bark-light: #B8A898;
     --tm-text-inv: #1A2018;
-    --tm-shadow: #0D1A0A;
-    --tm-note-1: #2A2C1A;
-    --tm-note-2: #1A2A2C;
-    --tm-note-3: #1A2C1E;
-    --tm-note-4: #2C1A1A;
-    --tm-note-5: #241A2C;
-    --tm-note-6: #2C2218;
-    --tm-weather-bg: #1A2030;
-    --tm-section-bg: #1C2419;
+    --tm-shadow: #0C160A;
+    /* note backgrounds — slightly saturated so they read as distinct colors */
+    --tm-note-1: #3A3610;    /* warm yellow */
+    --tm-note-2: #102C38;    /* teal-blue */
+    --tm-note-3: #0E3016;    /* forest green */
+    --tm-note-4: #38100E;    /* warm red */
+    --tm-note-5: #280E3A;    /* violet */
+    --tm-note-6: #3A2008;    /* amber */
+    --tm-weather-bg: #1A2634;
+    --tm-section-bg: #222C20;
 
-    --text: #9ca3af;
-    --text-h: #f3f4f6;
-    --bg: #16171d;
-    --border: #2e303a;
-    --code-bg: #1f2028;
+    --text: #b0b8bc;
+    --text-h: #eef0f2;
+    --bg: #1A2018;
+    --border: #303830;
+    --code-bg: #222C20;
     --accent: #c084fc;
     --accent-bg: rgba(192, 132, 252, 0.15);
     --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(47, 48, 58, 0.5);
+    --social-bg: rgba(38, 48, 36, 0.5);
     --shadow:
-      rgba(0, 0, 0, 0.4) 0 10px 15px -3px, rgba(0, 0, 0, 0.25) 0 4px 6px -2px;
+      rgba(0, 0, 0, 0.5) 0 10px 15px -3px, rgba(0, 0, 0, 0.3) 0 4px 6px -2px;
   }
 
+  /* Note text should be legible on dark note backgrounds */
   #social .button-icon {
     filter: invert(1) brightness(2);
   }
+
+  /* Visitor banner dark mode */
+  .tm-visitor-banner {
+    background: #102C38 !important;
+  }
+  .tm-visitor-banner span {
+    color: #7ABCDC !important;
+  }
+
+  /* Category chip backgrounds that are hardcoded — invert slightly */
+  .tm-category-chip-attraction { background: #1A2E18 !important; color: #90C880 !important; }
+  .tm-category-chip-food       { background: #302810 !important; color: #D4A840 !important; }
+  .tm-category-chip-transport  { background: #102030 !important; color: #80AACC !important; }
+  .tm-category-chip-hotel      { background: #2E1018 !important; color: #CC8090 !important; }
 }
 
 #root {
-  width: 1126px;
-  max-width: 100%;
-  margin: 0 auto;
-  text-align: left;
-  border-inline: 1px solid var(--border);
+  width: 100%;
   min-height: 100svh;
-  display: flex;
-  flex-direction: column;
   box-sizing: border-box;
+}
+
+/* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
+.tm-hscroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.tm-hscroll::-webkit-scrollbar {
+  display: none;
 }
 
 body {

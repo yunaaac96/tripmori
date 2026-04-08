@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc } from 'firebase/firestore';
 import { signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
@@ -52,10 +52,14 @@ const getLastSeen = (key: string) => Number(localStorage.getItem(key) || '0');
 const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()));
 
 function App() {
+  const wasGoogleSignedIn = useRef(false);
+
   // ── Google 登入後自動升級 owner 角色（或清除非 owner 的預設行程）
+  // ── 登出時：清除 localStorage 並回到 hub
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       if (user && !user.isAnonymous && user.email) {
+        wasGoogleSignedIn.current = true;
         checkOwnerRole(user.email).then(role => {
           if (role === 'owner') {
             setActiveProjectState(prev => {
@@ -87,6 +91,12 @@ function App() {
             }
           }
         });
+      } else if (wasGoogleSignedIn.current) {
+        // 使用者主動或自動登出 → 清除所有專案，回到初始畫面
+        wasGoogleSignedIn.current = false;
+        localStorage.removeItem('tripmori_active_project');
+        localStorage.removeItem('tripmori_projects');
+        setActiveProjectState(null);
       }
     });
     return unsub;
@@ -138,6 +148,9 @@ function App() {
           collaboratorKey: data.collaboratorKey || '',
           shareCode: data.shareCode || '',
           addedAt: Date.now(),
+          startDate: data.startDate || '',
+          endDate: data.endDate || '',
+          description: data.description || '',
         };
         saveProject(p);
         setActiveProject(p.id);
@@ -156,15 +169,16 @@ function App() {
   const [lists, setLists]       = useState<any[]>([]);
   const [memberNotes, setMemberNotes]         = useState<any[]>([]);
   const [journalComments, setJournalComments] = useState<any[]>([]);
+  const [tripNotifications, setTripNotifications] = useState<any[]>([]);
   const [activeTab, setActiveTab]   = useState('行程');
   const [loading, setLoading]       = useState(false);
-  // 啟動 Splash：短暫顯示品牌畫面，等 Firebase auth 就緒後消失
+  // 啟動 Splash：每次 App mount（含桌機首次開啟）都先顯示動畫
   const [splashDone, setSplashDone] = useState(false);
   const [notifications, setNotifications] = useState<Record<string, boolean>>({ '成員': false, '日誌': false });
 
   useEffect(() => {
-    // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 1.4 秒）
-    const minDelay = new Promise<void>(r => setTimeout(r, 1400));
+    // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）
+    const minDelay = new Promise<void>(r => setTimeout(r, 3000));
     const authReady = auth.authStateReady();
     Promise.all([minDelay, authReady]).then(() => setSplashDone(true));
   }, []);
@@ -212,6 +226,40 @@ function App() {
           setJournalComments(items);
           checkNotification(items, LS_SEEN_JOURNAL, '日誌');
         }));
+        // 站內通知（@標記、日誌留言）
+        // ── Real-time editor revocation: watch trip doc allowedEditorUids ──
+        const currentUid = auth.currentUser?.uid;
+        if (activeProject.role === 'editor' && currentUid) {
+          unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
+            if (!tripSnap.exists()) return;
+            const allowed: string[] = tripSnap.data().allowedEditorUids || [];
+            if (!allowed.includes(currentUid)) {
+              // Owner removed this editor — downgrade to visitor in-place
+              setActiveProjectState(prev => {
+                if (!prev || prev.role !== 'editor') return prev;
+                const updated = { ...prev, role: 'visitor' as TripRole };
+                saveProject(updated);
+                return updated;
+              });
+            }
+          }));
+        }
+
+        unsubs.push(onSnapshot(collection(tripRef, 'notifications'), snap => {
+          const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+          setTripNotifications(items);
+          // 若有未讀通知 → 對應 tab 顯示紅點
+          const currentName = localStorage.getItem('tripmori_current_user') || '';
+          if (currentName) {
+            const lastSeen = getLastSeen(LS_SEEN_JOURNAL);
+            const hasUnread = items.some((n: any) => {
+              if (n.recipientName !== currentName) return false;
+              const ts = n.createdAt?.toMillis ? n.createdAt.toMillis() : 0;
+              return ts > lastSeen;
+            });
+            if (hasUnread) setNotifications(prev => ({ ...prev, '日誌': true }));
+          }
+        }));
         setLoading(false);
         if (activeTripId === TRIP_ID && !localStorage.getItem('tripmori_imported')) {
           runImport().then(() => localStorage.setItem('tripmori_imported', '1'));
@@ -239,15 +287,18 @@ function App() {
     setActiveProjectState(null);
   };
 
+  // ── Splash screen：每次 App 啟動都先顯示（含桌機首次開啟）
+  if (!splashDone) return <SplashScreen />;
+
   // ── Show ProjectHub if no active project ──────────────────────
   if (!activeProject) {
     return <ProjectHub onEnterProject={handleEnterProject} />;
   }
 
-  if (!splashDone || loading) return <SplashScreen />;
+  if (loading) return <SplashScreen />;
 
   const isReadOnly = activeProject.role === 'visitor';
-  const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly };
+  const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly, tripNotifications };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
@@ -255,18 +306,8 @@ function App() {
 
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (
-          <div style={{ background: '#D8EDF8', padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div className="tm-visitor-banner" style={{ background: '#D8EDF8', padding: '8px 16px' }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
-            <div style={{ display: 'flex', gap: 6 }}>
-              <button onClick={() => signOut(auth).catch(console.error)}
-                style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: `1px solid #E8C4C4`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
-                登出
-              </button>
-              <button onClick={handleExitToHub}
-                style={{ fontSize: 11, color: '#2A6A9A', fontWeight: 700, background: 'none', border: `1px solid #2A6A9A55`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
-                切換
-              </button>
-            </div>
           </div>
         )}
 
@@ -294,10 +335,10 @@ function App() {
           </div>
         )}
 
-        {activeTab === '行程' && <SchedulePage events={events} members={members} firestore={firestore} />}
+        {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} firestore={firestore} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
-        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} />}
+        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />

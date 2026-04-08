@@ -1,15 +1,29 @@
 import { useState, useEffect } from 'react';
+import { getDoc } from 'firebase/firestore';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 
-const TRIP_DATES = ['2026-04-23', '2026-04-24', '2026-04-25', '2026-04-26'];
+const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 
-const DAY_OPTIONS = [
-  { date: '2026-04-23', label: '4/23', week: '四' },
-  { date: '2026-04-24', label: '4/24', week: '五' },
-  { date: '2026-04-25', label: '4/25', week: '六' },
-  { date: '2026-04-26', label: '4/26', week: '日' },
-];
+function buildTripDates(startDate: string, endDate: string): string[] {
+  const dates: string[] = [];
+  if (!startDate) return dates;
+  const start = new Date(startDate);
+  const end = endDate ? new Date(endDate) : start;
+  for (let d = new Date(start); d <= end; d.setDate(d.getDate() + 1)) {
+    dates.push(d.toISOString().slice(0, 10));
+  }
+  return dates;
+}
+
+function buildDayOptions(dates: string[]) {
+  return dates.map(date => {
+    const d = new Date(date);
+    const month = d.getMonth() + 1;
+    const day = d.getDate();
+    return { date, label: `${month}/${day}`, week: WEEK_LABELS[d.getDay()] };
+  });
+}
 
 type WeatherDay = {
   max: number;
@@ -40,18 +54,21 @@ function outfitForTemp(max: number): string {
   return '短袖短褲＋防曬必備 ☀️';
 }
 
-// Fallback climate data for Okinawa late April (used when trip is >16 days away)
+// Generic fallback climate (mild/warm travel weather)
 const FALLBACK_CLIMATE: WeatherDay = {
-  max: 26, min: 22,
+  max: 26, min: 21,
   emoji: '⛅', desc: '多雲',
   precipProb: 25,
   outfit: outfitForTemp(26),
 };
 
-export default function SchedulePage({ events, firestore }: { events: any[]; members: any[]; firestore: any }) {
+export default function SchedulePage({ events, project, firestore }: { events: any[]; members: any[]; project: any; firestore: any }) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly } = firestore;
 
-  const [activeDay, setActiveDay]   = useState('2026-04-23');
+  const TRIP_DATES = buildTripDates(project?.startDate || '2026-04-23', project?.endDate || '2026-04-26');
+  const DAY_OPTIONS = buildDayOptions(TRIP_DATES.length ? TRIP_DATES : ['2026-04-23', '2026-04-24', '2026-04-25', '2026-04-26']);
+
+  const [activeDay, setActiveDay]   = useState(() => project?.startDate || '2026-04-23');
   const [mode, setMode]             = useState<Mode>('view');
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [form, setForm]             = useState({ ...EMPTY_EVENT_FORM });
@@ -59,11 +76,11 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [weather, setWeather]       = useState<Record<string, WeatherDay>>({});
-  const [weatherSubtitle, setWeatherSubtitle] = useState('那霸市 模擬天氣');
+  const [weatherSubtitle, setWeatherSubtitle] = useState('氣象資訊載入中…');
 
   // Countdown timer
   useEffect(() => {
-    const target = new Date('2026-04-23T00:00:00').getTime();
+    const target = new Date(`${project?.startDate || '2026-04-23'}T00:00:00`).getTime();
     const tick = () => {
       const diff = target - Date.now();
       if (diff > 0) setCountdown({
@@ -78,59 +95,78 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
     return () => clearInterval(t);
   }, []);
 
-  // Weather fetch — Open-Meteo (free, no API key)
+  // Weather fetch — reads project location from Firestore, then calls Open-Meteo
   useEffect(() => {
+    if (!db || !TRIP_ID || !doc) return;
     const startDate = TRIP_DATES[0];
     const endDate   = TRIP_DATES[TRIP_DATES.length - 1];
+    if (!startDate) return;
 
-    // Check if trip is within forecast window (≤16 days away)
-    const daysUntilTrip = Math.floor((new Date(startDate).getTime() - Date.now()) / 86400000);
-
-    if (daysUntilTrip > 16) {
-      // Trip too far ahead — use fallback climate data
+    const applyFallback = (locationLabel: string) => {
       const fallback: Record<string, WeatherDay> = {};
       TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
       setWeather(fallback);
-      setWeatherSubtitle('📅 氣候預測（出發前2週更新為即時預報）');
-      return;
-    }
+      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 16 天更新即時預報）`);
+    };
 
-    // Fetch real forecast
-    const url =
-      `https://api.open-meteo.com/v1/forecast` +
-      `?latitude=26.33&longitude=127.80` +
-      `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max` +
-      `&timezone=Asia%2FTokyo&forecast_days=16` +
-      `&start_date=${startDate}&end_date=${endDate}`;
+    const fetchWeather = (lat: number, lng: number, timezone: string, locationName: string) => {
+      const daysUntilTrip = Math.floor((new Date(startDate).getTime() - Date.now()) / 86400000);
+      if (daysUntilTrip > 16) {
+        applyFallback(locationName);
+        return;
+      }
+      const url =
+        `https://api.open-meteo.com/v1/forecast` +
+        `?latitude=${lat}&longitude=${lng}` +
+        `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max` +
+        `&timezone=${encodeURIComponent(timezone)}` +
+        `&start_date=${startDate}&end_date=${endDate}`;
 
-    fetch(url)
-      .then(r => r.json())
-      .then(data => {
-        const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_max } = data.daily;
-        const result: Record<string, WeatherDay> = {};
-        time.forEach((date: string, i: number) => {
-          const max = Math.round(temperature_2m_max[i]);
-          const { emoji, desc } = wmoToDisplay(weathercode[i]);
-          result[date] = {
-            max,
-            min: Math.round(temperature_2m_min[i]),
-            emoji,
-            desc,
-            precipProb: precipitation_probability_max[i] ?? 0,
-            outfit: outfitForTemp(max),
-          };
-        });
-        setWeather(result);
-        setWeatherSubtitle('那霸市 即時天氣預報');
-      })
-      .catch(() => {
-        // Fetch failed — fall back to climate data
+      fetch(url)
+        .then(r => r.json())
+        .then(data => {
+          const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_max } = data.daily;
+          const result: Record<string, WeatherDay> = {};
+          time.forEach((date: string, i: number) => {
+            const max = Math.round(temperature_2m_max[i]);
+            const { emoji, desc } = wmoToDisplay(weathercode[i]);
+            result[date] = {
+              max,
+              min: Math.round(temperature_2m_min[i]),
+              emoji, desc,
+              precipProb: precipitation_probability_max[i] ?? 0,
+              outfit: outfitForTemp(max),
+            };
+          });
+          setWeather(result);
+          setWeatherSubtitle(`${locationName}　即時天氣預報`);
+        })
+        .catch(() => applyFallback(locationName));
+    };
+
+    // Fetch trip location from Firestore; fall back to a generic default if not set
+    getDoc(doc(db, 'trips', TRIP_ID))
+      .then(snap => {
+        if (snap.exists()) {
+          const d = snap.data();
+          if (d.locationLat && d.locationLng) {
+            fetchWeather(
+              d.locationLat,
+              d.locationLng,
+              d.locationTimezone || 'Asia/Tokyo',
+              d.locationName || project?.title || '目的地',
+            );
+            return;
+          }
+        }
+        // No location stored yet — show placeholder
+        setWeatherSubtitle('尚未設定目的地座標，請在建立行程時填寫目的地');
         const fallback: Record<string, WeatherDay> = {};
         TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
         setWeather(fallback);
-        setWeatherSubtitle('📅 氣候預測（出發前2週更新為即時預報）');
-      });
-  }, []);
+      })
+      .catch(() => applyFallback(project?.title || '目的地'));
+  }, [TRIP_ID]);
 
   const dayInfo = DAY_OPTIONS.find(d => d.date === activeDay)!;
   const currentWeather = weather[activeDay];
@@ -253,7 +289,7 @@ export default function SchedulePage({ events, firestore }: { events: any[]; mem
         </div>
       )}
 
-      <PageHeader title="日本沖繩之旅" subtitle="2026.04.23 – 04.26　那霸 · 北谷 · 本部" emoji="🗾" color={C.sage}>
+      <PageHeader title={project?.title || '行程'} subtitle={project?.description || undefined} emoji={project?.emoji || '✈️'} color={C.sage}>
         <div style={{ marginTop: 14, background: C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
           <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>⏰ 距離出發</span>
           <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>

@@ -195,9 +195,17 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   };
 
   // ── Notes (message board) ─────────────────────────────────────
-  const getNotesFor = (memberId: string) =>
+  // Private notes: only visible to the note author or the card owner
+  const getNotesFor = (memberId: string, memberGoogleUid?: string | null) =>
     (memberNotes || [])
-      .filter((n: any) => n.memberId === memberId)
+      .filter((n: any) => {
+        if (n.memberId !== memberId) return false;
+        if (n.visibility !== 'private') return true; // public: all see it
+        // private: only the author or the person whose card it is
+        if (n.authorName === currentUser) return true;
+        if (googleUid && memberGoogleUid && memberGoogleUid === googleUid) return true;
+        return false;
+      })
       .sort((a: any, b: any) => {
         const ta = a.createdAt?.toMillis ? a.createdAt.toMillis() : 0;
         const tb = b.createdAt?.toMillis ? b.createdAt.toMillis() : 0;
@@ -226,12 +234,70 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     catch (e) { console.error(e); }
   };
 
+  // ── Editor revocation (owner only) ───────────────────────────
+  const [allowedEditorUids, setAllowedEditorUids] = useState<string[]>([]);
+
+  useEffect(() => {
+    if (!TRIP_ID || firestore.role !== 'owner') return;
+    const { getDoc: _getDoc, doc: _doc } = require('firebase/firestore') as any;
+    _getDoc(_doc(db, 'trips', TRIP_ID)).then((snap: any) => {
+      if (snap.exists()) setAllowedEditorUids(snap.data().allowedEditorUids || []);
+    }).catch(() => {});
+  }, [TRIP_ID, firestore.role]);
+
+  const handleRevokeEditor = async (uid: string) => {
+    if (!window.confirm('確定要移除此成員的編輯權限？對方將立即切換為訪客模式。')) return;
+    try {
+      const { updateDoc: _updateDoc, arrayRemove: _arrayRemove, doc: _doc } = require('firebase/firestore') as any;
+      await _updateDoc(_doc(db, 'trips', TRIP_ID), { allowedEditorUids: _arrayRemove(uid) });
+      setAllowedEditorUids(prev => prev.filter(u => u !== uid));
+    } catch (e) { console.error(e); alert('操作失敗，請重試'); }
+  };
+
+  // ── Team name (editable by owner) ────────────────────────────
+  const defaultTeamName = project?.title ? `${project.title.slice(0, 10)} 小隊` : '旅伴小隊';
+  const [teamName, setTeamName] = useState<string>('');
+  const [editingTeamName, setEditingTeamName] = useState(false);
+  const [teamNameInput, setTeamNameInput] = useState('');
+
+  // Fetch teamName from Firestore trip doc
+  useEffect(() => {
+    if (!TRIP_ID) return;
+    const { getDoc: _getDoc, doc: _doc } = require('firebase/firestore') as any;
+    _getDoc(_doc(db, 'trips', TRIP_ID)).then((snap: any) => {
+      if (snap.exists()) {
+        setTeamName(snap.data().teamName || '');
+      }
+    }).catch(() => {});
+  }, [TRIP_ID]);
+
+  const handleSaveTeamName = async () => {
+    const val = teamNameInput.trim() || defaultTeamName;
+    try {
+      const { setDoc: _setDoc, doc: _doc } = require('firebase/firestore') as any;
+      await _setDoc(_doc(db, 'trips', TRIP_ID), { teamName: val }, { merge: true });
+      setTeamName(val);
+    } catch (e) { console.error(e); }
+    setEditingTeamName(false);
+  };
+
   const displayMembers = members.length > 0 ? members : [
     { id: 'uu',    name: 'uu',    color: '#ebcef5', role: '行程規劃', avatarUrl: '' },
     { id: 'brian', name: 'brian', color: '#aaa9ab', role: '交通達人', avatarUrl: '' },
   ];
 
   const memberNames = displayMembers.map((m: any) => m.name);
+
+  // Trip duration info from project
+  const startDate = project?.startDate || '';
+  const endDate   = project?.endDate   || '';
+  const tripDays  = startDate && endDate
+    ? Math.ceil((new Date(endDate).getTime() - new Date(startDate).getTime()) / 86400000) + 1
+    : 0;
+  const startLabel = startDate
+    ? `${new Date(startDate).getMonth()+1}/${new Date(startDate).getDate()}`
+    : '—';
+  const displayTeamName = teamName || defaultTeamName;
 
   return (
     <div style={{ fontFamily: FONT }}>
@@ -325,20 +391,49 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
-      <PageHeader title="旅伴" subtitle={`沖繩 ${displayMembers.length} 人小隊 🌊`} emoji="👥" color={C.earth}>
-        <div style={{ marginTop: 12, background: 'rgba(255,255,255,0.22)', borderRadius: 14, padding: '10px 14px', display: 'flex', justifyContent: 'space-between' }}>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>成員人數</p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{displayMembers.length} 人</p>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>出發日期</p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>4/23</p>
-          </div>
-          <div style={{ textAlign: 'center' }}>
-            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>旅行天數</p>
-            <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>4 天</p>
-          </div>
+      <PageHeader title="旅伴" subtitle={`${displayTeamName} · ${displayMembers.length} 人`} emoji="👥" color={C.earth}>
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+          {editingTeamName ? (
+            <div style={{ flex: 1, display: 'flex', gap: 6 }}>
+              <input
+                autoFocus
+                value={teamNameInput}
+                onChange={e => setTeamNameInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
+                placeholder={defaultTeamName}
+                style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
+              />
+              <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
+              <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
+              <div style={{ background: 'rgba(255,255,255,0.22)', borderRadius: 14, padding: '8px 14px', display: 'flex', gap: 18 }}>
+                <div style={{ textAlign: 'center' }}>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>成員</p>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{displayMembers.length} 人</p>
+                </div>
+                {startLabel !== '—' && (
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>出發</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{startLabel}</p>
+                  </div>
+                )}
+                {tripDays > 0 && (
+                  <div style={{ textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>天數</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{tripDays} 天</p>
+                  </div>
+                )}
+              </div>
+              {firestore.role === 'owner' && (
+                <button onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
+                  style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                  ✏️ 命名
+                </button>
+              )}
+            </div>
+          )}
         </div>
       </PageHeader>
 
@@ -446,7 +541,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           )}
           {displayMembers.map((m: any) => {
           const isUploading  = uploadingFor === m.id;
-          const notes        = getNotesFor(m.id);
+          const notes        = getNotesFor(m.id, m.googleUid);
           const isExpanded   = expandedBoard === m.id;
           const isSavingNote = savingNote === m.id;
           const colorIdx     = displayMembers.indexOf(m) % NOTE_COLORS.length;
@@ -512,6 +607,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                     <button onClick={() => handleUnbindGoogle(m.id)}
                       style={{ marginTop: 4, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
                       ✕ 解除綁定
+                    </button>
+                  )}
+                  {/* 移除編輯權限：owner 對有 googleUid 且在 allowedEditorUids 的成員 */}
+                  {firestore.role === 'owner' && m.googleUid && allowedEditorUids.includes(m.googleUid) && (
+                    <button onClick={() => handleRevokeEditor(m.googleUid)}
+                      style={{ marginTop: 4, fontSize: 10, color: '#9A4A00', background: '#FFF2CC', border: '1px solid #E8C96A', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 700 }}>
+                      🚫 移除編輯權限
                     </button>
                   )}
                 </div>
