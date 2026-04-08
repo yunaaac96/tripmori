@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
-import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc } from 'firebase/firestore';
+import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
@@ -54,12 +54,56 @@ const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()
 function App() {
   const wasGoogleSignedIn = useRef(false);
 
+  // ── Sync all trips for logged-in user from Firestore ─────────
+  const syncUserTrips = async (uid: string, email: string) => {
+    try {
+      const ownedQ  = query(collection(db, 'trips'), where('ownerUid',         '==',             uid));
+      const emailQ  = query(collection(db, 'trips'), where('ownerEmail',       '==',             email.toLowerCase()));
+      const editorQ = query(collection(db, 'trips'), where('allowedEditorUids','array-contains', uid));
+      const [ownedSnap, emailSnap, editorSnap] = await Promise.all([
+        getDocs(ownedQ), getDocs(emailQ), getDocs(editorQ),
+      ]);
+      const existing = loadProjects();
+      const map = new Map(existing.map(p => [p.id, p]));
+      const merge = (snap: any, role: TripRole) => {
+        snap.forEach((d: any) => {
+          const data = d.data();
+          const prev = map.get(d.id);
+          const p: StoredProject = {
+            id:             d.id,
+            title:          data.title       || '旅行行程',
+            emoji:          data.emoji       || '✈️',
+            role:           prev?.role === 'owner' ? 'owner' : role,
+            collaboratorKey: data.collaboratorKey || '',
+            shareCode:      data.shareCode   || '',
+            addedAt:        prev?.addedAt    || Date.now(),
+            startDate:      data.startDate   || '',
+            endDate:        data.endDate     || '',
+            description:    data.description || '',
+          };
+          map.set(d.id, p);
+        });
+      };
+      merge(ownedSnap,  'owner');
+      merge(emailSnap,  'owner');
+      merge(editorSnap, 'editor');
+      const updated = Array.from(map.values());
+      localStorage.setItem('tripmori_projects', JSON.stringify(updated));
+      setActiveProjectState(prev => {
+        if (!prev) return prev;
+        const synced = updated.find(p => p.id === prev.id);
+        return synced ? synced : prev;
+      });
+    } catch (e) { console.error('syncUserTrips:', e); }
+  };
+
   // ── Google 登入後自動升級 owner 角色（或清除非 owner 的預設行程）
   // ── 登出時：清除 localStorage 並回到 hub
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       if (user && !user.isAnonymous && user.email) {
         wasGoogleSignedIn.current = true;
+        syncUserTrips(user.uid, user.email);
         checkOwnerRole(user.email).then(role => {
           if (role === 'owner') {
             setActiveProjectState(prev => {
@@ -100,6 +144,21 @@ function App() {
       }
     });
     return unsub;
+  }, []);
+
+  // ── Cross-tab localStorage sync ─────────────────────────────
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => {
+      if (e.key === 'tripmori_projects') {
+        const activeId = getActiveProject();
+        if (activeId) {
+          const p = loadProjects().find(x => x.id === activeId);
+          if (p) setActiveProjectState(p);
+        }
+      }
+    };
+    window.addEventListener('storage', onStorage);
+    return () => window.removeEventListener('storage', onStorage);
   }, []);
 
   // ── Active project state ──────────────────────────────────────

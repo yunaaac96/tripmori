@@ -2,7 +2,7 @@
  * ProjectHub — 多專案選擇 / 建立 / 加入 畫面
  * 進入 App 時如果沒有 active project 就顯示此頁。
  */
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
@@ -205,9 +205,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
   // Join form
   const [keyInput, setKeyInput]       = useState('');
 
-  // Swipe-to-delete
-  const touchStartX = useRef<number>(0);
-  const [swipedId, setSwipedId]             = useState<string | null>(null);
+  // Double-click delete
   const [deleteTarget, setDeleteTarget]     = useState<StoredProject | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
   const [deletingProject, setDeletingProject] = useState(false);
@@ -381,7 +379,6 @@ export default function ProjectHub({ onEnterProject }: Props) {
     localStorage.setItem('tripmori_projects', JSON.stringify(updated));
     setProjects(updated);
     setDeleteTarget(null);
-    setSwipedId(null);
     setDeletingProject(false);
   };
 
@@ -768,7 +765,7 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
                       style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${deleteConfirmInput === deleteTarget.title ? '#E76F51' : C.creamDark}`, background: 'var(--tm-input-bg)', fontSize: 14, fontFamily: FONT, outline: 'none', color: C.bark, boxSizing: 'border-box', marginBottom: 16 }}
                     />
                     <div style={{ display: 'flex', gap: 8 }}>
-                      <button onClick={() => { setDeleteTarget(null); setDeleteConfirmInput(''); setSwipedId(null); }} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
+                      <button onClick={() => { setDeleteTarget(null); setDeleteConfirmInput(''); }} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                       <button
                         onClick={handleDeleteProject}
                         disabled={deleteConfirmInput !== deleteTarget.title || deletingProject}
@@ -782,31 +779,19 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
               <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
                 {projects.map(p => {
                   const rl = ROLE_LABEL[p.role];
-                  const isSwiped = swipedId === p.id;
                   return (
-                    <div key={p.id} style={{ position: 'relative', borderRadius: 20, overflow: 'hidden' }}>
-                      {p.role === 'owner' && (
-                        <div style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: 72, background: '#E76F51', display: 'flex', alignItems: 'center', justifyContent: 'center', borderRadius: '0 20px 20px 0' }}>
-                          <button onClick={() => { setDeleteTarget(p); setDeleteConfirmInput(''); }}
-                            style={{ background: 'none', border: 'none', color: 'white', fontSize: 22, cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
-                            🗑
-                            <span style={{ fontSize: 9, fontWeight: 700 }}>刪除</span>
-                          </button>
-                        </div>
-                      )}
-                      <button onClick={() => { if (isSwiped) { setSwipedId(null); return; } onEnterProject(p); }}
-                        onTouchStart={e => { if (p.role === 'owner') touchStartX.current = e.touches[0].clientX; }}
-                        onTouchEnd={e => {
-                          if (p.role !== 'owner') return;
-                          const dx = touchStartX.current - e.changedTouches[0].clientX;
-                          if (dx > 60) setSwipedId(p.id);
-                          else if (dx < -20) setSwipedId(null);
-                        }}
-                        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm, width: '100%', transform: isSwiped ? 'translateX(-72px)' : 'translateX(0)', transition: 'transform 0.25s ease', position: 'relative', zIndex: 1 }}>
+                    <div key={p.id} style={{ position: 'relative' }}>
+                      <button
+                        onClick={() => onEnterProject(p)}
+                        onDoubleClick={p.role === 'owner' ? (e) => { e.preventDefault(); setDeleteTarget(p); setDeleteConfirmInput(''); } : undefined}
+                        style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm, width: '100%' }}>
                         <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px', display: 'inline-block', marginTop: 4 }}>{rl.label}</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px' }}>{rl.label}</span>
+                            {p.role === 'owner' && <span style={{ fontSize: 9, color: C.barkLight, opacity: 0.6 }}>長按兩下可刪除</span>}
+                          </div>
                         </div>
                         <span style={{ fontSize: 20, color: C.barkLight }}>›</span>
                       </button>
