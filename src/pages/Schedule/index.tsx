@@ -97,15 +97,67 @@ export default function SchedulePage({ events, project, firestore }: { events: a
     }
   };
 
+  // country_code → IANA timezone (covers major travel destinations)
+  const COUNTRY_TZ: Record<string, string> = {
+    jp: 'Asia/Tokyo',         tw: 'Asia/Taipei',       kr: 'Asia/Seoul',
+    cn: 'Asia/Shanghai',      hk: 'Asia/Hong_Kong',    mo: 'Asia/Macau',
+    th: 'Asia/Bangkok',       vn: 'Asia/Ho_Chi_Minh',  sg: 'Asia/Singapore',
+    my: 'Asia/Kuala_Lumpur',  id: 'Asia/Jakarta',      ph: 'Asia/Manila',
+    au: 'Australia/Sydney',   nz: 'Pacific/Auckland',
+    us: 'America/New_York',   ca: 'America/Toronto',
+    gb: 'Europe/London',      fr: 'Europe/Paris',       it: 'Europe/Rome',
+    de: 'Europe/Berlin',      es: 'Europe/Madrid',      gr: 'Europe/Athens',
+    pt: 'Europe/Lisbon',      nl: 'Europe/Amsterdam',   at: 'Europe/Vienna',
+    ch: 'Europe/Zurich',      tr: 'Europe/Istanbul',    ae: 'Asia/Dubai',
+  };
+
   const handleLocSearch = async () => {
     const q = locInput.trim();
     if (!q) return;
     setLocSearching(true);
+    setLocResults([]);
+
+    // Step 1: Try Open-Meteo geocoding (has native timezone field, good for romanised input)
+    let results: any[] = [];
     try {
       const res  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=zh&format=json`);
       const data = await res.json();
-      setLocResults(data.results || []);
-    } catch { setLocResults([]); }
+      if (data.results?.length) {
+        results = data.results.map((r: any) => ({
+          name: r.name, admin1: r.admin1, country: r.country,
+          latitude: r.latitude, longitude: r.longitude,
+          timezone: r.timezone || 'Asia/Tokyo',
+        }));
+      }
+    } catch {}
+
+    // Step 2: Fallback to Nominatim (OpenStreetMap) — handles CJK characters natively
+    if (results.length === 0) {
+      try {
+        const res = await fetch(
+          `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=6&addressdetails=1`,
+          { headers: { 'Accept-Language': 'zh-TW,zh,en' } }
+        );
+        const data: any[] = await res.json();
+        results = data
+          .filter((r: any) => r.lat && r.lon)
+          .map((r: any) => {
+            const cc = (r.address?.country_code || '').toLowerCase();
+            const city = r.address?.city || r.address?.town || r.address?.village
+                      || r.address?.county || r.display_name.split(',')[0].trim();
+            const state = r.address?.state || r.address?.province || '';
+            const country = r.address?.country || '';
+            return {
+              name: city, admin1: state, country,
+              latitude:  parseFloat(r.lat),
+              longitude: parseFloat(r.lon),
+              timezone:  COUNTRY_TZ[cc] || 'UTC',
+            };
+          });
+      } catch {}
+    }
+
+    setLocResults(results);
     setLocSearching(false);
   };
 
