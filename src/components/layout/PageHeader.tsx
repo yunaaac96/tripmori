@@ -3,12 +3,13 @@ import { FONT } from '../../App';
 interface Props {
   title: string;
   subtitle?: string;
+  subtitleAction?: React.ReactNode;
   emoji?: string;
   color: string;
   children?: React.ReactNode;
 }
 
-export default function PageHeader({ title, subtitle, emoji, color, children }: Props) {
+export default function PageHeader({ title, subtitle, subtitleAction, emoji, color, children }: Props) {
   return (
     <div style={{
       background: color,
@@ -20,7 +21,11 @@ export default function PageHeader({ title, subtitle, emoji, color, children }: 
       <h1 style={{ fontSize: 22, fontWeight: 900, color: 'white', margin: 0 }}>
         {emoji && <span style={{ marginRight: 8 }}>{emoji}</span>}{title}
       </h1>
-      {subtitle && <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0' }}>{subtitle}</p>}
+      {(subtitle || subtitleAction) && (
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+          {subtitle}{subtitleAction}
+        </p>
+      )}
       {children}
     </div>
   );
