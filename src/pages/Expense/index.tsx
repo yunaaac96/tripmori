@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { createWorker } from 'tesseract.js';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
+import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import PageHeader from '../../components/layout/PageHeader';
 
 type SplitMode = 'equal' | 'weighted' | 'amount';
@@ -16,73 +16,7 @@ const EMPTY_FORM = {
   percentages: {} as Record<string, number>,
   customAmounts: {} as Record<string, string>,
   subItems: [] as { name: string; amount: string }[],
-  date: '', notes: '',
-};
-
-// ── Multi-language OCR config ───────────────────────────────────────────────
-type LangKey = 'ja' | 'ko' | 'en' | 'id' | 'fr';
-
-const OCR_LANGS: Record<LangKey, {
-  flag: string; label: string; tessCode: string[];
-  totalRx: RegExp; descRx: RegExp; currencyHint: Currency;
-  currencySymbolRx: RegExp;
-  keywords: Record<string, string>;
-}> = {
-  ja: {
-    flag: '🇯🇵', label: '日文', tessCode: ['jpn', 'eng'],
-    currencyHint: 'JPY', currencySymbolRx: /[¥￥]/,
-    totalRx: /合計|総合計|合計金額|税込合計|お支払|ご請求|お会計|小計/,
-    descRx: /[\u3040-\u9FFF]{2,}/,
-    keywords: {
-      '合計': '合計', '税込': '含稅', '税抜': '未稅', '小計': '小計',
-      '消費税': '消費稅', '割引': '折扣', '値引': '折扣',
-      'ポイント': '點數', 'お釣り': '找零', 'お預かり': '收到',
-    },
-  },
-  ko: {
-    flag: '🇰🇷', label: '韓文', tessCode: ['kor', 'eng'],
-    currencyHint: 'KRW', currencySymbolRx: /[₩]/,
-    totalRx: /합계|총액|결제금액|소계|총합계|결제|금액|합산/,
-    descRx: /[\uAC00-\uD7AF]{2,}/,
-    keywords: {
-      '합계': '合計', '소계': '小計', '부가세': '附加稅',
-      '할인': '折扣', '결제': '結帳', '주문': '訂單',
-      '영수증': '收據', '포인트': '點數', '잔액': '餘額',
-    },
-  },
-  en: {
-    flag: '🇺🇸', label: '英文', tessCode: ['eng'],
-    currencyHint: 'USD', currencySymbolRx: /[$£€]/,
-    totalRx: /\b(total|grand\s*total|amount\s*due|balance\s*due|amount\s*payable|net\s*total)\b/i,
-    descRx: /[A-Za-z]{3,}/,
-    keywords: {
-      'total': '合計', 'subtotal': '小計', 'tax': '稅',
-      'discount': '折扣', 'change': '找零', 'cash': '現金',
-      'card': '刷卡', 'receipt': '收據', 'amount': '金額',
-    },
-  },
-  id: {
-    flag: '🇮🇩', label: '印尼文', tessCode: ['ind', 'eng'],
-    currencyHint: 'IDR', currencySymbolRx: /Rp\.?\s*/i,
-    totalRx: /\b(total|jumlah|jumlah\s*bayar|total\s*bayar|tagihan|pembayaran)\b/i,
-    descRx: /[A-Za-z]{3,}/,
-    keywords: {
-      'total': '合計', 'jumlah': '金額', 'bayar': '付款',
-      'pajak': '稅', 'diskon': '折扣', 'kembalian': '找零',
-      'tunai': '現金', 'nota': '收據',
-    },
-  },
-  fr: {
-    flag: '🇫🇷', label: '法文', tessCode: ['fra', 'eng'],
-    currencyHint: 'EUR', currencySymbolRx: /€/,
-    totalRx: /\b(total|total\s*ttc|montant|net\s*à\s*payer|à\s*payer|sous-total|total\s*ht)\b/i,
-    descRx: /[A-Za-zÀ-ÿ]{3,}/,
-    keywords: {
-      'total': '合計', 'sous-total': '小計', 'tva': '增值稅',
-      'remise': '折扣', 'espèces': '現金', 'reçu': '收據',
-      'montant': '金額', 'rendu': '找零',
-    },
-  },
+  date: '', notes: '', receiptUrl: '',
 };
 
 // Currency display helpers
@@ -93,55 +27,6 @@ const CURRENCY_DISPLAY: Record<Currency, { symbol: string; label: string }> = {
   IDR: { symbol: 'Rp',  label: 'IDR 印尼盾' },
   EUR: { symbol: '€',   label: 'EUR 歐元'    },
   USD: { symbol: '$',   label: 'USD 美元'    },
-};
-
-// ── Multi-language OCR parse ────────────────────────────────────────────────
-const parseReceiptText = (text: string, lang: LangKey) => {
-  const cfg = OCR_LANGS[lang];
-  const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
-
-  // 1. Find total line using language-specific pattern
-  const totalLine = lines.find(l => cfg.totalRx.test(l));
-  let amount = '';
-  if (totalLine) {
-    // Remove currency symbols then grab number
-    const cleaned = totalLine.replace(cfg.currencySymbolRx, '').replace(/Rp/i, '');
-    const match = cleaned.match(/[\d,.]+/);
-    if (match) {
-      // Handle comma-as-decimal (EU) vs comma-as-thousands (US/JP)
-      const raw = match[0];
-      amount = raw.replace(/,(?=\d{3}(?:[.,]|$))/g, '').replace(',', '.');
-      // Keep only integer for most Asian currencies
-      if (['JPY', 'KRW', 'IDR'].includes(cfg.currencyHint)) {
-        amount = String(Math.round(parseFloat(amount)));
-      }
-    }
-  }
-  // 2. Fallback: largest number ≥ 100
-  if (!amount || amount === 'NaN') {
-    const nums = text.replace(cfg.currencySymbolRx, '').match(/[\d,]+/g)
-      ?.map(n => parseInt(n.replace(/,/g, ''), 10))
-      .filter(n => n >= 100) ?? [];
-    if (nums.length) amount = String(Math.max(...nums));
-  }
-
-  // 3. Description: first meaningful line (language-appropriate characters)
-  const desc = lines.find(l =>
-    cfg.descRx.test(l) &&
-    !/^[\d,¥￥₩€$Rp.\s]+$/.test(l) &&
-    !cfg.totalRx.test(l)
-  ) || '';
-
-  // 4. Keyword translation lookup (show matched Chinese meanings)
-  const foundKeywords: { original: string; zh: string }[] = [];
-  Object.entries(cfg.keywords).forEach(([kw, zh]) => {
-    const rx = new RegExp(kw, 'i');
-    if (rx.test(text) && !foundKeywords.some(f => f.zh === zh)) {
-      foundKeywords.push({ original: kw, zh });
-    }
-  });
-
-  return { amount, description: desc, rawText: text, foundKeywords, detectedCurrency: cfg.currencyHint };
 };
 
 // ── SVG Pie Chart ──────────────────────────────────────────────────────────
@@ -291,14 +176,10 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
 
-  // OCR
+  // Receipt photo attachment
   const descRef = useRef<HTMLInputElement>(null);
-  const ocrRef = useRef<HTMLInputElement>(null);
-  const [ocrState, setOcrState] = useState<'idle' | 'scanning' | 'done'>('idle');
-  const [ocrPreview, setOcrPreview] = useState<string | null>(null);
-  const [ocrRawText, setOcrRawText] = useState<string>('');
-  const [ocrLang, setOcrLang] = useState<LangKey>('ja');
-  const [ocrKeywords, setOcrKeywords] = useState<{ original: string; zh: string }[]>([]);
+  const receiptRef = useRef<HTMLInputElement>(null);
+  const [receiptUploading, setReceiptUploading] = useState(false);
 
   useEffect(() => {
     if (showForm) {
@@ -380,28 +261,18 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
     return result;
   };
 
-  // ── OCR ─────────────────────────────────────────────────────────────────
-  const handleOCR = async (file: File) => {
-    const langCfg = OCR_LANGS[ocrLang];
-    setOcrState('scanning');
-    setOcrPreview(URL.createObjectURL(file));
-    setOcrRawText('');
-    setOcrKeywords([]);
+  // ── Receipt photo upload ────────────────────────────────────────────────
+  const handleReceiptUpload = async (file: File) => {
+    if (!TRIP_ID) return;
+    setReceiptUploading(true);
     try {
-      const worker = await createWorker(langCfg.tessCode);
-      const { data: { text } } = await worker.recognize(file);
-      await worker.terminate();
-      const parsed = parseReceiptText(text, ocrLang);
-      setOcrRawText(parsed.rawText);
-      setOcrKeywords(parsed.foundKeywords);
-      if (parsed.amount) set('amount', parsed.amount);
-      if (parsed.description) set('description', parsed.description);
-      set('currency', parsed.detectedCurrency);
-      setOcrState('done');
-    } catch (e) {
-      console.error('OCR 失敗:', e);
-      setOcrState('idle');
-    }
+      const storage = getStorage();
+      const sRef = storageRef(storage, `receipts/${TRIP_ID}/${Date.now()}_${file.name}`);
+      await uploadBytes(sRef, file);
+      const url = await getDownloadURL(sRef);
+      set('receiptUrl', url);
+    } catch (e) { console.error('附件上傳失敗:', e); alert('上傳失敗，請重試'); }
+    setReceiptUploading(false);
   };
 
   // ── Form helpers ─────────────────────────────────────────────────────────
@@ -463,6 +334,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
       subItems: e.subItems || [],
       date: e.date || '',
       notes: e.notes || '',
+      receiptUrl: e.receiptUrl || '',
     });
     setEditingId(e.id);
     setShowForm(true);
@@ -506,6 +378,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
       subItems: form.subItems.filter(si => si.name.trim()),
       date: form.date || new Date().toISOString().slice(0, 10),
       notes: form.notes,
+      receiptUrl: form.receiptUrl || '',
     };
 
     try {
@@ -689,60 +562,29 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-              {/* OCR */}
+              {/* Receipt photo attachment */}
               <div>
-                {/* Language selector */}
-                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
-                  {(Object.keys(OCR_LANGS) as LangKey[]).map(lang => (
-                    <button key={lang} onClick={() => setOcrLang(lang)}
-                      style={{ padding: '5px 10px', borderRadius: 10, border: `1.5px solid ${ocrLang === lang ? C.sageDark : C.creamDark}`, background: ocrLang === lang ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: ocrLang === lang ? 700 : 500, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                      {OCR_LANGS[lang].flag} {OCR_LANGS[lang].label}
-                    </button>
-                  ))}
-                </div>
-
-                <input ref={ocrRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-                  onChange={e => { if (e.target.files?.[0]) handleOCR(e.target.files[0]); }} />
-                <button
-                  onClick={() => ocrRef.current?.click()}
-                  disabled={ocrState === 'scanning'}
-                  style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${ocrState === 'done' ? C.sageDark : C.creamDark}`, background: ocrState === 'done' ? '#EAF3DE' : C.cream, color: ocrState === 'done' ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: ocrState === 'scanning' ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: ocrState === 'scanning' ? 0.7 : 1 }}>
-                  {ocrState === 'scanning' ? (
-                    <><span style={{ animation: 'spin 1s linear infinite', display: 'inline-block' }}>🔄</span> 識別中，請稍候...</>
-                  ) : ocrState === 'done' ? (
-                    <>✅ 識別完成（{OCR_LANGS[ocrLang].flag} {OCR_LANGS[ocrLang].label}）</>
-                  ) : (
-                    <>📷 拍照識別發票（{OCR_LANGS[ocrLang].flag} {OCR_LANGS[ocrLang].label}）</>
-                  )}
-                </button>
-
-                {ocrPreview && ocrState !== 'scanning' && (
-                  <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <img src={ocrPreview} alt="發票預覽" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}` }} />
-                    <button onClick={() => { setOcrPreview(null); setOcrState('idle'); setOcrRawText(''); setOcrKeywords([]); }}
-                      style={{ fontSize: 11, color: C.barkLight, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>✕ 清除</button>
-                  </div>
-                )}
-
-                {/* Keyword translation */}
-                {ocrKeywords.length > 0 && (
-                  <div style={{ marginTop: 6, display: 'flex', gap: 4, flexWrap: 'wrap' }}>
-                    {ocrKeywords.map((kw, i) => (
-                      <span key={i} style={{ fontSize: 10, background: C.sageLight + '55', color: C.sageDark, borderRadius: 6, padding: '2px 6px' }}>
-                        {kw.original} → {kw.zh}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {ocrRawText ? (
-                  <div style={{ marginTop: 6 }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>OCR 原始識別文字</p>
-                    <div style={{ background: C.cream, borderRadius: 8, padding: '6px 8px', maxHeight: 80, overflowY: 'auto', fontSize: 10, color: C.bark, whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
-                      {ocrRawText}
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>📎 附件（發票／收據）</label>
+                <input ref={receiptRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                  onChange={e => { if (e.target.files?.[0]) handleReceiptUpload(e.target.files[0]); e.target.value = ''; }} />
+                {form.receiptUrl ? (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <img src={form.receiptUrl} alt="附件預覽" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }}
+                      onClick={() => window.open(form.receiptUrl, '_blank')} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 11, color: C.sageDark, fontWeight: 600, margin: '0 0 4px' }}>✅ 附件已上傳</p>
+                      <button onClick={() => set('receiptUrl', '')}
+                        style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                        ✕ 移除
+                      </button>
                     </div>
                   </div>
-                ) : null}
+                ) : (
+                  <button onClick={() => receiptRef.current?.click()} disabled={receiptUploading}
+                    style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-input-bg)', color: receiptUploading ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: receiptUploading ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    {receiptUploading ? '⏳ 上傳中...' : '📷 拍照 / 上傳附件'}
+                  </button>
+                )}
               </div>
 
               {/* Description */}
@@ -1039,7 +881,8 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
             {!showPie && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
                 {categoryBreakdown.map(d => (
-                  <span key={d.key} style={{ fontSize: 11, background: EXPENSE_CATEGORY_MAP[d.key]?.bg || '#F0F0F0', borderRadius: 8, padding: '3px 8px', color: C.bark }}>
+                  <span key={d.key} className={`tm-expense-chip tm-expense-chip-${d.key}`}
+                    style={{ fontSize: 11, background: EXPENSE_CATEGORY_MAP[d.key]?.bg || '#F0F0F0', borderRadius: 8, padding: '5px 10px', color: C.bark, fontWeight: 600 }}>
                     {d.emoji} {d.label} {catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%
                   </span>
                 ))}
@@ -1152,6 +995,14 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                       )}
                     </div>
                   </div>
+
+                  {/* Receipt thumbnail */}
+                  {e.receiptUrl && !isVisitor && (
+                    <div style={{ marginTop: 6 }}>
+                      <img src={e.receiptUrl} alt="附件" onClick={() => window.open(e.receiptUrl, '_blank')}
+                        style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 8, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }} />
+                    </div>
+                  )}
 
                   {/* Sub-items toggle */}
                   {hasSubItems && (

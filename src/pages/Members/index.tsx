@@ -660,13 +660,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                       ✕ 解除綁定
                     </button>
                   )}
-                  {/* 移除編輯權限：owner 對有 googleUid 且在 allowedEditorUids 的成員 */}
-                  {firestore.role === 'owner' && m.googleUid && allowedEditorUids.includes(m.googleUid) && (
-                    <button onClick={() => handleRevokeEditor(m.googleUid)}
-                      style={{ marginTop: 4, fontSize: 10, color: '#9A4A00', background: '#FFF2CC', border: '1px solid #E8C96A', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 700 }}>
-                      🚫 移除編輯權限
-                    </button>
-                  )}
                 </div>
                 {/* Board toggle */}
                 <button onClick={() => setExpandedBoard(isExpanded ? null : m.id)}

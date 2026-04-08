@@ -141,6 +141,15 @@
   .tm-category-chip-transport  { background: #0C1E30 !important; color: #78AACC !important; }
   .tm-category-chip-hotel      { background: #2C100E !important; color: #CC8082 !important; }
 
+  /* Expense category breakdown chips */
+  .tm-expense-chip { color: #EDE4D8 !important; }
+  .tm-expense-chip-transport { background: #0E2236 !important; }
+  .tm-expense-chip-food      { background: #302410 !important; }
+  .tm-expense-chip-attraction { background: #142610 !important; }
+  .tm-expense-chip-shopping  { background: #2C1018 !important; }
+  .tm-expense-chip-hotel     { background: #1E1030 !important; }
+  .tm-expense-chip-other     { background: #2A2520 !important; }
+
   /* Booking cards — hardcoded light backgrounds override */
   .tm-booking-checkin  { background: #0C2810 !important; }
   .tm-booking-checkin  p:first-child { color: #68B850 !important; }
