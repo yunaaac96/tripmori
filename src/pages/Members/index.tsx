@@ -5,7 +5,8 @@ import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getDoc, setDoc, arrayRemove } from 'firebase/firestore';
+import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc } from 'firebase/firestore';
+import { makeCollabKey, saveProject } from '../ProjectHub/index';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -247,15 +248,30 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     catch (e) { console.error(e); }
   };
 
-  // ── Editor revocation (owner only) ───────────────────────────
+  // ── Editor revocation + collaboratorKey (owner only) ────────
   const [allowedEditorUids, setAllowedEditorUids] = useState<string[]>([]);
+  const [firestoreCollaboratorKey, setFirestoreCollaboratorKey] = useState<string>('');
 
   useEffect(() => {
     if (!TRIP_ID || firestore.role !== 'owner') return;
-    getDoc(doc(db, 'trips', TRIP_ID)).then((snap: any) => {
-      if (snap.exists()) {
-        setAllowedEditorUids(snap.data().allowedEditorUids || []);
-        setFirestoreCollaboratorKey(snap.data().collaboratorKey || '');
+    getDoc(_doc(db, 'trips', TRIP_ID)).then(async (snap: any) => {
+      if (!snap.exists()) return;
+      setAllowedEditorUids(snap.data().allowedEditorUids || []);
+      const existing = snap.data().collaboratorKey;
+      if (existing) {
+        setFirestoreCollaboratorKey(existing);
+        // Sync to localStorage if missing there
+        if (project && !project.collaboratorKey) {
+          saveProject({ ...project, collaboratorKey: existing });
+        }
+      } else {
+        // Auto-generate and persist
+        const newKey = makeCollabKey(TRIP_ID);
+        try {
+          await _updateDoc(_doc(db, 'trips', TRIP_ID), { collaboratorKey: newKey });
+          setFirestoreCollaboratorKey(newKey);
+          if (project) saveProject({ ...project, collaboratorKey: newKey });
+        } catch (e) { console.error('Failed to write collaboratorKey', e); }
       }
     }).catch(() => {});
   }, [TRIP_ID, firestore.role]);
@@ -272,7 +288,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const [editingTeamName, setEditingTeamName] = useState(false);
   const [teamNameInput, setTeamNameInput] = useState('');
 
-  const [firestoreCollaboratorKey, setFirestoreCollaboratorKey] = useState<string>('');
   const handleSaveTeamName = async () => {
     const val = teamNameInput.trim();
     if (!val) { setEditingTeamName(false); return; }
