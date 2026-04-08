@@ -4,7 +4,7 @@
  */
 import { useState, useEffect } from 'react';
 import { db, auth } from '../../config/firebase';
-import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp } from 'firebase/firestore';
+import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 import CurrencySearch from '../../components/CurrencySearch';
@@ -339,20 +339,26 @@ export default function ProjectHub({ onEnterProject }: Props) {
     const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
     if (!user) { setError('請先登入 Google 帳號後再加入行程'); return; }
     setBusy(true); setError('');
+
+    const registerAndEnter = async (tripId: string, project: StoredProject) => {
+      if (user.uid) {
+        try { await updateDoc(doc(db, 'trips', tripId), { allowedEditorUids: arrayUnion(user.uid) }); }
+        catch (e) { console.error('Failed to register editor UID:', e); }
+      }
+      const editorProject: StoredProject = { ...project, role: 'editor' as TripRole };
+      saveProject(editorProject);
+      onEnterProject(editorProject);
+    };
+
     try {
+      // 1. Fast path: project already in localStorage
       const existing = projects.find(p => p.collaboratorKey === key);
       if (existing) {
-        // Register editor UID in allowedEditorUids so owner can revoke
-        if (user.uid) {
-          try { await updateDoc(doc(db, 'trips', existing.id), { allowedEditorUids: arrayUnion(user.uid) }); }
-          catch (e) { console.error('Failed to register editor UID:', e); }
-        }
-        const editorProject = { ...existing, role: 'editor' as TripRole };
-        saveProject(editorProject);
-        onEnterProject(editorProject);
+        await registerAndEnter(existing.id, existing);
         return;
       }
 
+      // 2. Default demo project shortcut
       if (key === DEFAULT_COLLAB) {
         ensureDefaultProject();
         const p = loadProjects().find(x => x.id === DEFAULT_TRIP_ID)!;
@@ -360,11 +366,34 @@ export default function ProjectHub({ onEnterProject }: Props) {
         return;
       }
 
+      // 3. Basic format check before hitting Firestore
       const parts = key.split('-');
-      if (parts.length < 3 || parts[0] !== 'COLLAB') { setError('金鑰格式不正確'); setBusy(false); return; }
+      if (parts.length < 3 || parts[0] !== 'COLLAB') {
+        setError('金鑰格式不正確'); setBusy(false); return;
+      }
 
-      setError('找不到符合的專案，請確認金鑰是否正確');
-    } catch (e) { setError('加入失敗，請重試'); }
+      // 4. Query Firestore — find the trip whose collaboratorKey matches
+      const snap = await getDocs(query(collection(db, 'trips'), where('collaboratorKey', '==', key)));
+      if (snap.empty) {
+        setError('找不到符合的專案，請確認金鑰是否正確'); setBusy(false); return;
+      }
+
+      const tripDoc = snap.docs[0];
+      const data    = tripDoc.data();
+      const newProject: StoredProject = {
+        id: tripDoc.id,
+        title: data.title || '旅行行程',
+        emoji: data.emoji || '✈️',
+        role: 'editor',
+        collaboratorKey: key,
+        shareCode: data.shareCode || '',
+        addedAt: Date.now(),
+        startDate: data.startDate || '',
+        endDate: data.endDate || '',
+        description: data.description || '',
+      };
+      await registerAndEnter(tripDoc.id, newProject);
+    } catch (e) { console.error(e); setError('加入失敗，請重試'); }
     setBusy(false);
   };
 
