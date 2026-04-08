@@ -56,10 +56,22 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   }, [googleUid, members]);
 
   const handleCopy = (text: string, key: string) => {
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(key);
-      setTimeout(() => setCopied(null), 2500);
-    });
+    const done = () => { setCopied(key); setTimeout(() => setCopied(null), 2500); };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(done).catch(() => {
+        const ta = document.createElement('textarea');
+        ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+        document.body.appendChild(ta); ta.select();
+        try { document.execCommand('copy'); done(); } catch {}
+        document.body.removeChild(ta);
+      });
+    } else {
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+      document.body.appendChild(ta); ta.select();
+      try { document.execCommand('copy'); done(); } catch {}
+      document.body.removeChild(ta);
+    }
   };
 
   // 統一用 signInWithPopup，同步呼叫可相容 iOS Safari，避免 redirect sessionStorage 問題
@@ -282,11 +294,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     n <= 2 ? '小隊' : n <= 4 ? '小組' : '旅行團';
 
   // Build subtitle: "2026.04 沖繩之旅・2人小隊"
-  const tripYearMonth = startDate
-    ? `${new Date(startDate).getFullYear()}.${String(new Date(startDate).getMonth() + 1).padStart(2, '0')}`
-    : '';
-  const headerSubtitle = [tripYearMonth, displayTeamName].filter(Boolean).join(' ')
-    + `・${displayMembers.length}人${groupLabel(displayMembers.length)}`;
+  const headerSubtitle = `${displayTeamName}・${displayMembers.length}人${groupLabel(displayMembers.length)}`;
 
   // Start label and trip days for stats panel
   const startLabel = startDate
@@ -389,51 +397,32 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
-      <PageHeader title="旅伴" subtitle={headerSubtitle} emoji="👥" color={C.earth}>
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <PageHeader title="旅伴" subtitle={headerSubtitle} emoji="👥" color={C.earth} />
+
+      {/* Team name rename — owner only, sits just below header */}
+      {firestore.role === 'owner' && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 16px 0' }}>
           {editingTeamName ? (
-            <div style={{ flex: 1, display: 'flex', gap: 6 }}>
+            <>
               <input
                 autoFocus
                 value={teamNameInput}
                 onChange={e => setTeamNameInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
                 placeholder={defaultTeamName}
-                style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
+                style={{ flex: 1, padding: '7px 12px', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, fontSize: 13, fontFamily: FONT, outline: 'none', background: 'var(--tm-input-bg)', color: 'var(--tm-bark)' }}
               />
-              <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
-              <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
-            </div>
+              <button onClick={handleSaveTeamName} style={{ padding: '7px 12px', borderRadius: 10, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
+              <button onClick={() => setEditingTeamName(false)} style={{ padding: '7px 10px', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
+            </>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-              <div style={{ background: 'rgba(255,255,255,0.22)', borderRadius: 14, padding: '8px 14px', display: 'flex', gap: 18 }}>
-                <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>成員</p>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{displayMembers.length} 人</p>
-                </div>
-                {startLabel !== '—' && (
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>出發</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{startLabel}</p>
-                  </div>
-                )}
-                {tripDays > 0 && (
-                  <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>天數</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{tripDays} 天</p>
-                  </div>
-                )}
-              </div>
-              {firestore.role === 'owner' && (
-                <button onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
-                  style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 12, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                  ✏️ 命名
-                </button>
-              )}
-            </div>
+            <button onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
+              style={{ padding: '4px 8px', borderRadius: 8, border: 'none', background: 'none', color: C.barkLight, fontSize: 16, cursor: 'pointer', lineHeight: 1 }}>
+              ✏️
+            </button>
           )}
         </div>
-      </PageHeader>
+      )}
 
       {/* Copy toast */}
       {copied && (
