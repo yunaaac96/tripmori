@@ -961,16 +961,18 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
 
       {/* ── Page header ── */}
       <PageHeader title="旅行記帳" subtitle="支出記錄・分帳結算" emoji="💰" color={C.sage}>
-        <div style={{ marginTop: 12, background: 'rgba(255,255,255,0.2)', borderRadius: 14, padding: '12px 14px' }}>
-          <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '0 0 2px' }}>總支出（換算台幣）</p>
-          <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>NT$ {totalTWD.toLocaleString()}</p>
-        </div>
+        {!isVisitor && (
+          <div style={{ marginTop: 12, background: 'rgba(255,255,255,0.2)', borderRadius: 14, padding: '12px 14px' }}>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '0 0 2px' }}>總支出（換算台幣）</p>
+            <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>NT$ {totalTWD.toLocaleString()}</p>
+          </div>
+        )}
       </PageHeader>
 
       <div style={{ padding: '12px 16px 80px' }}>
 
-        {/* ── Member stats ── */}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+        {/* ── Member stats (hidden for visitors) ── */}
+        {!isVisitor && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
           {memberStats.map(ms => {
             const toReceive = settlementReceive[ms.name] || 0;
             const toPay     = settlementPay[ms.name]     || 0;
@@ -996,10 +998,10 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
               </div>
             );
           })}
-        </div>
+        </div>}
 
-        {/* ── Settlement suggestions ── */}
-        {settlements.length > 0 && (
+        {/* ── Settlement suggestions (hidden for visitors) ── */}
+        {!isVisitor && settlements.length > 0 && (
           <div style={{ ...cardStyle, marginBottom: 12, background: '#EAF3DE', border: '1px solid #B5CFA7' }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 6px' }}>💡 建議結算方式</p>
             {settlements.map((s, i) => (
