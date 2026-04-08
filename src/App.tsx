@@ -111,7 +111,9 @@ function App() {
       const existing = loadProjects().find(p => p.id === visitId);
       if (existing) {
         setActiveProject(existing.id);
-        return { ...existing, role: 'visitor' as TripRole };
+        // Preserve editor/owner role if already granted via collaborator key
+        const role: TripRole = (existing.role === 'editor' || existing.role === 'owner') ? existing.role : 'visitor';
+        return { ...existing, role };
       }
       // Will be resolved async in useEffect
     }
@@ -129,7 +131,9 @@ function App() {
     const stored = loadProjects().find(p => p.id === tripId);
     if (stored) {
       setActiveProject(stored.id);
-      setActiveProjectState({ ...stored, role: 'visitor' });
+      // Preserve editor/owner role if already granted via collaborator key
+      const role: TripRole = (stored.role === 'editor' || stored.role === 'owner') ? stored.role : 'visitor';
+      setActiveProjectState({ ...stored, role });
       return;
     }
     // Fetch trip metadata from Firestore
