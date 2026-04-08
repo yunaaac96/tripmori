@@ -271,7 +271,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
       <div style={{ padding: '8px 16px 80px' }}>
 
         {/* ── 航班 ── */}
-        <SectionTitle action={!isReadOnly && flights !== null && <EditBtn onClick={() => openEdit('flight', 0)} />}>✈️ 航班資訊</SectionTitle>
+        <SectionTitle>✈️ 航班資訊</SectionTitle>
         {!staticLoaded ? null : flights === null || flights.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px' }}>✈️</p>
@@ -352,27 +352,27 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
               {!isReadOnly && <EditBtn onClick={() => openEdit('hotel', idx)} />}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
-              <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '8px 10px' }}>
+              <div className="tm-booking-checkin" style={{ background: '#EAF8E6', borderRadius: 12, padding: '8px 10px' }}>
                 <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📥 Check-in</p>
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkIn}</p>
               </div>
-              <div style={{ background: '#FFF2E6', borderRadius: 12, padding: '8px 10px' }}>
+              <div className="tm-booking-checkout" style={{ background: '#FFF2E6', borderRadius: 12, padding: '8px 10px' }}>
                 <p style={{ fontSize: 10, color: '#9A5A00', fontWeight: 700, margin: 0 }}>📤 Check-out</p>
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkOut}</p>
               </div>
             </div>
             {isVisitor ? (
-              <div style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
+              <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
                 <span style={{ fontSize: 14 }}>🔒</span>
                 <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訂單詳細資訊僅旅伴可查看</span>
               </div>
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
-                <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
+                <div className="tm-booking-order" style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
                   <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
                   <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
                 </div>
-                <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
+                <div className="tm-booking-pin" style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
                   <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
                   <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
                 </div>
@@ -389,7 +389,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
         ))}
 
         {/* ── 租車 ── */}
-        <SectionTitle action={!isReadOnly && car !== null && <EditBtn onClick={() => openEdit('car')} />}>🚗 租車資訊</SectionTitle>
+        <SectionTitle>🚗 租車資訊</SectionTitle>
         {!staticLoaded ? null : car === null ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px' }}>🚗</p>
@@ -413,24 +413,24 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
             {!isReadOnly && <EditBtn onClick={() => openEdit('car')} />}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-            <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '10px 12px' }}>
+            <div className="tm-booking-pickup" style={{ background: '#EAF8E6', borderRadius: 12, padding: '10px 12px' }}>
               <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: '0 0 4px' }}>🟢 取車</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.pickupLocation}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.pickupTime}</p>
             </div>
-            <div style={{ background: '#FFEBEB', borderRadius: 12, padding: '10px 12px' }}>
+            <div className="tm-booking-return" style={{ background: '#FFEBEB', borderRadius: 12, padding: '10px 12px' }}>
               <p style={{ fontSize: 10, color: '#9A3A3A', fontWeight: 700, margin: '0 0 4px' }}>🔴 還車</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.returnLocation}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.returnTime}</p>
             </div>
           </div>
           {isVisitor ? (
-            <div style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 14 }}>🔒</span>
               <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用與訂單詳情僅旅伴可查看</span>
             </div>
           ) : (
-            <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+            <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
               <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
                 {car.currency === 'JPY' ? '¥' : 'NT$'} {Number(car.totalCost).toLocaleString()}
@@ -446,10 +446,10 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 {showCarQR ? '收起 QR Code' : '📱 展開報到 QR Code'}
               </button>
               {showCarQR && (
-                <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, textAlign: 'center' }}>
+                <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
                   <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>OTS 取車報到 QR Code</p>
                   {!carQrErr ? (
-                    <img src={QR_SRC} alt="OTS QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated' }} onError={() => setCarQrErr(true)} />
+                    <img src={QR_SRC} alt="OTS QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block' }} onError={() => setCarQrErr(true)} />
                   ) : (
                     <div style={{ padding: '20px 16px', background: '#FAE0E0', borderRadius: 10 }}>
                       <p style={{ fontSize: 12, color: '#9A3A3A', margin: 0, fontWeight: 600 }}>QR Code 圖片未找到</p>
@@ -527,7 +527,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
               {isVisitor ? (
                 /* Visitor: show date only, hide confirmCode/cost/qr */
                 b.date && (
-                  <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px', marginBottom: 8, display: 'inline-block' }}>
+                  <div className="tm-booking-date" style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px', marginBottom: 8, display: 'inline-block' }}>
                     <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📅 日期</p>
                     <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
                   </div>
@@ -536,19 +536,19 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 (b.date || b.confirmCode || b.cost) && (
                   <div style={{ display: 'grid', gridTemplateColumns: [b.date, b.confirmCode, b.cost].filter(Boolean).length >= 3 ? '1fr 1fr 1fr' : [b.date, b.confirmCode, b.cost].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr', gap: 6, marginBottom: 8 }}>
                     {b.date && (
-                      <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px' }}>
+                      <div className="tm-booking-date" style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px' }}>
                         <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📅 日期</p>
                         <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
                       </div>
                     )}
                     {b.confirmCode && (
-                      <div style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
+                      <div className="tm-booking-order" style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
                         <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>訂單編號</p>
                         <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{b.confirmCode}</p>
                       </div>
                     )}
                     {b.cost && (
-                      <div style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
+                      <div className="tm-booking-cost" style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
                         <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>費用</p>
                         <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>
                           {b.currency === 'TWD' ? 'NT$' : b.currency === 'USD' ? '$' : '¥'} {Number(b.cost).toLocaleString()}
@@ -567,8 +567,8 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                     {isQrOpen ? '收起 QR Code' : '📱 展開 QR Code'}
                   </button>
                   {isQrOpen && (
-                    <div style={{ marginTop: 10, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', justifyContent: 'center' }}>
-                      <img src={b.qrUrl} alt="QR Code" style={{ maxWidth: 220, width: 'auto', height: 'auto', maxHeight: 220, borderRadius: 8, display: 'block' }} />
+                    <div style={{ marginTop: 10, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+                      <img src={b.qrUrl} alt="QR Code" style={{ maxWidth: 220, width: 'auto', height: 'auto', maxHeight: 220, borderRadius: 8, display: 'block', margin: '0 auto' }} />
                     </div>
                   )}
                 </>

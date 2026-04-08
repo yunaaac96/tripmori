@@ -66,65 +66,82 @@
 
 @media (prefers-color-scheme: dark) {
   :root {
-    /* TripMori dark theme — warm forest night, high readability
-     * Base palette: deep olive-charcoal, warm off-white text, muted sage accents
+    /* TripMori dark theme — warm charcoal, readable & cohesive
+     * Base: deep warm neutral, not green-tinted; text is warm off-white
      */
-    --tm-page-bg: #1A2018;
-    --tm-dot-color: #222A1E;
-    --tm-nav-bg: #1E2820;
-    --tm-nav-border: #2E3E2A;
-    --tm-card-bg: #263024;
-    --tm-card-border: #32403A;
-    --tm-sheet-bg: #2A3628;
-    --tm-input-bg: #202A1E;
-    --tm-input-border: #3E5438;
-    --tm-cream: #202A1E;
-    --tm-cream-dark: #2E3E2A;
-    --tm-bark: #E8DDD0;
-    --tm-bark-light: #B8A898;
-    --tm-text-inv: #1A2018;
-    --tm-shadow: #0C160A;
-    /* note backgrounds — slightly saturated so they read as distinct colors */
-    --tm-note-1: #3A3610;    /* warm yellow */
-    --tm-note-2: #102C38;    /* teal-blue */
-    --tm-note-3: #0E3016;    /* forest green */
-    --tm-note-4: #38100E;    /* warm red */
-    --tm-note-5: #280E3A;    /* violet */
-    --tm-note-6: #3A2008;    /* amber */
-    --tm-weather-bg: #1A2634;
-    --tm-section-bg: #222C20;
+    --tm-page-bg: #1C1A17;
+    --tm-dot-color: #252320;
+    --tm-nav-bg: #201E1B;
+    --tm-nav-border: #343028;
+    --tm-card-bg: #2C2926;
+    --tm-card-border: #3C3830;
+    --tm-sheet-bg: #302D2A;
+    --tm-input-bg: #242118;
+    --tm-input-border: #4A4438;
+    --tm-cream: #242118;
+    --tm-cream-dark: #3C3830;
+    --tm-bark: #EDE4D8;
+    --tm-bark-light: #A8998A;
+    --tm-text-inv: #1C1A17;
+    --tm-shadow: #080706;
+    /* note backgrounds: clearly distinguishable, enough saturation to read as color */
+    --tm-note-1: #332E0C;    /* warm yellow */
+    --tm-note-2: #0C2A38;    /* teal-blue */
+    --tm-note-3: #0C2A10;    /* forest green */
+    --tm-note-4: #361010;    /* warm red */
+    --tm-note-5: #260C36;    /* violet */
+    --tm-note-6: #361C06;    /* amber */
+    --tm-weather-bg: #1A2430;
+    --tm-section-bg: #242118;
 
-    --text: #b0b8bc;
-    --text-h: #eef0f2;
-    --bg: #1A2018;
-    --border: #303830;
-    --code-bg: #222C20;
-    --accent: #c084fc;
-    --accent-bg: rgba(192, 132, 252, 0.15);
-    --accent-border: rgba(192, 132, 252, 0.5);
-    --social-bg: rgba(38, 48, 36, 0.5);
+    --text: #B4AAAA;
+    --text-h: #F0EAE2;
+    --bg: #1C1A17;
+    --border: #38342C;
+    --code-bg: #242118;
+    --accent: #D4A0FF;
+    --accent-bg: rgba(212, 160, 255, 0.12);
+    --accent-border: rgba(212, 160, 255, 0.4);
+    --social-bg: rgba(44, 41, 38, 0.6);
     --shadow:
-      rgba(0, 0, 0, 0.5) 0 10px 15px -3px, rgba(0, 0, 0, 0.3) 0 4px 6px -2px;
+      rgba(0, 0, 0, 0.55) 0 10px 15px -3px, rgba(0, 0, 0, 0.35) 0 4px 6px -2px;
   }
 
-  /* Note text should be legible on dark note backgrounds */
+  /* Note text legibility on dark note backgrounds */
   #social .button-icon {
     filter: invert(1) brightness(2);
   }
 
-  /* Visitor banner dark mode */
+  /* Visitor banner */
   .tm-visitor-banner {
-    background: #102C38 !important;
+    background: #102838 !important;
   }
   .tm-visitor-banner span {
-    color: #7ABCDC !important;
+    color: #80C0E0 !important;
   }
 
-  /* Category chip backgrounds that are hardcoded — invert slightly */
-  .tm-category-chip-attraction { background: #1A2E18 !important; color: #90C880 !important; }
-  .tm-category-chip-food       { background: #302810 !important; color: #D4A840 !important; }
-  .tm-category-chip-transport  { background: #102030 !important; color: #80AACC !important; }
-  .tm-category-chip-hotel      { background: #2E1018 !important; color: #CC8090 !important; }
+  /* Schedule category chips */
+  .tm-category-chip-attraction { background: #162A12 !important; color: #88CC72 !important; }
+  .tm-category-chip-food       { background: #2E2208 !important; color: #D4A040 !important; }
+  .tm-category-chip-transport  { background: #0C1E30 !important; color: #78AACC !important; }
+  .tm-category-chip-hotel      { background: #2C100E !important; color: #CC8082 !important; }
+
+  /* Booking cards — hardcoded light backgrounds override */
+  .tm-booking-checkin  { background: #0C2810 !important; }
+  .tm-booking-checkin  p:first-child { color: #68B850 !important; }
+  .tm-booking-checkout { background: #2C1C06 !important; }
+  .tm-booking-checkout p:first-child { color: #C88C30 !important; }
+  .tm-booking-order    { background: #2A2208 !important; }
+  .tm-booking-pin      { background: #2C0E0E !important; }
+  .tm-booking-pin p:last-child { color: #E87070 !important; }
+  .tm-booking-cost     { background: #252118 !important; }
+  .tm-booking-lock     { background: #2A2520 !important; }
+  .tm-booking-pickup   { background: #0C2810 !important; }
+  .tm-booking-pickup   p:first-child { color: #68B850 !important; }
+  .tm-booking-return   { background: #2C0E0E !important; }
+  .tm-booking-return   p:first-child { color: #E87070 !important; }
+  .tm-booking-date     { background: #0C2810 !important; }
+  .tm-booking-date     p:first-child { color: #68B850 !important; }
 }
 
 #root {
