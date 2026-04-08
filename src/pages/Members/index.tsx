@@ -376,8 +376,8 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
-      <PageHeader title="旅伴" subtitle={`${displayTeamName} · ${displayMembers.length} 人`} emoji="👥" color={C.earth}>
-        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+      <PageHeader title="旅伴" subtitle={displayTeamName} emoji="👥" color={C.earth}>
+        <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
           {editingTeamName ? (
             <div style={{ flex: 1, display: 'flex', gap: 6 }}>
               <input
@@ -392,32 +392,34 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
             </div>
           ) : (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1 }}>
-              <div style={{ background: 'rgba(255,255,255,0.22)', borderRadius: 14, padding: '8px 14px', display: 'flex', gap: 18 }}>
+            <>
+              {/* Stats pill */}
+              <div style={{ flex: 1, background: 'rgba(255,255,255,0.22)', borderRadius: 14, padding: '8px 16px', display: 'flex', justifyContent: 'space-around' }}>
                 <div style={{ textAlign: 'center' }}>
-                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>成員</p>
+                  <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>成員人數</p>
                   <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{displayMembers.length} 人</p>
                 </div>
                 {startLabel !== '—' && (
                   <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>出發</p>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>出發日期</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{startLabel}</p>
                   </div>
                 )}
                 {tripDays > 0 && (
                   <div style={{ textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>天數</p>
+                    <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>旅行天數</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: 'white', margin: '2px 0 0' }}>{tripDays} 天</p>
                   </div>
                 )}
               </div>
+              {/* Rename button (owner only) */}
               {firestore.role === 'owner' && (
                 <button onClick={() => { setTeamNameInput(project?.title || ''); setEditingTeamName(true); }}
-                  style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 16, cursor: 'pointer', fontFamily: FONT, lineHeight: 1 }}>
+                  style={{ flexShrink: 0, padding: '7px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 16, cursor: 'pointer', fontFamily: FONT, lineHeight: 1 }}>
                   ✏️
                 </button>
               )}
-            </div>
+            </>
           )}
         </div>
       </PageHeader>
