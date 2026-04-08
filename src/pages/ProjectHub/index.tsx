@@ -7,6 +7,7 @@ import { db, auth } from '../../config/firebase';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
+import CurrencySearch from '../../components/CurrencySearch';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
 
@@ -659,12 +660,7 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
               <span style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700 }}>✓ 依目的地自動填入</span>
             )}
           </div>
-          <select value={newCurrency} onChange={e => { setNewCurrency(e.target.value); setNewRate(''); }}
-            style={{ ...inputSt, appearance: 'none' as const }}>
-            {CURRENCY_OPTIONS.map(c => (
-              <option key={c.code} value={c.code}>{c.label}</option>
-            ))}
-          </select>
+          <CurrencySearch value={newCurrency} onChange={code => { setNewCurrency(code); setNewRate(''); }} />
           <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>
             依目的地自動建議，可手動更換為其他幣值
           </p>

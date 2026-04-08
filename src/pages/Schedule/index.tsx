@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { getDoc } from 'firebase/firestore';
+import CurrencySearch from '../../components/CurrencySearch';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 
@@ -306,7 +307,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>主要幣值</label>
-                <input style={inputStyle} placeholder="JPY / TWD / USD…" value={metaForm.currency} onChange={e => setMeta('currency', e.target.value.toUpperCase())} maxLength={5} />
+                <CurrencySearch value={metaForm.currency} onChange={code => setMeta('currency', code)} />
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button onClick={() => setEditingMeta(false)} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
