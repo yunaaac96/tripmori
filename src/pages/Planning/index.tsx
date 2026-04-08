@@ -18,7 +18,8 @@ const getDueStatus = (dueDate: string, checked: boolean): 'normal' | 'soon' | 'o
 };
 
 export default function PlanningPage({ lists, members, firestore }: any) {
-  const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly } = firestore;
+  const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
+  const isOwner = role === 'owner';
 
   const [filterBy, setFilterBy]           = useState<string>('all');
   const [activeSection, setActiveSection] = useState<string>('todo');
@@ -83,7 +84,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   };
 
   const handleDelete = async (itemId: string) => {
-    if (isReadOnly) return;
+    if (!isOwner) return; // only owner can delete planning items
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'lists', itemId)); }
     catch (e) { console.error(e); }
     setConfirmDelete(null);
@@ -213,7 +214,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
 
               {/* 按鈕 */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                {isEdit && (
+                {isEdit && isOwner && (
                   <button
                     onClick={() => { setConfirmDelete(editTarget.id); setShowSheet(false); }}
                     style={{ padding: '12px 16px', borderRadius: 12, border: `1.5px solid #FAE0E0`, background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>

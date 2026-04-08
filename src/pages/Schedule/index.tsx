@@ -63,7 +63,8 @@ const FALLBACK_CLIMATE: WeatherDay = {
 };
 
 export default function SchedulePage({ events, project, firestore }: { events: any[]; members: any[]; project: any; firestore: any }) {
-  const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly } = firestore;
+  const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
+  const isOwner = role === 'owner';
 
   const TRIP_DATES = buildTripDates(project?.startDate || '2026-04-23', project?.endDate || '2026-04-26');
   const DAY_OPTIONS = buildDayOptions(TRIP_DATES.length ? TRIP_DATES : ['2026-04-23', '2026-04-24', '2026-04-25', '2026-04-26']);
@@ -87,7 +88,7 @@ export default function SchedulePage({ events, project, firestore }: { events: a
   const lastTapRef = useRef<number>(0);
 
   const handleWeatherTap = () => {
-    if (isReadOnly) return;
+    if (!isOwner) return; // only owner can set location
     const now = Date.now();
     if (now - lastTapRef.current < 350) {
       lastTapRef.current = 0;
@@ -202,12 +203,12 @@ export default function SchedulePage({ events, project, firestore }: { events: a
       const fallback: Record<string, WeatherDay> = {};
       TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
       setWeather(fallback);
-      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 16 天更新即時預報）`);
+      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 10 天更新即時預報）`);
     };
 
     const fetchWeather = (lat: number, lng: number, timezone: string, locationName: string) => {
       const daysUntilTrip = Math.floor((new Date(startDate).getTime() - Date.now()) / 86400000);
-      if (daysUntilTrip > 16) {
+      if (daysUntilTrip > 10) {
         applyFallback(locationName);
         return;
       }
@@ -305,7 +306,7 @@ export default function SchedulePage({ events, project, firestore }: { events: a
   };
 
   const handleDelete = async () => {
-    if (isReadOnly) return;
+    if (!isOwner) return; // only owner can delete events
     if (!selectedEvent) return;
     await deleteDoc(doc(db, 'trips', TRIP_ID, 'events', selectedEvent.id));
     setShowDeleteConfirm(false); setMode('view'); setSelectedEvent(null);
@@ -361,7 +362,7 @@ export default function SchedulePage({ events, project, firestore }: { events: a
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>備註</label><textarea style={{ ...inputStyle, minHeight: 72, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={form.notes} onChange={e => set('notes', e.target.value)} /></div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結</label><input style={inputStyle} placeholder="https://maps.app.goo.gl/..." value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} /></div>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                {mode === 'edit' && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>🗑</button>}
+                {mode === 'edit' && isOwner && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>🗑</button>}
                 <button onClick={() => setMode('view')} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.title || !form.startTime} style={{ ...btnPrimary(), flex: 2, opacity: saving || !form.title || !form.startTime ? 0.6 : 1 }}>{saving ? '儲存中...' : mode === 'add' ? '✓ 新增' : '✓ 儲存'}</button>
               </div>
@@ -463,7 +464,7 @@ export default function SchedulePage({ events, project, firestore }: { events: a
 
         {/* Weather card + add button */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <div onClick={handleWeatherTap} style={{ flex: 1, background: 'linear-gradient(135deg,#D0E8F5,#E8F4E8)', borderRadius: 18, padding: '10px 14px', boxShadow: C.shadowSm, cursor: isReadOnly ? 'default' : 'pointer', userSelect: 'none' }}>
+          <div onClick={handleWeatherTap} style={{ flex: 1, background: 'linear-gradient(135deg,#D0E8F5,#E8F4E8)', borderRadius: 18, padding: '10px 14px', boxShadow: C.shadowSm, cursor: isOwner ? 'pointer' : 'default', userSelect: 'none' }}>
             {currentWeather ? (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{currentWeather.emoji}</span>

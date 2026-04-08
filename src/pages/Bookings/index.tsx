@@ -271,13 +271,13 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
       <div style={{ padding: '8px 16px 80px' }}>
 
         {/* ── 航班 ── */}
-        <SectionTitle action={isOwner && flights !== null && <EditBtn onClick={() => openEdit('flight', 0)} />}>✈️ 航班資訊</SectionTitle>
+        <SectionTitle action={!isReadOnly && flights !== null && <EditBtn onClick={() => openEdit('flight', 0)} />}>✈️ 航班資訊</SectionTitle>
         {!staticLoaded ? null : flights === null || flights.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px' }}>✈️</p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>航班資訊待更新</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊右上方 ✏️ 填入航班資料</p>
-            {isOwner && (
+            {!isReadOnly && (
               <button onClick={() => { setEditType('flight'); setEditIndex(0); setEditForm({ id: 'f1', direction: '去程', airline: '', flightNo: '', dep: { airport: '', name: '', time: '' }, arr: { airport: '', name: '', time: '' }, date: '', notes: '', costPerPerson: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                 ＋ 新增航班
@@ -287,7 +287,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
         ) : (flights || []).map((f, idx) => (
           <div key={f.id || idx} style={{ borderRadius: 24, overflow: 'hidden', boxShadow: C.shadow, marginBottom: 14 }}>
             <div style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 20px', position: 'relative' }}>
-              {isOwner && (
+              {!isReadOnly && (
                 <div style={{ position: 'absolute', top: 12, right: 12 }}>
                   <button onClick={() => openEdit('flight', idx)}
                     style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -295,7 +295,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
                   </button>
                 </div>
               )}
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingRight: isOwner ? 36 : 0 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10, paddingRight: !isReadOnly ? 36 : 0 }}>
                 <span style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.9)' }}>{f.airline}　{f.flightNo}</span>
                 <span style={{ fontSize: 11, fontWeight: 600, background: 'rgba(255,255,255,0.2)', color: 'white', borderRadius: 20, padding: '2px 10px' }}>{f.direction}　{f.date}</span>
               </div>
@@ -333,7 +333,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
             <p style={{ fontSize: 28, margin: '0 0 8px' }}>🏨</p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>住宿安排待更新</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 ✏️ 填入訂房資訊</p>
-            {isOwner && (
+            {!isReadOnly && (
               <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameJa: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: 'TWD', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                 ＋ 新增住宿
@@ -349,7 +349,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
                 <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameJa}</p>
                 <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>
               </div>
-              {isOwner && <EditBtn onClick={() => openEdit('hotel', idx)} />}
+              {!isReadOnly && <EditBtn onClick={() => openEdit('hotel', idx)} />}
             </div>
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
               <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '8px 10px' }}>
@@ -389,13 +389,13 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
         ))}
 
         {/* ── 租車 ── */}
-        <SectionTitle action={isOwner && car !== null && <EditBtn onClick={() => openEdit('car')} />}>🚗 租車資訊</SectionTitle>
+        <SectionTitle action={!isReadOnly && car !== null && <EditBtn onClick={() => openEdit('car')} />}>🚗 租車資訊</SectionTitle>
         {!staticLoaded ? null : car === null ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px' }}>🚗</p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>此行程未安排租車</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>如有租車需求，擁有者可點擊下方按鈕新增</p>
-            {isOwner && (
+            {!isReadOnly && (
               <button onClick={() => { setEditType('car'); setEditForm({ company: '', carType: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: 'JPY', confirmCode: '', notes: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: '#FFC107', color: '#333', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                 ＋ 新增租車
@@ -410,7 +410,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
               <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{car.company}　{car.carType}</p>
               {!isVisitor && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
             </div>
-            {isOwner && <EditBtn onClick={() => openEdit('car')} />}
+            {!isReadOnly && <EditBtn onClick={() => openEdit('car')} />}
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
             <div style={{ background: '#EAF8E6', borderRadius: 12, padding: '10px 12px' }}>

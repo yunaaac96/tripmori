@@ -681,8 +681,11 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           );
         })}
 
-        {/* 新增成員 */}
+        {/* 新增成員：owner 不限；editor 只能在尚未綁定前新增一張自己的卡 */}
         {!firestore.isReadOnly && (
+          firestore.role === 'owner' ||
+          (firestore.role === 'editor' && googleUid && !members.some((m: any) => m.googleUid === googleUid))
+        ) && (
           <div
             onClick={() => { setShowAdd(true); setEditTarget(null); setForm({ ...EMPTY_FORM }); }}
             style={{ background: 'var(--tm-card-bg)', borderRadius: 20, padding: '20px 14px', textAlign: 'center', border: `2px dashed ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, cursor: 'pointer' }}>

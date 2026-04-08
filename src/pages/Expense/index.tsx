@@ -270,6 +270,8 @@ function SettlementForm({ memberNames, onAdd, onClose, firestore }: {
 export default function ExpensePage({ expenses, members, firestore }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role } = firestore;
   const isVisitor = isReadOnly;
+  const isOwner = role === 'owner';
+  const currentUserName = localStorage.getItem('tripmori_current_user') || '';
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -511,6 +513,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
         await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', editingId), payload);
       } else {
         payload.createdAt = Timestamp.now();
+        payload.createdBy = currentUserName; // track creator for delete permissions
         await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
       }
     } catch (e) { console.error(e); }
@@ -518,8 +521,11 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
     closeForm();
   };
 
-  const handleDelete = async (id: string) => {
-    if (isReadOnly) return;
+  const canDeleteExpense = (e: any) =>
+    !isReadOnly && (isOwner || (currentUserName && e.createdBy === currentUserName));
+
+  const handleDelete = async (id: string, expense: any) => {
+    if (!canDeleteExpense(expense)) return;
     await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
   };
 
@@ -1134,10 +1140,12 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
                               ✏️
                             </button>
                           )}
-                          <button onClick={() => handleDelete(e.id)}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                            🗑
-                          </button>
+                          {canDeleteExpense(e) && (
+                            <button onClick={() => handleDelete(e.id, e)}
+                              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              🗑
+                            </button>
+                          )}
                         </div>
                       )}
                     </div>

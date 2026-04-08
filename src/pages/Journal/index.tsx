@@ -110,8 +110,10 @@ export default function JournalPage({ journals, members, journalComments, firest
     setForm({ content: '', date: '', author: '', photos: [] });
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async (id: string, authorName: string) => {
     if (isReadOnly) return;
+    // Editor: can only delete their own journal posts
+    if (role !== 'owner' && authorName !== currentUser) return;
     await deleteDoc(doc(db,'trips',TRIP_ID,'journals',id));
   };
 
@@ -367,8 +369,8 @@ export default function JournalPage({ journals, members, journalComments, firest
                           <p style={{ fontSize: 10, color: 'var(--tm-bark-light)', margin: 0 }}>{j.date}</p>
                         </div>
                       </div>
-                      {!isReadOnly && (
-                        <button onClick={() => handleDelete(j.id)}
+                      {!isReadOnly && (role === 'owner' || j.authorName === currentUser) && (
+                        <button onClick={() => handleDelete(j.id, j.authorName)}
                           style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑</button>
                       )}
                     </div>
@@ -388,14 +390,14 @@ export default function JournalPage({ journals, members, journalComments, firest
                         const reactors = reactions[emoji] || [];
                         const hasMyReact = reactors.includes(currentUser);
                         return (
-                          <button key={emoji} onClick={() => currentUser && handleReaction(j.id, emoji, reactions)}
+                          <button key={emoji} onClick={() => !isReadOnly && currentUser && handleReaction(j.id, emoji, reactions)}
                             style={{
                               padding: '4px 8px', borderRadius: 20,
                               border: `1.5px solid ${hasMyReact ? C.sageDark : 'var(--tm-cream-dark)'}`,
                               background: hasMyReact ? C.sageLight : 'var(--tm-card-bg)',
-                              fontSize: 14, cursor: currentUser ? 'pointer' : 'default',
+                              fontSize: 14, cursor: (!isReadOnly && currentUser) ? 'pointer' : 'default',
                               display: 'flex', alignItems: 'center', gap: 4, fontFamily: FONT,
-                              opacity: currentUser ? 1 : 0.7,
+                              opacity: (!isReadOnly && currentUser) ? 1 : 0.6,
                             }}>
                             {emoji}
                             {reactors.length > 0 && (
