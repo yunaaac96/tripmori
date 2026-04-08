@@ -226,15 +226,26 @@ function App() {
           setJournalComments(items);
           checkNotification(items, LS_SEEN_JOURNAL, '日誌');
         }));
-        // 站內通知（@標記、日誌留言）
-        // ── Real-time editor revocation: watch trip doc allowedEditorUids ──
+        // ── Watch trip doc: sync title changes + editor revocation ──
         const currentUid = auth.currentUser?.uid;
-        if (activeProject.role === 'editor' && currentUid) {
-          unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
-            if (!tripSnap.exists()) return;
-            const allowed: string[] = tripSnap.data().allowedEditorUids || [];
+        unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
+          if (!tripSnap.exists()) return;
+          const data = tripSnap.data();
+
+          // Sync title (and other top-level fields) back into activeProject for all roles
+          setActiveProjectState(prev => {
+            if (!prev) return prev;
+            const newTitle = data.title || prev.title;
+            if (newTitle === prev.title) return prev;
+            const updated = { ...prev, title: newTitle };
+            saveProject(updated);
+            return updated;
+          });
+
+          // Editor revocation: if owner removed this uid, downgrade to visitor
+          if (activeProject.role === 'editor' && currentUid) {
+            const allowed: string[] = data.allowedEditorUids || [];
             if (!allowed.includes(currentUid)) {
-              // Owner removed this editor — downgrade to visitor in-place
               setActiveProjectState(prev => {
                 if (!prev || prev.role !== 'editor') return prev;
                 const updated = { ...prev, role: 'visitor' as TripRole };
@@ -242,8 +253,8 @@ function App() {
                 return updated;
               });
             }
-          }));
-        }
+          }
+        }));
 
         unsubs.push(onSnapshot(collection(tripRef, 'notifications'), snap => {
           const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));

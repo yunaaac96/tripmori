@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getDoc } from 'firebase/firestore';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
@@ -77,6 +77,50 @@ export default function SchedulePage({ events, project, firestore }: { events: a
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [weather, setWeather]       = useState<Record<string, WeatherDay>>({});
   const [weatherSubtitle, setWeatherSubtitle] = useState('氣象資訊載入中…');
+  const [weatherLocationKey, setWeatherLocationKey] = useState(0); // increments to re-trigger fetch
+
+  // ── Location edit (double-tap weather card) ──
+  const [showLocEdit, setShowLocEdit] = useState(false);
+  const [locInput, setLocInput]       = useState('');
+  const [locSearching, setLocSearching] = useState(false);
+  const [locResults, setLocResults]   = useState<any[]>([]);
+  const lastTapRef = useRef<number>(0);
+
+  const handleWeatherTap = () => {
+    if (isReadOnly) return;
+    const now = Date.now();
+    if (now - lastTapRef.current < 350) {
+      lastTapRef.current = 0;
+      setLocInput(''); setLocResults([]); setShowLocEdit(true);
+    } else {
+      lastTapRef.current = now;
+    }
+  };
+
+  const handleLocSearch = async () => {
+    const q = locInput.trim();
+    if (!q) return;
+    setLocSearching(true);
+    try {
+      const res  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=zh&format=json`);
+      const data = await res.json();
+      setLocResults(data.results || []);
+    } catch { setLocResults([]); }
+    setLocSearching(false);
+  };
+
+  const handleLocSelect = async (result: any) => {
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID), {
+        locationLat:      result.latitude,
+        locationLng:      result.longitude,
+        locationTimezone: result.timezone || 'Asia/Tokyo',
+        locationName:     result.name,
+      });
+      setShowLocEdit(false);
+      setWeatherLocationKey(k => k + 1); // re-trigger weather useEffect
+    } catch (e) { console.error(e); }
+  };
 
   // Countdown timer
   useEffect(() => {
@@ -159,14 +203,14 @@ export default function SchedulePage({ events, project, firestore }: { events: a
             return;
           }
         }
-        // No location stored yet — show placeholder
-        setWeatherSubtitle('尚未設定目的地座標，請在建立行程時填寫目的地');
+        // No location stored yet — show fallback climate + hint
         const fallback: Record<string, WeatherDay> = {};
         TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
         setWeather(fallback);
+        setWeatherSubtitle('尚未設定目的地　輕點兩下設定');
       })
       .catch(() => applyFallback(project?.title || '目的地'));
-  }, [TRIP_ID]);
+  }, [TRIP_ID, weatherLocationKey]);
 
   const dayInfo = DAY_OPTIONS.find(d => d.date === activeDay)!;
   const currentWeather = weather[activeDay];
@@ -289,6 +333,52 @@ export default function SchedulePage({ events, project, firestore }: { events: a
         </div>
       )}
 
+      {/* ── Location edit sheet ── */}
+      {showLocEdit && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
+          onClick={e => { if (e.target === e.currentTarget) setShowLocEdit(false); }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>📍 設定目的地</p>
+              <button onClick={() => setShowLocEdit(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--tm-bark-light)' }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
+              <input
+                autoFocus
+                value={locInput}
+                onChange={e => setLocInput(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') handleLocSearch(); }}
+                placeholder="搜尋城市或地名，例如：沖繩、東京"
+                style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', fontSize: 15, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)', outline: 'none' }}
+              />
+              <button onClick={handleLocSearch} disabled={locSearching || !locInput.trim()}
+                style={{ padding: '10px 16px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, opacity: locSearching || !locInput.trim() ? 0.5 : 1 }}>
+                {locSearching ? '…' : '搜尋'}
+              </button>
+            </div>
+            {locResults.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                {locResults.map((r: any, i: number) => (
+                  <button key={i} onClick={() => handleLocSelect(r)}
+                    style={{ textAlign: 'left', padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>📍 {r.name}</p>
+                    <p style={{ fontSize: 11, color: 'var(--tm-bark-light)', margin: '2px 0 0' }}>
+                      {[r.admin1, r.country].filter(Boolean).join('・')}
+                      <span style={{ marginLeft: 6, opacity: 0.6 }}>{r.latitude?.toFixed(2)}, {r.longitude?.toFixed(2)}</span>
+                    </p>
+                  </button>
+                ))}
+              </div>
+            )}
+            {!locSearching && locResults.length === 0 && locInput && (
+              <p style={{ fontSize: 12, color: 'var(--tm-bark-light)', textAlign: 'center', padding: '12px 0 0', margin: 0 }}>
+                找不到結果，請試試其他關鍵字
+              </p>
+            )}
+          </div>
+        </div>
+      )}
+
       <PageHeader title={project?.title || '行程'} subtitle={project?.description || undefined} emoji={project?.emoji || '✈️'} color={C.sage}>
         <div style={{ marginTop: 14, background: C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
           <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>⏰ 距離出發</span>
@@ -321,7 +411,7 @@ export default function SchedulePage({ events, project, firestore }: { events: a
 
         {/* Weather card + add button */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <div style={{ flex: 1, background: 'linear-gradient(135deg,#D0E8F5,#E8F4E8)', borderRadius: 18, padding: '10px 14px', boxShadow: C.shadowSm }}>
+          <div onClick={handleWeatherTap} style={{ flex: 1, background: 'linear-gradient(135deg,#D0E8F5,#E8F4E8)', borderRadius: 18, padding: '10px 14px', boxShadow: C.shadowSm, cursor: isReadOnly ? 'default' : 'pointer', userSelect: 'none' }}>
             {currentWeather ? (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{currentWeather.emoji}</span>
