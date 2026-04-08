@@ -250,22 +250,23 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
   // ── Editor revocation + collaboratorKey (owner only) ────────
   const [allowedEditorUids, setAllowedEditorUids] = useState<string[]>([]);
+  const [editorInfo, setEditorInfo]               = useState<Record<string, { email: string; joinedAt: number }>>({});
   const [firestoreCollaboratorKey, setFirestoreCollaboratorKey] = useState<string>('');
 
   useEffect(() => {
     if (!TRIP_ID || firestore.role !== 'owner') return;
     getDoc(_doc(db, 'trips', TRIP_ID)).then(async (snap: any) => {
       if (!snap.exists()) return;
-      setAllowedEditorUids(snap.data().allowedEditorUids || []);
-      const existing = snap.data().collaboratorKey;
+      const data = snap.data();
+      setAllowedEditorUids(data.allowedEditorUids || []);
+      setEditorInfo(data.editorInfo || {});
+      const existing = data.collaboratorKey;
       if (existing) {
         setFirestoreCollaboratorKey(existing);
-        // Sync to localStorage if missing there
         if (project && !project.collaboratorKey) {
           saveProject({ ...project, collaboratorKey: existing });
         }
       } else {
-        // Auto-generate and persist
         const newKey = makeCollabKey(TRIP_ID);
         try {
           await _updateDoc(_doc(db, 'trips', TRIP_ID), { collaboratorKey: newKey });
@@ -277,10 +278,15 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   }, [TRIP_ID, firestore.role]);
 
   const handleRevokeEditor = async (uid: string) => {
-    if (!window.confirm('確定要移除此成員的編輯權限？對方將立即切換為訪客模式。')) return;
+    if (!window.confirm('確定要移除此編輯者的權限？對方將立即降級為訪客。')) return;
     try {
-      await updateDoc(doc(db, 'trips', TRIP_ID), { allowedEditorUids: arrayRemove(uid) });
+      const { deleteField } = require('firebase/firestore') as any;
+      await _updateDoc(_doc(db, 'trips', TRIP_ID), {
+        allowedEditorUids: arrayRemove(uid),
+        [`editorInfo.${uid}`]: deleteField(),
+      });
       setAllowedEditorUids(prev => prev.filter(u => u !== uid));
+      setEditorInfo(prev => { const n = { ...prev }; delete n[uid]; return n; });
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 
@@ -476,6 +482,44 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               <p style={{ fontSize: 12, fontWeight: 600, color: C.bark, margin: 0 }}>訪客專屬分享連結</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>對方點擊連結即可直接瀏覽行程（無需登入或輸入代碼）</p>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Editor list management (Owner only) */}
+      {firestore.role === 'owner' && allowedEditorUids.length > 0 && (
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px' }}>✏️ 編輯者名單</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {allowedEditorUids.map(uid => {
+              const info = editorInfo[uid];
+              // Try to find member card bound to this uid
+              const boundMember = members.find((m: any) => m.googleUid === uid);
+              const displayName = boundMember?.name || info?.email || uid.slice(0, 12) + '…';
+              const displaySub  = boundMember ? (info?.email || '') : (info?.email || '');
+              const joinDate    = info?.joinedAt
+                ? new Date(info.joinedAt).toLocaleDateString('zh-TW', { month: 'numeric', day: 'numeric' })
+                : '';
+              return (
+                <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--tm-input-bg)', borderRadius: 12, border: `1px solid ${C.creamDark}` }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: boundMember?.color || '#D8EDF8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: C.bark, flexShrink: 0 }}>
+                    {(boundMember?.name || displayName)[0]?.toUpperCase() || '?'}
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{displayName}</p>
+                    {(displaySub || joinDate) && (
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {displaySub}{displaySub && joinDate ? '・' : ''}{joinDate ? `加入 ${joinDate}` : ''}
+                      </p>
+                    )}
+                  </div>
+                  <button onClick={() => handleRevokeEditor(uid)}
+                    style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 10, border: '1px solid #E8C96A', background: '#FFF8E1', color: '#9A6800', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                    降級訪客
+                  </button>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

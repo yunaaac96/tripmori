@@ -398,11 +398,15 @@ function App() {
         setVisitorKeyError('金鑰不正確，請確認後再試');
         setVisitorKeyBusy(false); return;
       }
-      // Register editor UID in Firestore
+      // Register editor UID + email in Firestore
       const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
       if (user?.uid) {
-        try { await updateDoc(doc(db, 'trips', activeProject.id), { allowedEditorUids: arrayUnion(user.uid) }); }
-        catch (e) { console.error('Failed to register editor UID:', e); }
+        try {
+          await updateDoc(doc(db, 'trips', activeProject.id), {
+            allowedEditorUids: arrayUnion(user.uid),
+            [`editorInfo.${user.uid}`]: { email: user.email || '', joinedAt: Date.now() },
+          });
+        } catch (e) { console.error('Failed to register editor UID:', e); }
       }
       const upgraded: StoredProject = { ...activeProject, role: 'editor' };
       saveProject(upgraded);
