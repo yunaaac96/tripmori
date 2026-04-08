@@ -106,12 +106,12 @@ export default function SchedulePage({ events, project, firestore }: { events: a
       const fallback: Record<string, WeatherDay> = {};
       TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
       setWeather(fallback);
-      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 16 天更新即時預報）`);
+      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 10 天更新即時預報）`);
     };
 
     const fetchWeather = (lat: number, lng: number, timezone: string, locationName: string) => {
       const daysUntilTrip = Math.floor((new Date(startDate).getTime() - Date.now()) / 86400000);
-      if (daysUntilTrip > 16) {
+      if (daysUntilTrip > 10) {
         applyFallback(locationName);
         return;
       }
@@ -139,7 +139,10 @@ export default function SchedulePage({ events, project, firestore }: { events: a
             };
           });
           setWeather(result);
-          setWeatherSubtitle(`${locationName}　即時天氣預報`);
+          const subtitle = daysUntilTrip <= 0
+            ? `${locationName}　今日預報`
+            : `${locationName}　出發當天即時天氣預報`;
+          setWeatherSubtitle(subtitle);
         })
         .catch(() => applyFallback(locationName));
     };
