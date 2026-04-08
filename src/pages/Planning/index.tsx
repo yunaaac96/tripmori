@@ -236,7 +236,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         </div>
       )}
 
-      <PageHeader title="旅行準備" subtitle="待辦清單 · 行李清單" emoji="📋" color={C.earth}>
+      <PageHeader title="旅行準備" subtitle="待辦清單・行李清單" emoji="📋" color={C.earth}>
         {allTotal > 0 && (
           <div style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>

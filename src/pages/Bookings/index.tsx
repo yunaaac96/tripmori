@@ -266,7 +266,7 @@ export default function BookingsPage({ bookings, firestore }: { bookings: any[];
 
   return (
     <div style={{ fontFamily: FONT }}>
-      <PageHeader title="旅行預訂" subtitle="機票 · 住宿 · 租車 · 票券" emoji="✈️" color={C.sky} />
+      <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji="✈️" color={C.sky} />
 
       <div style={{ padding: '8px 16px 80px' }}>
 

@@ -179,6 +179,10 @@ function App() {
   // 啟動 Splash：每次 App mount（含桌機首次開啟）都先顯示動畫
   const [splashDone, setSplashDone] = useState(false);
   const [notifications, setNotifications] = useState<Record<string, boolean>>({ '成員': false, '日誌': false });
+  const [visitorKeyInput, setVisitorKeyInput] = useState('');
+  const [visitorKeyError, setVisitorKeyError] = useState('');
+  const [visitorKeyBusy, setVisitorKeyBusy]   = useState(false);
+  const [showKeyUpgrade, setShowKeyUpgrade]   = useState(false);
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）
@@ -291,6 +295,32 @@ function App() {
     setActiveProjectState(null);
   };
 
+  const handleUpgradeToEditor = async () => {
+    const key = visitorKeyInput.trim().toUpperCase();
+    if (!key) { setVisitorKeyError('請輸入協作金鑰'); return; }
+    if (!activeProject) return;
+    setVisitorKeyBusy(true); setVisitorKeyError('');
+    try {
+      // Validate against stored collaboratorKey
+      const expected = activeProject.collaboratorKey?.toUpperCase();
+      if (!expected || key !== expected) {
+        setVisitorKeyError('金鑰不正確，請確認後再試');
+        setVisitorKeyBusy(false); return;
+      }
+      // Register editor UID in Firestore
+      const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+      if (user?.uid) {
+        try { await updateDoc(doc(db, 'trips', activeProject.id), { allowedEditorUids: arrayUnion(user.uid) }); }
+        catch (e) { console.error('Failed to register editor UID:', e); }
+      }
+      const upgraded: StoredProject = { ...activeProject, role: 'editor' };
+      saveProject(upgraded);
+      setActiveProject(upgraded.id);
+      setActiveProjectState(upgraded);
+    } catch (e) { setVisitorKeyError('升級失敗，請重試'); }
+    setVisitorKeyBusy(false);
+  };
+
   // ── Splash screen：每次 App 啟動都先顯示（含桌機首次開啟）
   if (!splashDone) return <SplashScreen />;
 
@@ -311,7 +341,33 @@ function App() {
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (
           <div className="tm-visitor-banner" style={{ background: '#D8EDF8', padding: '8px 16px' }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+              <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
+              <button
+                onClick={() => { setShowKeyUpgrade(v => !v); setVisitorKeyError(''); setVisitorKeyInput(''); }}
+                style={{ fontSize: 11, fontWeight: 700, color: '#2A6A9A', background: 'white', border: '1.5px solid #A8CADF', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                {showKeyUpgrade ? '取消' : '輸入金鑰升級'}
+              </button>
+            </div>
+            {showKeyUpgrade && (
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <input
+                    value={visitorKeyInput}
+                    onChange={e => setVisitorKeyInput(e.target.value.toUpperCase())}
+                    placeholder="輸入協作金鑰"
+                    style={{ flex: 1, padding: '7px 12px', borderRadius: 10, border: '1.5px solid #A8CADF', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none', color: '#2A6A9A', letterSpacing: 1 }}
+                  />
+                  <button
+                    onClick={handleUpgradeToEditor}
+                    disabled={visitorKeyBusy}
+                    style={{ padding: '7px 14px', borderRadius: 10, border: 'none', background: '#2A6A9A', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: visitorKeyBusy ? 0.6 : 1 }}>
+                    {visitorKeyBusy ? '…' : '確認'}
+                  </button>
+                </div>
+                {visitorKeyError && <span style={{ fontSize: 11, color: '#9A3A3A' }}>{visitorKeyError}</span>}
+              </div>
+            )}
           </div>
         )}
 
@@ -339,7 +395,7 @@ function App() {
           </div>
         )}
 
-        {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} />}
+        {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} firestore={firestore} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}

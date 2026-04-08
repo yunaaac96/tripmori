@@ -391,7 +391,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
-      <PageHeader title="旅伴" subtitle={`${displayTeamName} · ${displayMembers.length} 人`} emoji="👥" color={C.earth}>
+      <PageHeader title="旅伴" subtitle={`${displayTeamName}・${displayMembers.length} 人`} emoji="👥" color={C.earth}>
         <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
           {editingTeamName ? (
             <div style={{ flex: 1, display: 'flex', gap: 6 }}>

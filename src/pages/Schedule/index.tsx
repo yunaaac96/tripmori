@@ -62,7 +62,7 @@ const FALLBACK_CLIMATE: WeatherDay = {
   outfit: outfitForTemp(26),
 };
 
-export default function SchedulePage({ events, project, firestore }: { events: any[]; members: any[]; project: any; firestore: any }) {
+export default function SchedulePage({ events, project, firestore, onProjectUpdate }: { events: any[]; members: any[]; project: any; firestore: any; onProjectUpdate?: (p: any) => void }) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly } = firestore;
 
   const TRIP_DATES = buildTripDates(project?.startDate || '2026-04-23', project?.endDate || '2026-04-26');
@@ -77,6 +77,11 @@ export default function SchedulePage({ events, project, firestore }: { events: a
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [weather, setWeather]       = useState<Record<string, WeatherDay>>({});
   const [weatherSubtitle, setWeatherSubtitle] = useState('氣象資訊載入中…');
+
+  // Trip meta edit (owner only)
+  const [editingMeta, setEditingMeta] = useState(false);
+  const [metaForm, setMetaForm] = useState({ startDate: '', endDate: '', description: '', currency: '' });
+  const [savingMeta, setSavingMeta]   = useState(false);
 
   // Countdown timer
   useEffect(() => {
@@ -218,6 +223,52 @@ export default function SchedulePage({ events, project, firestore }: { events: a
     setShowDeleteConfirm(false); setMode('view'); setSelectedEvent(null);
   };
 
+  const openMetaEdit = async () => {
+    // Fetch latest values from Firestore
+    try {
+      const snap = await getDoc(doc(db, 'trips', TRIP_ID));
+      const d = snap.exists() ? snap.data() : {};
+      setMetaForm({
+        startDate:   d.startDate   || project?.startDate   || '',
+        endDate:     d.endDate     || project?.endDate     || '',
+        description: d.description || project?.description || '',
+        currency:    d.currency    || 'JPY',
+      });
+    } catch {
+      setMetaForm({
+        startDate:   project?.startDate   || '',
+        endDate:     project?.endDate     || '',
+        description: project?.description || '',
+        currency:    'JPY',
+      });
+    }
+    setEditingMeta(true);
+  };
+
+  const handleSaveMeta = async () => {
+    setSavingMeta(true);
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID), {
+        startDate:   metaForm.startDate,
+        endDate:     metaForm.endDate || metaForm.startDate,
+        description: metaForm.description.trim(),
+        currency:    metaForm.currency,
+      });
+      if (onProjectUpdate && project) {
+        onProjectUpdate({
+          ...project,
+          startDate:   metaForm.startDate,
+          endDate:     metaForm.endDate || metaForm.startDate,
+          description: metaForm.description.trim(),
+        });
+      }
+      setEditingMeta(false);
+    } catch (e) { console.error(e); }
+    setSavingMeta(false);
+  };
+
+  const setMeta = (key: string, val: string) => setMetaForm(p => ({ ...p, [key]: val }));
+
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));
 
   // Build a Google Maps URL: prefer explicit mapUrl, fallback to search by location name
@@ -229,6 +280,42 @@ export default function SchedulePage({ events, project, firestore }: { events: a
 
   return (
     <div style={{ fontFamily: FONT }}>
+
+      {/* ── Trip Meta Edit Modal (owner only) ── */}
+      {editingMeta && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>✏️ 編輯旅行設定</p>
+              <button onClick={() => setEditingMeta(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>出發日期</label>
+                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="date" value={metaForm.startDate} onChange={e => setMeta('startDate', e.target.value)} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>回程日期</label>
+                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="date" value={metaForm.endDate} onChange={e => setMeta('endDate', e.target.value)} />
+                </div>
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>旅行簡介</label>
+                <textarea style={{ ...inputStyle, minHeight: 72, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="簡單描述這趟旅行…" value={metaForm.description} onChange={e => setMeta('description', e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>主要幣值</label>
+                <input style={inputStyle} placeholder="JPY / TWD / USD…" value={metaForm.currency} onChange={e => setMeta('currency', e.target.value.toUpperCase())} maxLength={5} />
+              </div>
+              <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
+                <button onClick={() => setEditingMeta(false)} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
+                <button onClick={handleSaveMeta} disabled={savingMeta} style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: savingMeta ? 0.6 : 1 }}>{savingMeta ? '儲存中...' : '✓ 儲存'}</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Inline Event Form Modal ── */}
       {(mode === 'add' || mode === 'edit') && (
@@ -293,6 +380,11 @@ export default function SchedulePage({ events, project, firestore }: { events: a
       )}
 
       <PageHeader title={project?.title || '行程'} subtitle={project?.description || undefined} emoji={project?.emoji || '✈️'} color={C.sage}>
+        {firestore.role === 'owner' && (
+          <button onClick={openMetaEdit} style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
+            ✏️ 編輯旅行設定
+          </button>
+        )}
         <div style={{ marginTop: 14, background: C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
           <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>⏰ 距離出發</span>
           <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>

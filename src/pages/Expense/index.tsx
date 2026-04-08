@@ -954,7 +954,7 @@ export default function ExpensePage({ expenses, members, firestore }: any) {
       )}
 
       {/* ── Page header ── */}
-      <PageHeader title="旅行記帳" subtitle="支出記錄 · 分帳結算" emoji="💰" color={C.sage}>
+      <PageHeader title="旅行記帳" subtitle="支出記錄・分帳結算" emoji="💰" color={C.sage}>
         <div style={{ marginTop: 12, background: 'rgba(255,255,255,0.2)', borderRadius: 14, padding: '12px 14px' }}>
           <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '0 0 2px' }}>總支出（換算台幣）</p>
           <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>NT$ {totalTWD.toLocaleString()}</p>
