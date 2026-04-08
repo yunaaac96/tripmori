@@ -12,7 +12,7 @@ import JournalPage from './pages/Journal/index';
 import PlanningPage from './pages/Planning/index';
 import MembersPage from './pages/Members/index';
 import ProjectHub, {
-  ensureDefaultProject, loadProjects, saveProject, setActiveProject, getActiveProject,
+  ensureDefaultProject, loadProjects, saveProject, removeProject, setActiveProject, getActiveProject,
   checkOwnerRole, StoredProject, TripRole,
 } from './pages/ProjectHub/index';
 
@@ -87,6 +87,20 @@ function App() {
       merge(ownedSnap,  'owner');
       merge(emailSnap,  'owner');
       merge(editorSnap, 'editor');
+
+      // Build set of trip IDs that actually exist in Firestore for this user
+      const firestoreIds = new Set<string>();
+      [ownedSnap, emailSnap, editorSnap].forEach(snap =>
+        snap.forEach((d: any) => firestoreIds.add(d.id))
+      );
+      // Remove from map any owner/editor trips that no longer exist in Firestore
+      // (visitor trips stay — we can't query them)
+      map.forEach((p, id) => {
+        if ((p.role === 'owner' || p.role === 'editor') && !firestoreIds.has(id)) {
+          map.delete(id);
+        }
+      });
+
       const updated = Array.from(map.values());
       localStorage.setItem('tripmori_projects', JSON.stringify(updated));
       setActiveProjectState(prev => {
@@ -293,10 +307,17 @@ function App() {
           setJournalComments(items);
           checkNotification(items, LS_SEEN_JOURNAL, '日誌');
         }));
-        // ── Watch trip doc: sync title changes + editor revocation ──
+        // ── Watch trip doc: sync title changes + editor revocation + deletion ──
         const currentUid = auth.currentUser?.uid;
         unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
-          if (!tripSnap.exists()) return;
+          if (!tripSnap.exists()) {
+            // Trip was deleted — evict from localStorage and return to hub for all users
+            removeProject(activeTripId);
+            localStorage.removeItem('tripmori_active_project');
+            setActiveProjectState(null);
+            window.dispatchEvent(new StorageEvent('storage', { key: 'tripmori_projects' }));
+            return;
+          }
           const data = tripSnap.data();
 
           // Sync title (and other top-level fields) back into activeProject for all roles
