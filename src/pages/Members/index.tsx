@@ -5,6 +5,7 @@ import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { getDoc, setDoc, arrayRemove } from 'firebase/firestore';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -239,8 +240,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
   useEffect(() => {
     if (!TRIP_ID || firestore.role !== 'owner') return;
-    const { getDoc: _getDoc, doc: _doc } = require('firebase/firestore') as any;
-    _getDoc(_doc(db, 'trips', TRIP_ID)).then((snap: any) => {
+    getDoc(doc(db, 'trips', TRIP_ID)).then((snap: any) => {
       if (snap.exists()) setAllowedEditorUids(snap.data().allowedEditorUids || []);
     }).catch(() => {});
   }, [TRIP_ID, firestore.role]);
@@ -248,8 +248,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const handleRevokeEditor = async (uid: string) => {
     if (!window.confirm('確定要移除此成員的編輯權限？對方將立即切換為訪客模式。')) return;
     try {
-      const { updateDoc: _updateDoc, arrayRemove: _arrayRemove, doc: _doc } = require('firebase/firestore') as any;
-      await _updateDoc(_doc(db, 'trips', TRIP_ID), { allowedEditorUids: _arrayRemove(uid) });
+      await updateDoc(doc(db, 'trips', TRIP_ID), { allowedEditorUids: arrayRemove(uid) });
       setAllowedEditorUids(prev => prev.filter(u => u !== uid));
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
@@ -263,8 +262,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   // Fetch teamName from Firestore trip doc
   useEffect(() => {
     if (!TRIP_ID) return;
-    const { getDoc: _getDoc, doc: _doc } = require('firebase/firestore') as any;
-    _getDoc(_doc(db, 'trips', TRIP_ID)).then((snap: any) => {
+    getDoc(doc(db, 'trips', TRIP_ID)).then((snap: any) => {
       if (snap.exists()) {
         setTeamName(snap.data().teamName || '');
       }
@@ -274,8 +272,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const handleSaveTeamName = async () => {
     const val = teamNameInput.trim() || defaultTeamName;
     try {
-      const { setDoc: _setDoc, doc: _doc } = require('firebase/firestore') as any;
-      await _setDoc(_doc(db, 'trips', TRIP_ID), { teamName: val }, { merge: true });
+      await setDoc(doc(db, 'trips', TRIP_ID), { teamName: val }, { merge: true });
       setTeamName(val);
     } catch (e) { console.error(e); }
     setEditingTeamName(false);

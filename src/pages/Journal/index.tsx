@@ -121,16 +121,27 @@ export default function JournalPage({ journals, members, journalComments, firest
   };
 
   // ── Reactions ──────────────────────────────────────────────────
+  // Each user can only hold one reaction per post; clicking a new emoji
+  // auto-removes the previous one in a single atomic write.
   const handleReaction = async (journalId: string, emoji: string, currentReactions: Record<string, string[]>) => {
     if (!currentUser) return;
     const existing = (currentReactions[emoji] || []) as string[];
     const hasReacted = existing.includes(currentUser);
+
+    // Build atomic update: remove user from any other emoji they already picked
+    const update: Record<string, any> = {};
+    for (const [e, reactors] of Object.entries(currentReactions)) {
+      if (e !== emoji && (reactors as string[]).includes(currentUser)) {
+        update[`reactions.${e}`] = arrayRemove(currentUser);
+      }
+    }
+    // Toggle the clicked emoji
+    update[`reactions.${emoji}`] = hasReacted
+      ? arrayRemove(currentUser)
+      : arrayUnion(currentUser);
+
     try {
-      await updateDoc(doc(db, 'trips', TRIP_ID, 'journals', journalId), {
-        [`reactions.${emoji}`]: hasReacted
-          ? arrayRemove(currentUser)
-          : arrayUnion(currentUser),
-      });
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'journals', journalId), update);
     } catch (e) { console.error(e); }
   };
 
