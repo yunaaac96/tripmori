@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
-import { signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
+import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
@@ -132,6 +132,26 @@ function App() {
       if (user && !user.isAnonymous && user.email) {
         wasGoogleSignedIn.current = true;
         syncUserTrips(user.uid, user.email);
+
+        // ── Complete pending key upgrade if a validated key is waiting ──
+        if (pendingKeyRef.current) {
+          pendingKeyRef.current = '';
+          setUpgradeStep('none');
+          setActiveProjectState(prev => {
+            if (!prev) return prev;
+            // Register editor UID in Firestore (fire-and-forget)
+            updateDoc(doc(db, 'trips', prev.id), {
+              allowedEditorUids: arrayUnion(user.uid),
+              [`editorInfo.${user.uid}`]: { email: user.email || '', joinedAt: Date.now() },
+            }).catch(console.error);
+            const upgraded: StoredProject = { ...prev, role: 'editor' };
+            saveProject(upgraded);
+            setActiveProject(upgraded.id);
+            setShowMemberBind(true); // trigger member card binding screen
+            return upgraded;
+          });
+          return; // skip owner check for this event
+        }
         checkOwnerRole(user.email).then(role => {
           if (role === 'owner') {
             setActiveProjectState(prev => {
@@ -273,6 +293,12 @@ function App() {
   const [visitorKeyError, setVisitorKeyError] = useState('');
   const [visitorKeyBusy, setVisitorKeyBusy]   = useState(false);
   const [showKeyUpgrade, setShowKeyUpgrade]   = useState(false);
+  // Upgrade flow: key validated → pending Google login → member card binding
+  type UpgradeStep = 'none' | 'input' | 'need-login' | 'signing-in' | 'binding';
+  const [upgradeStep, setUpgradeStep] = useState<UpgradeStep>('none');
+  const pendingKeyRef = useRef<string>(''); // survives re-renders / closure
+  const [showMemberBind, setShowMemberBind] = useState(false);
+  const [bindingMember, setBindingMember]   = useState(false);
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）
@@ -403,40 +429,75 @@ function App() {
     setActiveProjectState(null);
   };
 
-  const handleUpgradeToEditor = async () => {
+  // Step 1: validate key
+  const handleValidateKey = async () => {
     const key = visitorKeyInput.trim().toUpperCase();
     if (!key) { setVisitorKeyError('請輸入協作金鑰'); return; }
     if (!activeProject) return;
     setVisitorKeyBusy(true); setVisitorKeyError('');
     try {
-      // Validate collaboratorKey — fetch from Firestore if not cached locally
       let storedKey = activeProject.collaboratorKey?.toUpperCase() || '';
       if (!storedKey) {
-        try {
-          const tripSnap = await getDoc(doc(db, 'trips', activeProject.id));
-          storedKey = (tripSnap.data()?.collaboratorKey || '').toUpperCase();
-        } catch (e) { /* ignore, will fail validation below */ }
+        const tripSnap = await getDoc(doc(db, 'trips', activeProject.id));
+        storedKey = (tripSnap.data()?.collaboratorKey || '').toUpperCase();
       }
       if (!storedKey || key !== storedKey) {
         setVisitorKeyError('金鑰不正確，請確認後再試');
         setVisitorKeyBusy(false); return;
       }
-      // Register editor UID + email in Firestore
+      // Key is valid — check if already Google-signed-in
       const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
-      if (user?.uid) {
-        try {
-          await updateDoc(doc(db, 'trips', activeProject.id), {
-            allowedEditorUids: arrayUnion(user.uid),
-            [`editorInfo.${user.uid}`]: { email: user.email || '', joinedAt: Date.now() },
-          });
-        } catch (e) { console.error('Failed to register editor UID:', e); }
+      if (user) {
+        // Already logged in → complete upgrade immediately
+        await updateDoc(doc(db, 'trips', activeProject.id), {
+          allowedEditorUids: arrayUnion(user.uid),
+          [`editorInfo.${user.uid}`]: { email: user.email || '', joinedAt: Date.now() },
+        });
+        const upgraded: StoredProject = { ...activeProject, role: 'editor' };
+        saveProject(upgraded);
+        setActiveProject(upgraded.id);
+        setActiveProjectState(upgraded);
+        setShowKeyUpgrade(false);
+        setUpgradeStep('binding');
+        setShowMemberBind(true);
+      } else {
+        // Not logged in → save validated key, prompt Google login
+        pendingKeyRef.current = key;
+        setUpgradeStep('need-login');
       }
-      const upgraded: StoredProject = { ...activeProject, role: 'editor' };
-      saveProject(upgraded);
-      setActiveProject(upgraded.id);
-      setActiveProjectState(upgraded);
-    } catch (e) { setVisitorKeyError('升級失敗，請重試'); }
+    } catch (e) { setVisitorKeyError('驗證失敗，請重試'); }
     setVisitorKeyBusy(false);
+  };
+
+  // Step 2: Google sign-in popup (for key upgrade flow)
+  const handleGoogleSignInForUpgrade = async () => {
+    setUpgradeStep('signing-in');
+    try {
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      // onAuthStateChanged will fire and complete the upgrade via pendingKeyRef
+    } catch (e: any) {
+      pendingKeyRef.current = '';
+      setUpgradeStep('need-login');
+      setVisitorKeyError('登入取消或失敗，請重試');
+    }
+  };
+
+  // Bind current Google account to a member card
+  const handleBindMemberCard = async (memberId: string) => {
+    const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+    if (!user || !activeProject) return;
+    setBindingMember(true);
+    try {
+      await updateDoc(doc(db, 'trips', activeProject.id, 'members', memberId), {
+        googleUid: user.uid,
+        googleEmail: user.email || '',
+      });
+      localStorage.setItem('tripmori_current_user',
+        members.find((m: any) => m.id === memberId)?.name || '');
+    } catch (e) { console.error(e); }
+    setBindingMember(false);
+    setShowMemberBind(false);
+    setUpgradeStep('none');
   };
 
   // ── Splash screen：每次 App 啟動都先顯示（含桌機首次開啟）
@@ -459,32 +520,53 @@ function App() {
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (
           <div className="tm-visitor-banner" style={{ background: '#D8EDF8', padding: '8px 16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
-              <button
-                onClick={() => { setShowKeyUpgrade(v => !v); setVisitorKeyError(''); setVisitorKeyInput(''); }}
-                style={{ fontSize: 11, fontWeight: 700, color: '#2A6A9A', background: 'white', border: '1.5px solid #A8CADF', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
-                {showKeyUpgrade ? '取消' : '輸入金鑰升級'}
-              </button>
-            </div>
-            {showKeyUpgrade && (
-              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                <div style={{ display: 'flex', gap: 6 }}>
-                  <input
-                    value={visitorKeyInput}
-                    onChange={e => setVisitorKeyInput(e.target.value.toUpperCase())}
-                    placeholder="輸入協作金鑰"
-                    style={{ flex: 1, padding: '7px 12px', borderRadius: 10, border: '1.5px solid #A8CADF', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none', color: '#2A6A9A', letterSpacing: 1 }}
-                  />
-                  <button
-                    onClick={handleUpgradeToEditor}
-                    disabled={visitorKeyBusy}
-                    style={{ padding: '7px 14px', borderRadius: 10, border: 'none', background: '#2A6A9A', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: visitorKeyBusy ? 0.6 : 1 }}>
-                    {visitorKeyBusy ? '…' : '確認'}
-                  </button>
+            {upgradeStep === 'need-login' || upgradeStep === 'signing-in' ? (
+              /* Step 2: prompt Google login */
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>✅ 金鑰驗證成功</span>
+                  <button onClick={() => { setUpgradeStep('none'); pendingKeyRef.current = ''; setVisitorKeyInput(''); setVisitorKeyError(''); }}
+                    style={{ fontSize: 11, color: '#2A6A9A', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 </div>
+                <p style={{ fontSize: 11, color: '#2A6A9A', margin: 0 }}>請登入 Google 帳號以完成身份綁定，成為協作編輯者</p>
+                <button onClick={handleGoogleSignInForUpgrade} disabled={upgradeStep === 'signing-in'}
+                  style={{ padding: '9px 14px', borderRadius: 10, border: 'none', background: upgradeStep === 'signing-in' ? '#9AAFC8' : '#2A6A9A', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, width: '100%' }}>
+                  <span style={{ fontSize: 15, fontWeight: 900, background: 'white', color: '#4285F4', borderRadius: 4, width: 20, height: 20, display: 'inline-flex', alignItems: 'center', justifyContent: 'center' }}>G</span>
+                  {upgradeStep === 'signing-in' ? '登入中…' : '使用 Google 帳號登入並綁定'}
+                </button>
                 {visitorKeyError && <span style={{ fontSize: 11, color: '#9A3A3A' }}>{visitorKeyError}</span>}
               </div>
+            ) : (
+              /* Step 1: key input */
+              <>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
+                  <button
+                    onClick={() => { setShowKeyUpgrade(v => !v); setVisitorKeyError(''); setVisitorKeyInput(''); setUpgradeStep('none'); }}
+                    style={{ fontSize: 11, fontWeight: 700, color: '#2A6A9A', background: 'white', border: '1.5px solid #A8CADF', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                    {showKeyUpgrade ? '取消' : '輸入金鑰升級'}
+                  </button>
+                </div>
+                {showKeyUpgrade && (
+                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        value={visitorKeyInput}
+                        onChange={e => setVisitorKeyInput(e.target.value.toUpperCase())}
+                        placeholder="輸入協作金鑰"
+                        style={{ flex: 1, padding: '7px 12px', borderRadius: 10, border: '1.5px solid #A8CADF', background: 'white', fontSize: 13, fontFamily: FONT, outline: 'none', color: '#2A6A9A', letterSpacing: 1 }}
+                      />
+                      <button
+                        onClick={handleValidateKey}
+                        disabled={visitorKeyBusy}
+                        style={{ padding: '7px 14px', borderRadius: 10, border: 'none', background: '#2A6A9A', color: 'white', fontSize: 13, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: visitorKeyBusy ? 0.6 : 1 }}>
+                        {visitorKeyBusy ? '…' : '確認'}
+                      </button>
+                    </div>
+                    {visitorKeyError && <span style={{ fontSize: 11, color: '#9A3A3A' }}>{visitorKeyError}</span>}
+                  </div>
+                )}
+              </>
             )}
           </div>
         )}
@@ -520,6 +602,53 @@ function App() {
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
+
+        {/* ── Member card binding modal (shown after key upgrade) ── */}
+        {showMemberBind && (
+          <div style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+            <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', fontFamily: FONT, maxHeight: '80vh', overflowY: 'auto' }}>
+              <div style={{ textAlign: 'center', marginBottom: 20 }}>
+                <div style={{ fontSize: 32, marginBottom: 6 }}>🎉</div>
+                <p style={{ fontSize: 16, fontWeight: 800, color: C.bark, margin: '0 0 4px' }}>已成功加入協作！</p>
+                <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>請選擇你的成員卡，或新增一張</p>
+              </div>
+
+              {/* Unbound member cards */}
+              {members.filter((m: any) => !m.googleUid).length > 0 && (
+                <div style={{ marginBottom: 16 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 10px' }}>選擇已有的成員卡</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {members.filter((m: any) => !m.googleUid).map((m: any) => (
+                      <button key={m.id} onClick={() => handleBindMemberCard(m.id)} disabled={bindingMember}
+                        style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', width: '100%', opacity: bindingMember ? 0.6 : 1 }}>
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: m.color || '#E0D9C8', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
+                          {m.avatarUrl ? <img src={m.avatarUrl} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" /> : m.name?.[0] || '?'}
+                        </div>
+                        <div>
+                          <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>
+                          {m.role && <p style={{ fontSize: 11, color: C.barkLight, margin: '1px 0 0' }}>{m.role}</p>}
+                        </div>
+                        <span style={{ marginLeft: 'auto', fontSize: 12, fontWeight: 700, color: '#4A7A35' }}>這是我 →</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Skip / handle later */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <button onClick={() => { setShowMemberBind(false); setActiveTab('成員'); }}
+                  style={{ padding: '12px', borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT }}>
+                  ＋ 前往成員頁新增成員卡
+                </button>
+                <button onClick={() => { setShowMemberBind(false); setUpgradeStep('none'); }}
+                  style={{ padding: '10px', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'transparent', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                  稍後再綁定
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
