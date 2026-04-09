@@ -571,23 +571,40 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           {/* ── Owner-only: Google binding summary ── */}
           {firestore.role === 'owner' && members.length > 0 && (
             <div style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 16px', marginBottom: 14, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 8px' }}>🔐 帳號綁定總覽（擁有者）</p>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 10px' }}>🔐 帳號綁定總覽</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {members.map((m: any) => (
-                  <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <div style={{ width: 28, height: 28, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, flexShrink: 0, overflow: 'hidden' }}>
-                      {m.avatarUrl
-                        ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : m.name?.[0]?.toUpperCase()
+                {/* Owner member first (bound to current googleUid), then editors, then rest */}
+                {[
+                  ...members.filter((m: any) => googleUid && m.googleUid === googleUid),
+                  ...members.filter((m: any) => m.googleUid && m.googleUid !== googleUid && allowedEditorUids.includes(m.googleUid)),
+                  ...members.filter((m: any) => !m.googleUid || (!allowedEditorUids.includes(m.googleUid) && !(googleUid && m.googleUid === googleUid))),
+                ].map((m: any) => {
+                  const isOwnerCard = googleUid && m.googleUid === googleUid;
+                  const isEditorCard = m.googleUid && allowedEditorUids.includes(m.googleUid) && !isOwnerCard;
+                  const rowBg = isOwnerCard ? '#E8F5E2' : isEditorCard ? '#EEF5FF' : 'var(--tm-cream)';
+                  const badge = isOwnerCard
+                    ? <span style={{ fontSize: 10, fontWeight: 700, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>擁有者</span>
+                    : isEditorCard
+                      ? <span style={{ fontSize: 10, fontWeight: 700, background: '#9A6800', color: 'white', borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>編輯者</span>
+                      : null;
+                  return (
+                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: rowBg, borderRadius: 10, padding: '6px 10px' }}>
+                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, flexShrink: 0, overflow: 'hidden' }}>
+                        {m.avatarUrl
+                          ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : m.name?.[0]?.toUpperCase()
+                        }
+                      </div>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: C.bark, minWidth: 50, flexShrink: 0 }}>{m.name}</span>
+                      {badge}
+                      <span style={{ flex: 1 }} />
+                      {m.googleEmail
+                        ? <span style={{ fontSize: 11, color: '#2A6A9A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{m.googleEmail}</span>
+                        : <span style={{ fontSize: 11, color: '#9A8A7A' }}>尚未綁定</span>
                       }
                     </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: C.bark, minWidth: 60 }}>{m.name}</span>
-                    {m.googleEmail
-                      ? <span style={{ fontSize: 11, color: '#2A6A9A', background: '#D8EDF8', borderRadius: 8, padding: '2px 8px', fontWeight: 600 }}>📧 {m.googleEmail}</span>
-                      : <span style={{ fontSize: 11, color: '#9A8A7A', background: '#F5F5F5', borderRadius: 8, padding: '2px 8px' }}>尚未綁定</span>
-                    }
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
           )}
