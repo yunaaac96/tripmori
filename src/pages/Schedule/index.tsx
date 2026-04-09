@@ -78,6 +78,9 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [tripPhase, setTripPhase]   = useState<'before' | 'during' | 'after'>('before');
+  // Flight-based countdown anchors (fetched from staticFlights)
+  const [flightStartMs, setFlightStartMs] = useState<number | null>(null);
+  const [flightEndMs,   setFlightEndMs]   = useState<number | null>(null);
   const [weather, setWeather]       = useState<Record<string, WeatherDay>>({});
   const [weatherSubtitle, setWeatherSubtitle] = useState('氣象資訊載入中…');
   const [weatherLocationKey, setWeatherLocationKey] = useState(0); // increments to re-trigger fetch
@@ -182,11 +185,36 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [metaForm, setMetaForm] = useState({ startDate: '', endDate: '', description: '', currency: '' });
   const [savingMeta, setSavingMeta]   = useState(false);
 
-  // Countdown timer — counts to start, then to end, then shows ended
+  // Fetch staticFlights → extract outbound departure + return arrival timestamps
   useEffect(() => {
-    const startMs = new Date(`${project?.startDate || '2026-04-23'}T00:00:00`).getTime();
-    // End of trip = endDate 23:59:59
-    const endMs   = new Date(`${project?.endDate || project?.startDate || '2026-04-23'}T23:59:59`).getTime();
+    if (!db || !TRIP_ID || !doc) return;
+    getDoc(doc(db, 'trips', TRIP_ID)).then(snap => {
+      if (!snap.exists()) return;
+      const flts: any[] = snap.data().staticFlights || [];
+      if (!flts.length) return;
+      // Outbound: direction === '去程', fallback to first flight
+      const outbound = flts.find(f => f.direction === '去程') ?? flts[0];
+      // Return: direction === '回程', fallback to last flight
+      const inbound  = flts.find(f => f.direction === '回程') ?? flts[flts.length - 1];
+      if (outbound?.date && outbound?.dep?.time) {
+        setFlightStartMs(new Date(`${outbound.date}T${outbound.dep.time}:00`).getTime());
+      }
+      if (inbound?.date && inbound?.arr?.time) {
+        setFlightEndMs(new Date(`${inbound.date}T${inbound.arr.time}:00`).getTime());
+      }
+    }).catch(() => {});
+  }, [db, TRIP_ID]);
+
+  // Countdown timer:
+  //   before  → count down to outbound departure time
+  //   during  → hidden (no countdown shown)
+  //   after   → show "旅行已結束" once past return arrival time
+  useEffect(() => {
+    // Prefer flight times; fallback to startDate 00:00 / endDate 23:59
+    const startMs = flightStartMs
+      ?? new Date(`${project?.startDate || '2026-04-23'}T00:00:00`).getTime();
+    const endMs = flightEndMs
+      ?? new Date(`${project?.endDate || project?.startDate || '2026-04-23'}T23:59:59`).getTime();
     const tick = () => {
       const now = Date.now();
       if (now < startMs) {
@@ -200,13 +228,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
         });
       } else if (now <= endMs) {
         setTripPhase('during');
-        const diff = endMs - now;
-        setCountdown({
-          d: Math.floor(diff / 86400000),
-          h: Math.floor((diff % 86400000) / 3600000),
-          m: Math.floor((diff % 3600000) / 60000),
-          s: Math.floor((diff % 60000) / 1000),
-        });
+        setCountdown({ d: 0, h: 0, m: 0, s: 0 });
       } else {
         setTripPhase('after');
         setCountdown({ d: 0, h: 0, m: 0, s: 0 });
@@ -215,7 +237,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     tick();
     const t = setInterval(tick, 1000);
     return () => clearInterval(t);
-  }, [project?.startDate, project?.endDate]);
+  }, [project?.startDate, project?.endDate, flightStartMs, flightEndMs]);
 
   // Weather fetch — reads project location from Firestore, then calls Open-Meteo
   useEffect(() => {
@@ -548,29 +570,29 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
             ✏️ 編輯旅行設定
           </button>
         )}
-        <div style={{ marginTop: 14, background: tripPhase === 'after' ? '#E8F5E2' : C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
-          {tripPhase === 'after' ? (
-            <>
-              <span style={{ fontWeight: 700, fontSize: 12, color: '#4A7A35' }}>✈️ 旅程已結束</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', opacity: 0.75 }}>回憶珍藏中 🌸</span>
-            </>
-          ) : (
-            <>
-              <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>
-                {tripPhase === 'during' ? '🌟 距離旅程結束' : '⏰ 距離出發'}
-              </span>
-              <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>
-                {([['d', '天', countdown.d], ['h', '時', countdown.h], ['m', '分', countdown.m], ['s', '秒', countdown.s]] as [string, string, number][]).map(([k, u, v], i) => (
-                  <span key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
-                    {i > 0 && <span style={{ opacity: 0.4, marginRight: 2 }}>:</span>}
-                    <span style={{ fontSize: 18 }}>{String(v).padStart(2, '0')}</span>
-                    <span style={{ fontSize: 9, opacity: 0.65 }}>{u}</span>
-                  </span>
-                ))}
-              </div>
-            </>
-          )}
-        </div>
+        {tripPhase !== 'during' && (
+          <div style={{ marginTop: 14, background: tripPhase === 'after' ? '#E8F5E2' : C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
+            {tripPhase === 'after' ? (
+              <>
+                <span style={{ fontWeight: 700, fontSize: 12, color: '#4A7A35' }}>✈️ 旅程已結束</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', opacity: 0.75 }}>回憶珍藏中 🌸</span>
+              </>
+            ) : (
+              <>
+                <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>⏰ 距離出發</span>
+                <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>
+                  {([['d', '天', countdown.d], ['h', '時', countdown.h], ['m', '分', countdown.m], ['s', '秒', countdown.s]] as [string, string, number][]).map(([k, u, v], i) => (
+                    <span key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+                      {i > 0 && <span style={{ opacity: 0.4, marginRight: 2 }}>:</span>}
+                      <span style={{ fontSize: 18 }}>{String(v).padStart(2, '0')}</span>
+                      <span style={{ fontSize: 9, opacity: 0.65 }}>{u}</span>
+                    </span>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        )}
       </PageHeader>
 
       <div style={{ padding: '16px 16px 0', textAlign: 'left' }}>
