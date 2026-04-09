@@ -188,7 +188,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     }
   }, [showForm]);
 
-  const memberNames: string[] = members.length > 0 ? members.map((m: any) => m.name) : ['uu', 'brian'];
+  const memberNames: string[] = members.map((m: any) => m.name);
 
   // Approximate exchange rates to TWD (for display convenience)
   const CURRENCY_TO_TWD: Record<string, number> = {
@@ -268,6 +268,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // ── Receipt photo upload ────────────────────────────────────────────────
   const handleReceiptUpload = async (file: File) => {
     if (!TRIP_ID) return;
+    if (!file.type.startsWith('image/')) {
+      alert('請上傳圖片格式的附件（JPG、PNG、HEIC 等）');
+      return;
+    }
     setReceiptUploading(true);
     try {
       const storage = getStorage();
@@ -389,7 +393,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         payload.createdBy = currentUserName; // track creator for delete permissions
         await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
       }
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      setSaving(false);
+      alert('儲存失敗，請檢查網路連線後再試');
+      return;
+    }
     setSaving(false);
     closeForm();
   };

@@ -293,7 +293,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                       <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
                         <img src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
                         <button onClick={() => removePhoto(idx)}
-                          style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: '#E76F51', border: 'none', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
+                          style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
                       </div>
                     ))}
                   </div>

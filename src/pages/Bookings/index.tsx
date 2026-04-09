@@ -157,7 +157,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
   const openEdit = (type: EditType, idx = 0) => {
     setEditType(type);
     setEditIndex(idx);
-    if (type === 'hotel')  setEditForm({ currency: projCurrency, ...hotels[idx] });
+    if (type === 'hotel' && hotels[idx])  setEditForm({ currency: projCurrency, ...hotels[idx] });
     if (type === 'car')    setEditForm({ currency: projCurrency, ...car });
   };
 

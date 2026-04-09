@@ -315,7 +315,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       .catch(() => applyFallback(project?.title || '目的地'));
   }, [TRIP_ID, weatherLocationKey]);
 
-  const dayInfo = DAY_OPTIONS.find(d => d.date === activeDay)!;
+  const dayInfo = DAY_OPTIONS.find(d => d.date === activeDay) ?? DAY_OPTIONS[0];
   const currentWeather = weather[activeDay];
 
   const dayEvents = events
