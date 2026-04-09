@@ -443,7 +443,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               <button onClick={() => setMode('view')} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>行程名稱 *</label><input style={inputStyle} placeholder="例：美麗海水族館" value={form.title} onChange={e => set('title', e.target.value)} /></div>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>行程名稱 *</label><input style={inputStyle} placeholder="台北101" value={form.title} onChange={e => set('title', e.target.value)} /></div>
               {/* 時間欄：flex 取代 grid，避免 iOS time input overflow */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>

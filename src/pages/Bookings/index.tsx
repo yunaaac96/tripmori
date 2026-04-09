@@ -128,17 +128,31 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
   const [editForm,  setEditForm]  = useState<any>({});
   const [staticSaving, setStaticSaving] = useState(false);
 
+  const projCurrency = project?.currency || 'JPY';
+
   const openEdit = (type: EditType, idx = 0) => {
     setEditType(type);
     setEditIndex(idx);
     if (type === 'flight') setEditForm({ ...flights[idx] });
-    if (type === 'hotel')  setEditForm({ ...hotels[idx] });
-    if (type === 'car')    setEditForm({ ...car });
+    if (type === 'hotel')  setEditForm({ currency: projCurrency, ...hotels[idx] });
+    if (type === 'car')    setEditForm({ currency: projCurrency, ...car });
   };
 
   const setF = (key: string, val: any) => setEditForm((p: any) => ({ ...p, [key]: val }));
   const setDep = (key: string, val: string) => setEditForm((p: any) => ({ ...p, dep: { ...p.dep, [key]: val } }));
   const setArr = (key: string, val: string) => setEditForm((p: any) => ({ ...p, arr: { ...p.arr, [key]: val } }));
+
+  // ── Date+time helpers ────────────────────────────────────
+  const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
+    const h = String(Math.floor(i / 2)).padStart(2, '0');
+    const m = i % 2 === 0 ? '00' : '30';
+    return `${h}:${m}`;
+  });
+  const splitDT = (val: string) => {
+    const parts = (val || '').trim().split(/\s+/);
+    return { date: parts[0] || '', time: parts[1] || '' };
+  };
+  const joinDT = (date: string, time: string) => `${date}  ${time}`;
 
   const handleStaticSave = async () => {
     if (!updateDoc || !doc || !db || !TRIP_ID) return;
@@ -467,7 +481,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
         {/* ── 其他預訂（動態）── */}
         <SectionTitle action={
           !isReadOnly && (
-            <button onClick={() => setShowAdd(true)}
+            <button onClick={() => { setCustomForm({ ...EMPTY_CUSTOM_FORM, currency: projCurrency }); setShowAdd(true); }}
               style={{ fontSize: 12, fontWeight: 700, color: 'white', background: C.earth, border: 'none', borderRadius: 10, padding: '5px 12px', cursor: 'pointer', fontFamily: FONT }}>
               ＋ 新增
             </button>
@@ -607,18 +621,18 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 </Row>
                 <Row>
                   <Field label="航空公司"><input style={inSt} value={editForm.airline || ''} onChange={e => setF('airline', e.target.value)} /></Field>
-                  <Field label="航班號"><input style={inSt} placeholder="IT 230" value={editForm.flightNo || ''} onChange={e => setF('flightNo', e.target.value)} /></Field>
+                  <Field label="航班號"><input style={inSt} value={editForm.flightNo || ''} onChange={e => setF('flightNo', e.target.value)} /></Field>
                 </Row>
                 <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '4px 0 0' }}>出發</p>
                 <Row>
-                  <Field label="機場代碼"><input style={inSt} placeholder="TPE" value={editForm.dep?.airport || ''} onChange={e => setDep('airport', e.target.value)} /></Field>
-                  <Field label="機場名稱"><input style={inSt} placeholder="台北桃園" value={editForm.dep?.name || ''} onChange={e => setDep('name', e.target.value)} /></Field>
+                  <Field label="機場代碼"><input style={inSt} value={editForm.dep?.airport || ''} onChange={e => setDep('airport', e.target.value)} /></Field>
+                  <Field label="機場名稱"><input style={inSt} value={editForm.dep?.name || ''} onChange={e => setDep('name', e.target.value)} /></Field>
                   <Field label="時間"><input style={inSt} type="time" value={editForm.dep?.time || ''} onChange={e => setDep('time', e.target.value)} /></Field>
                 </Row>
                 <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '4px 0 0' }}>抵達</p>
                 <Row>
-                  <Field label="機場代碼"><input style={inSt} placeholder="OKA" value={editForm.arr?.airport || ''} onChange={e => setArr('airport', e.target.value)} /></Field>
-                  <Field label="機場名稱"><input style={inSt} placeholder="沖繩那霸" value={editForm.arr?.name || ''} onChange={e => setArr('name', e.target.value)} /></Field>
+                  <Field label="機場代碼"><input style={inSt} value={editForm.arr?.airport || ''} onChange={e => setArr('airport', e.target.value)} /></Field>
+                  <Field label="機場名稱"><input style={inSt} value={editForm.arr?.name || ''} onChange={e => setArr('name', e.target.value)} /></Field>
                   <Field label="時間"><input style={inSt} type="time" value={editForm.arr?.time || ''} onChange={e => setArr('time', e.target.value)} /></Field>
                 </Row>
                 <Field label="每人票價（NT$，選填）"><input style={inSt} type="number" value={editForm.costPerPerson || ''} onChange={e => setF('costPerPerson', e.target.value)} /></Field>
@@ -630,16 +644,30 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 <Field label="飯店名稱 *"><input style={inSt} value={editForm.name || ''} onChange={e => setF('name', e.target.value)} /></Field>
                 <Field label="當地名稱（選填）"><input style={inSt} value={editForm.nameJa || ''} onChange={e => setF('nameJa', e.target.value)} /></Field>
                 <Row>
-                  <Field label="Check-in *"><input style={inSt} placeholder="2026-04-23  14:00" value={editForm.checkIn || ''} onChange={e => setF('checkIn', e.target.value)} /></Field>
-                  <Field label="Check-out *"><input style={inSt} placeholder="2026-04-24  11:00" value={editForm.checkOut || ''} onChange={e => setF('checkOut', e.target.value)} /></Field>
+                  <Field label="Check-in 日期"><input style={inSt} type="date" value={splitDT(editForm.checkIn).date} onChange={e => setF('checkIn', joinDT(e.target.value, splitDT(editForm.checkIn).time || '14:00'))} /></Field>
+                  <Field label="時間">
+                    <select style={selSt} value={splitDT(editForm.checkIn).time || '14:00'} onChange={e => setF('checkIn', joinDT(splitDT(editForm.checkIn).date, e.target.value))}>
+                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </Field>
+                </Row>
+                <Row>
+                  <Field label="Check-out 日期"><input style={inSt} type="date" value={splitDT(editForm.checkOut).date} onChange={e => setF('checkOut', joinDT(e.target.value, splitDT(editForm.checkOut).time || '11:00'))} /></Field>
+                  <Field label="時間">
+                    <select style={selSt} value={splitDT(editForm.checkOut).time || '11:00'} onChange={e => setF('checkOut', joinDT(splitDT(editForm.checkOut).date, e.target.value))}>
+                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </Field>
                 </Row>
                 <Field label="訂單編號 *"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
                 <Row>
                   <Field label="幣別">
-                    <select style={selSt} value={editForm.currency || project?.currency || 'JPY'} onChange={e => setF('currency', e.target.value)}>
-                      {project?.currency && project.currency !== 'TWD' && <option value={project.currency}>{project.currency}</option>}
+                    <select style={selSt} value={editForm.currency || projCurrency} onChange={e => setF('currency', e.target.value)}>
+                      {projCurrency !== 'TWD' && <option value={projCurrency}>{projCurrency}</option>}
                       <option value="TWD">TWD</option>
-                      {(!project?.currency || project.currency === 'TWD') && <option value="JPY">JPY</option>}
+                      {projCurrency !== 'JPY' && <option value="JPY">JPY</option>}
+                      {projCurrency !== 'KRW' && <option value="KRW">KRW</option>}
+                      {projCurrency !== 'USD' && <option value="USD">USD</option>}
                     </select>
                   </Field>
                   <Field label="總費用（選填）"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
@@ -661,13 +689,31 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                   <Field label="車型"><input style={inSt} value={editForm.carType || ''} onChange={e => setF('carType', e.target.value)} /></Field>
                 </Row>
                 <Field label="取車地點"><input style={inSt} value={editForm.pickupLocation || ''} onChange={e => setF('pickupLocation', e.target.value)} /></Field>
-                <Field label="取車時間"><input style={inSt} placeholder="2026-04-23  11:00" value={editForm.pickupTime || ''} onChange={e => setF('pickupTime', e.target.value)} /></Field>
+                <Row>
+                  <Field label="取車日期"><input style={inSt} type="date" value={splitDT(editForm.pickupTime).date} onChange={e => setF('pickupTime', joinDT(e.target.value, splitDT(editForm.pickupTime).time || '11:00'))} /></Field>
+                  <Field label="時間">
+                    <select style={selSt} value={splitDT(editForm.pickupTime).time || '11:00'} onChange={e => setF('pickupTime', joinDT(splitDT(editForm.pickupTime).date, e.target.value))}>
+                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </Field>
+                </Row>
                 <Field label="還車地點"><input style={inSt} value={editForm.returnLocation || ''} onChange={e => setF('returnLocation', e.target.value)} /></Field>
-                <Field label="還車時間"><input style={inSt} placeholder="2026-04-26  13:30" value={editForm.returnTime || ''} onChange={e => setF('returnTime', e.target.value)} /></Field>
+                <Row>
+                  <Field label="還車日期"><input style={inSt} type="date" value={splitDT(editForm.returnTime).date} onChange={e => setF('returnTime', joinDT(e.target.value, splitDT(editForm.returnTime).time || '13:30'))} /></Field>
+                  <Field label="時間">
+                    <select style={selSt} value={splitDT(editForm.returnTime).time || '13:30'} onChange={e => setF('returnTime', joinDT(splitDT(editForm.returnTime).date, e.target.value))}>
+                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
+                    </select>
+                  </Field>
+                </Row>
                 <Row>
                   <Field label="幣別">
-                    <select style={selSt} value={editForm.currency || 'JPY'} onChange={e => setF('currency', e.target.value)}>
-                      <option value="JPY">JPY</option><option value="TWD">TWD</option>
+                    <select style={selSt} value={editForm.currency || projCurrency} onChange={e => setF('currency', e.target.value)}>
+                      {projCurrency !== 'TWD' && <option value={projCurrency}>{projCurrency}</option>}
+                      <option value="TWD">TWD</option>
+                      {projCurrency !== 'JPY' && <option value="JPY">JPY</option>}
+                      {projCurrency !== 'KRW' && <option value="KRW">KRW</option>}
+                      {projCurrency !== 'USD' && <option value="USD">USD</option>}
                     </select>
                   </Field>
                   <Field label="總費用"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
@@ -713,16 +759,18 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                   ))}
                 </div>
               </div>
-              <Field label="預訂名稱 *"><input style={inSt} placeholder="例：美麗海水族館門票" value={customForm.title} onChange={e => setC('title', e.target.value)} /></Field>
+              <Field label="預訂名稱 *"><input style={inSt} placeholder="台北101門票" value={customForm.title} onChange={e => setC('title', e.target.value)} /></Field>
               <Field label="日期（選填）"><input style={{ ...inSt, padding: '10px 8px' }} type="date" value={customForm.date} onChange={e => setC('date', e.target.value)} /></Field>
               <Field label="訂單編號（選填）"><input style={inSt} placeholder="預訂確認碼" value={customForm.confirmCode} onChange={e => setC('confirmCode', e.target.value)} /></Field>
               <Row>
                 <div style={{ width: 90, flexShrink: 0 }}>
                   <label style={lblSt}>幣別</label>
                   <select style={selSt} value={customForm.currency} onChange={e => setC('currency', e.target.value)}>
-                    <option value="JPY">JPY ¥</option>
-                    <option value="TWD">TWD NT$</option>
-                    <option value="USD">USD $</option>
+                    {projCurrency !== 'TWD' && <option value={projCurrency}>{projCurrency}</option>}
+                    <option value="TWD">TWD</option>
+                    {projCurrency !== 'JPY' && <option value="JPY">JPY</option>}
+                    {projCurrency !== 'KRW' && <option value="KRW">KRW</option>}
+                    {projCurrency !== 'USD' && <option value="USD">USD</option>}
                   </select>
                 </div>
                 <Field label="費用（選填）"><input style={inSt} type="number" placeholder="0" value={customForm.cost} onChange={e => setC('cost', e.target.value)} /></Field>

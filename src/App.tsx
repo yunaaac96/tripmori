@@ -104,9 +104,20 @@ function App() {
       const updated = Array.from(map.values());
       localStorage.setItem('tripmori_projects', JSON.stringify(updated));
       setActiveProjectState(prev => {
-        if (!prev) return prev;
-        const synced = updated.find(p => p.id === prev.id);
-        return synced ? synced : prev;
+        if (prev) {
+          const synced = updated.find(p => p.id === prev.id);
+          return synced ? synced : prev;
+        }
+        // No active project — try to restore the last used one
+        const lastId = localStorage.getItem('tripmori_last_project');
+        if (lastId) {
+          const last = updated.find(p => p.id === lastId);
+          if (last) {
+            setActiveProject(last.id);
+            return last;
+          }
+        }
+        return prev;
       });
     } catch (e) { console.error('syncUserTrips:', e); }
   };
@@ -152,6 +163,9 @@ function App() {
       } else if (wasGoogleSignedIn.current) {
         // 使用者主動或自動登出 → 清除所有專案，回到初始畫面
         wasGoogleSignedIn.current = false;
+        // Save last project ID so we can restore it after re-login
+        const lastId = localStorage.getItem('tripmori_active_project');
+        if (lastId) localStorage.setItem('tripmori_last_project', lastId);
         localStorage.removeItem('tripmori_active_project');
         localStorage.removeItem('tripmori_projects');
         setActiveProjectState(null);
@@ -392,9 +406,15 @@ function App() {
     if (!activeProject) return;
     setVisitorKeyBusy(true); setVisitorKeyError('');
     try {
-      // Validate against stored collaboratorKey
-      const expected = activeProject.collaboratorKey?.toUpperCase();
-      if (!expected || key !== expected) {
+      // Validate collaboratorKey — fetch from Firestore if not cached locally
+      let storedKey = activeProject.collaboratorKey?.toUpperCase() || '';
+      if (!storedKey) {
+        try {
+          const tripSnap = await getDoc(doc(db, 'trips', activeProject.id));
+          storedKey = (tripSnap.data()?.collaboratorKey || '').toUpperCase();
+        } catch (e) { /* ignore, will fail validation below */ }
+      }
+      if (!storedKey || key !== storedKey) {
         setVisitorKeyError('金鑰不正確，請確認後再試');
         setVisitorKeyBusy(false); return;
       }
@@ -492,7 +512,7 @@ function App() {
 
         {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} firestore={firestore} project={activeProject} />}
-        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} />}
+        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} />}
