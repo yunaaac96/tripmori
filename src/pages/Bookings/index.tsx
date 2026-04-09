@@ -3,7 +3,7 @@ import { C, FONT, cardStyle } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getDoc } from 'firebase/firestore';
+import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
 
 // ── QR Code for OTS car rental ──────────────────────────
 const QR_SRC = '/ots-qr.png';
@@ -113,11 +113,17 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
       setFlights('staticFlights' in d ? d.staticFlights : null);
       setHotels ('staticHotels'  in d ? d.staticHotels  : null);
       setCar    ('staticCar'     in d ? d.staticCar     : null);
-      // 舊版預設行程沿用 hardcoded 資料（保持相容）
+      // 舊版預設行程沿用 hardcoded 資料，並同步寫入 Firestore 供其他頁面（如倒數）讀取
       if (!('staticFlights' in d) && TRIP_ID === '74pfE7RXyEIusEdRV0rZ') {
         setFlights(DEFAULT_FLIGHTS);
         setHotels (DEFAULT_HOTELS);
         setCar    (DEFAULT_CAR);
+        // Write defaults to Firestore so Schedule page can read flight times
+        updateDoc(fsDoc(db, 'trips', TRIP_ID), {
+          staticFlights: DEFAULT_FLIGHTS,
+          staticHotels:  DEFAULT_HOTELS,
+          staticCar:     DEFAULT_CAR,
+        }).catch(console.error);
       }
       setStaticLoaded(true);
     }).catch(() => setStaticLoaded(true));
