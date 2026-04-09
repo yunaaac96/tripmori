@@ -5,7 +5,7 @@ import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc } from 'firebase/firestore';
+import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc, deleteField } from 'firebase/firestore';
 import { makeCollabKey, saveProject } from '../ProjectHub/index';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
@@ -280,7 +280,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const handleRevokeEditor = async (uid: string) => {
     if (!window.confirm('確定要移除此編輯者的權限？對方將立即降級為訪客。')) return;
     try {
-      const { deleteField } = require('firebase/firestore') as any;
       await _updateDoc(_doc(db, 'trips', TRIP_ID), {
         allowedEditorUids: arrayRemove(uid),
         [`editorInfo.${uid}`]: deleteField(),
