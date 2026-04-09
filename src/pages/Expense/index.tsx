@@ -605,7 +605,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                   {Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => (
                     <button key={key} onClick={() => set('category', key)}
-                      style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      className={form.category === key ? `tm-cat-active-${key}` : ''}
+                      style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: form.category === key ? '#333' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
                       {info.emoji} {info.label}
                     </button>
                   ))}
