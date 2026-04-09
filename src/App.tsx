@@ -104,6 +104,8 @@ function App() {
 
       const updated = Array.from(map.values());
       localStorage.setItem('tripmori_projects', JSON.stringify(updated));
+      // Notify ProjectHub (same-tab) that the project list has changed
+      window.dispatchEvent(new StorageEvent('storage', { key: 'tripmori_projects' }));
       setActiveProjectState(prev => {
         if (prev) {
           const synced = updated.find(p => p.id === prev.id);

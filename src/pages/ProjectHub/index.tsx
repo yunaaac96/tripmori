@@ -168,6 +168,15 @@ export default function ProjectHub({ onEnterProject }: Props) {
   const [error, setError]     = useState('');
   const [googleUser, setGoogleUser] = useState<User | null>(null);
 
+  // Re-read projects whenever syncUserTrips (or another tab) updates localStorage
+  useEffect(() => {
+    const handler = (e: StorageEvent) => {
+      if (e.key === 'tripmori_projects') setProjects(loadProjects());
+    };
+    window.addEventListener('storage', handler);
+    return () => window.removeEventListener('storage', handler);
+  }, []);
+
   // Create form
   const [newTitle, setNewTitle]       = useState('');
   const [newEmoji, setNewEmoji]       = useState('✈️');
@@ -328,7 +337,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
         currency: newCurrency,
         exchangeRate: newRate ? parseFloat(newRate) : null,
         ownerUid: user.uid,
-        ownerEmail: user.email || '',
+        ownerEmail: (user.email || '').toLowerCase(),
         collaboratorKey: '', shareCode: '',
         createdAt: Timestamp.now(),
         // Location for weather
