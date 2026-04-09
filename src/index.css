@@ -166,6 +166,12 @@
   .tm-booking-return   p:first-child { color: #E87070 !important; }
   .tm-booking-date     { background: #0C2810 !important; }
   .tm-booking-date     p:first-child { color: #68B850 !important; }
+
+  /* Members — share key / visitor link dark mode */
+  .tm-collab-key-bg    { background: #2E2400 !important; }
+  .tm-visitor-link-bg  { background: #001E2E !important; }
+  .tm-collab-key-label { color: #D4A820 !important; }
+  .tm-visitor-link-label { color: #5AACDF !important; }
 }
 
 #root {
@@ -173,6 +179,12 @@
   min-height: 100svh;
   box-sizing: border-box;
 }
+
+/* Members share section: light mode defaults */
+.tm-collab-key-bg    { background: #FFF2CC; }
+.tm-visitor-link-bg  { background: #D8EDF8; }
+.tm-collab-key-label { color: #9A6800; }
+.tm-visitor-link-label { color: #2A6A9A; }
 
 /* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
 .tm-hscroll {

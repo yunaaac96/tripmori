@@ -80,6 +80,7 @@ function App() {
             startDate:      data.startDate   || '',
             endDate:        data.endDate     || '',
             description:    data.description || '',
+            currency:       data.currency    || prev?.currency || '',
           };
           map.set(d.id, p);
         });

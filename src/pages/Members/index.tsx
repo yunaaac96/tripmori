@@ -464,20 +464,22 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* 協作金鑰 — tap to copy */}
             <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
-              style={{ background: copied === 'collab' ? '#E0F0D8' : '#FFF2CC', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
+              className={copied === 'collab' ? '' : 'tm-collab-key-bg'}
+              style={{ background: copied === 'collab' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : '#9A6800', margin: 0 }}>協作金鑰（編輯者）</p>
-                <span style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : '#9A6800', fontWeight: 700 }}>{copied === 'collab' ? '✅ 已複製' : '點擊複製 📋'}</span>
+                <p className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : undefined, margin: 0 }}>協作金鑰（編輯者）</p>
+                <span className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'collab' ? '✅ 已複製' : '點擊複製 📋'}</span>
               </div>
               <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{firestoreCollaboratorKey || project?.collaboratorKey || '—'}</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
             </div>
             {/* 訪客連結 — tap to copy */}
             <div onClick={() => handleCopy(`${window.location.origin}/?visit=${project.id}`, 'visit')}
-              style={{ background: copied === 'visit' ? '#E0F0D8' : '#D8EDF8', borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
+              className={copied === 'visit' ? '' : 'tm-visitor-link-bg'}
+              style={{ background: copied === 'visit' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                <p style={{ fontSize: 10, fontWeight: 700, color: copied === 'visit' ? '#4A7A35' : '#2A6A9A', margin: 0 }}>訪客連結（唯讀瀏覽）</p>
-                <span style={{ fontSize: 10, color: copied === 'visit' ? '#4A7A35' : '#2A6A9A', fontWeight: 700 }}>{copied === 'visit' ? '✅ 已複製' : '點擊複製 📋'}</span>
+                <p className={copied === 'visit' ? '' : 'tm-visitor-link-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'visit' ? '#4A7A35' : undefined, margin: 0 }}>訪客連結（唯讀瀏覽）</p>
+                <span className={copied === 'visit' ? '' : 'tm-visitor-link-label'} style={{ fontSize: 10, color: copied === 'visit' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'visit' ? '✅ 已複製' : '點擊複製 📋'}</span>
               </div>
               <p style={{ fontSize: 12, fontWeight: 600, color: C.bark, margin: 0 }}>訪客專屬分享連結</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>對方點擊連結即可直接瀏覽行程（無需登入或輸入代碼）</p>

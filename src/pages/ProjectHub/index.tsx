@@ -22,6 +22,7 @@ export interface StoredProject {
   startDate?: string;
   endDate?: string;
   description?: string;
+  currency?: string;
 }
 
 const LS_PROJECTS  = 'tripmori_projects';
@@ -247,17 +248,47 @@ export default function ProjectHub({ onEnterProject }: Props) {
   ];
 
   const handleFetchRate = async () => {
-    setFetchingRate(true);
+    setFetchingRate(true); setError('');
+    const STATIC_RATES: Record<string, number> = {
+      JPY: 0.22, KRW: 0.024, THB: 0.9, SGD: 24, HKD: 4.1,
+      USD: 33, EUR: 36, AUD: 21, GBP: 42, MYR: 7.4,
+      VND: 0.0013, IDR: 0.002, CNY: 4.6, CHF: 37,
+    };
     try {
-      const res = await fetch(`https://open.er-api.com/v6/latest/TWD`);
-      const data = await res.json();
-      if (data?.rates?.[newCurrency]) {
-        setNewRate(String(Math.round(1 / data.rates[newCurrency] * 100) / 100));
+      let rate: number | null = null;
+      // Try TWD base first
+      try {
+        const res = await fetch(`https://open.er-api.com/v6/latest/TWD`);
+        const data = await res.json();
+        if (data?.rates?.[newCurrency]) {
+          rate = Math.round(1 / data.rates[newCurrency] * 100) / 100;
+        }
+      } catch { /* try fallback */ }
+      // Fallback: USD base → cross rate
+      if (!rate) {
+        try {
+          const res = await fetch(`https://open.er-api.com/v6/latest/USD`);
+          const data = await res.json();
+          if (data?.rates?.TWD && data?.rates?.[newCurrency]) {
+            rate = Math.round(data.rates.TWD / data.rates[newCurrency] * 100) / 100;
+          }
+        } catch { /* ignore */ }
+      }
+      if (rate) {
+        setNewRate(String(rate));
+      } else if (STATIC_RATES[newCurrency]) {
+        setNewRate(String(STATIC_RATES[newCurrency]));
+        setError('（已使用參考匯率，建議確認最新匯率）');
       } else {
         setError('無法取得匯率，請手動輸入');
       }
     } catch {
-      setError('匯率查詢失敗，請手動輸入');
+      if (STATIC_RATES[newCurrency]) {
+        setNewRate(String(STATIC_RATES[newCurrency]));
+        setError('（已使用參考匯率）');
+      } else {
+        setError('匯率查詢失敗，請手動輸入');
+      }
     }
     setFetchingRate(false);
   };
@@ -322,6 +353,7 @@ export default function ProjectHub({ onEnterProject }: Props) {
         id: ref.id, title: newTitle.trim(), emoji: newEmoji,
         role: 'owner', collaboratorKey: cKey, shareCode: sCode, addedAt: Date.now(),
         startDate: newStart, endDate: newEnd || newStart, description: newDesc.trim(),
+        currency: newCurrency,
       };
       saveProject(p);
       setCreatedProject(p);
