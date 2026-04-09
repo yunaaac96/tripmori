@@ -492,7 +492,11 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               </div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地點</label><input style={inputStyle} placeholder="地址或景點名" value={form.location} onChange={e => set('location', e.target.value)} /></div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>備註</label><textarea style={{ ...inputStyle, minHeight: 72, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={form.notes} onChange={e => set('notes', e.target.value)} /></div>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結</label><input style={inputStyle} placeholder="https://maps.app.goo.gl/..." value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} /></div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結</label>
+                <input style={inputStyle} placeholder="https://maps.app.goo.gl/..." value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} />
+                <p style={{ fontSize: 10, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>選填，未填寫時將自動依「地點」欄位資訊導入地圖</p>
+              </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 {mode === 'edit' && isOwner && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>🗑</button>}
                 <button onClick={() => setMode('view')} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
