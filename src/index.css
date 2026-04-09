@@ -173,6 +173,15 @@
   .tm-collab-key-label { color: #D4A820 !important; }
   .tm-visitor-link-label { color: #5AACDF !important; }
 
+  /* Binding summary rows — dark mode (dark bg, readable text preserved via C.bark var) */
+  .tm-binding-owner  { background: #0E2410 !important; }
+  .tm-binding-editor { background: #0A1628 !important; }
+  .tm-binding-none   { background: #1E1A14 !important; }
+
+  /* Role badges — dark mode */
+  .tm-badge-owner  { background: #2E5A22 !important; color: #A8E896 !important; }
+  .tm-badge-editor { background: #5A3C00 !important; color: #F0C050 !important; }
+
   /* Expense category active buttons — dark mode readable colours */
   .tm-cat-active-transport  { background: #0A2030 !important; color: #7DC8F0 !important; border-color: #3A7A9A !important; }
   .tm-cat-active-food       { background: #2A2000 !important; color: #E8C840 !important; border-color: #8A7000 !important; }
@@ -193,6 +202,15 @@
 .tm-visitor-link-bg  { background: #D8EDF8; }
 .tm-collab-key-label { color: #9A6800; }
 .tm-visitor-link-label { color: #2A6A9A; }
+
+/* Binding summary rows — light mode */
+.tm-binding-owner  { background: #E8F5E2; }
+.tm-binding-editor { background: #EEF5FF; }
+.tm-binding-none   { background: var(--tm-cream); }
+
+/* Role badges — light mode */
+.tm-badge-owner  { background: #4A7A35; color: #fff; }
+.tm-badge-editor { background: #9A6800; color: #fff; }
 
 /* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
 .tm-hscroll {

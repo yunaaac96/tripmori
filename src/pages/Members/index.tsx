@@ -32,6 +32,8 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const [googleEmail, setGoogleEmail]   = useState<string | null>(null);
   const [signingIn, setSigningIn]       = useState(false);
   const [authError, setAuthError]       = useState<string | null>(null);
+  const [bindingSummaryOpen, setBindingSummaryOpen] = useState(true);
+  const [editorListOpen, setEditorListOpen]         = useState(true);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
@@ -489,9 +491,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
       {/* Editor list management (Owner only) */}
       {firestore.role === 'owner' && allowedEditorUids.length > 0 && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px' }}>✏️ 編輯者名單</p>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, boxShadow: C.shadowSm, overflow: 'hidden' }}>
+          <button onClick={() => setEditorListOpen(v => !v)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.bark }}>✏️ 編輯者名單</span>
+            <span style={{ fontSize: 12, color: C.barkLight }}>{editorListOpen ? '▲' : '▼'}</span>
+          </button>
+          {editorListOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 16px 14px' }}>
             {allowedEditorUids.map(uid => {
               const info = editorInfo[uid];
               // Try to find member card bound to this uid
@@ -521,7 +527,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 </div>
               );
             })}
-          </div>
+          </div>}
         </div>
       )}
 
@@ -570,42 +576,48 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           <>
           {/* ── Owner-only: Google binding summary ── */}
           {firestore.role === 'owner' && members.length > 0 && (
-            <div style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 16px', marginBottom: 14, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 10px' }}>🔐 帳號綁定總覽</p>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {/* Owner member first (bound to current googleUid), then editors, then rest */}
-                {[
-                  ...members.filter((m: any) => googleUid && m.googleUid === googleUid),
-                  ...members.filter((m: any) => m.googleUid && m.googleUid !== googleUid && allowedEditorUids.includes(m.googleUid)),
-                  ...members.filter((m: any) => !m.googleUid || (!allowedEditorUids.includes(m.googleUid) && !(googleUid && m.googleUid === googleUid))),
-                ].map((m: any) => {
-                  const isOwnerCard = googleUid && m.googleUid === googleUid;
-                  const isEditorCard = m.googleUid && allowedEditorUids.includes(m.googleUid) && !isOwnerCard;
-                  const rowBg = isOwnerCard ? '#E8F5E2' : isEditorCard ? '#EEF5FF' : 'var(--tm-cream)';
-                  const badge = isOwnerCard
-                    ? <span style={{ fontSize: 10, fontWeight: 700, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>擁有者</span>
-                    : isEditorCard
-                      ? <span style={{ fontSize: 10, fontWeight: 700, background: '#9A6800', color: 'white', borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>編輯者</span>
-                      : null;
-                  return (
-                    <div key={m.id} style={{ display: 'flex', alignItems: 'center', gap: 8, background: rowBg, borderRadius: 10, padding: '6px 10px' }}>
-                      <div style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, flexShrink: 0, overflow: 'hidden' }}>
-                        {m.avatarUrl
-                          ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : m.name?.[0]?.toUpperCase()
+            <div style={{ background: 'var(--tm-card-bg)', borderRadius: 16, marginBottom: 14, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm, overflow: 'hidden' }}>
+              {/* Collapsible header */}
+              <button onClick={() => setBindingSummaryOpen(v => !v)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35' }}>🔐 帳號綁定總覽</span>
+                <span style={{ fontSize: 12, color: '#4A7A35', opacity: 0.7 }}>{bindingSummaryOpen ? '▲' : '▼'}</span>
+              </button>
+              {bindingSummaryOpen && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 12px 12px' }}>
+                  {[
+                    ...members.filter((m: any) => googleUid && m.googleUid === googleUid),
+                    ...members.filter((m: any) => m.googleUid && m.googleUid !== googleUid && allowedEditorUids.includes(m.googleUid)),
+                    ...members.filter((m: any) => !m.googleUid || (!allowedEditorUids.includes(m.googleUid) && !(googleUid && m.googleUid === googleUid))),
+                  ].map((m: any) => {
+                    const isOwnerCard  = !!(googleUid && m.googleUid === googleUid);
+                    const isEditorCard = !!(m.googleUid && allowedEditorUids.includes(m.googleUid) && !isOwnerCard);
+                    const rowClass     = isOwnerCard ? 'tm-binding-owner' : isEditorCard ? 'tm-binding-editor' : 'tm-binding-none';
+                    const badge = isOwnerCard
+                      ? <span className="tm-badge-owner" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>擁有者</span>
+                      : isEditorCard
+                        ? <span className="tm-badge-editor" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>編輯者</span>
+                        : null;
+                    return (
+                      <div key={m.id} className={rowClass} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, padding: '6px 10px' }}>
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#333', flexShrink: 0, overflow: 'hidden' }}>
+                          {m.avatarUrl
+                            ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : m.name?.[0]?.toUpperCase()
+                          }
+                        </div>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.bark, minWidth: 50, flexShrink: 0 }}>{m.name}</span>
+                        {badge}
+                        <span style={{ flex: 1 }} />
+                        {m.googleEmail
+                          ? <span style={{ fontSize: 11, color: C.bark, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160, opacity: 0.75 }}>{m.googleEmail}</span>
+                          : <span style={{ fontSize: 11, color: C.barkLight }}>尚未綁定</span>
                         }
                       </div>
-                      <span style={{ fontSize: 13, fontWeight: 700, color: C.bark, minWidth: 50, flexShrink: 0 }}>{m.name}</span>
-                      {badge}
-                      <span style={{ flex: 1 }} />
-                      {m.googleEmail
-                        ? <span style={{ fontSize: 11, color: '#2A6A9A', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: 160 }}>{m.googleEmail}</span>
-                        : <span style={{ fontSize: 11, color: '#9A8A7A' }}>尚未綁定</span>
-                      }
-                    </div>
-                  );
-                })}
-              </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           )}
           {displayMembers.map((m: any) => {
