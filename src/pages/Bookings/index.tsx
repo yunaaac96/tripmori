@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { C, FONT, cardStyle } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
+import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc } from 'firebase/firestore';
 
@@ -698,16 +699,15 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                   </Field>
                 </Row>
                 <Field label="訂單編號 *"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
+                  <CurrencyPicker
+                    value={editForm.currency || projCurrency}
+                    onChange={v => setF('currency', v)}
+                    projCurrency={projCurrency}
+                  />
+                </div>
                 <Row>
-                  <Field label="幣別">
-                    <select style={selSt} value={editForm.currency || projCurrency} onChange={e => setF('currency', e.target.value)}>
-                      {projCurrency !== 'TWD' && <option value={projCurrency}>{projCurrency}</option>}
-                      <option value="TWD">TWD</option>
-                      {projCurrency !== 'JPY' && <option value="JPY">JPY</option>}
-                      {projCurrency !== 'KRW' && <option value="KRW">KRW</option>}
-                      {projCurrency !== 'USD' && <option value="USD">USD</option>}
-                    </select>
-                  </Field>
                   <Field label="總費用（選填）"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
                   <Field label="每人分攤（選填）"><input style={inSt} type="number" value={editForm.costPerPerson || ''} onChange={e => setF('costPerPerson', e.target.value)} /></Field>
                 </Row>
@@ -744,18 +744,15 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                     </select>
                   </Field>
                 </Row>
-                <Row>
-                  <Field label="幣別">
-                    <select style={selSt} value={editForm.currency || projCurrency} onChange={e => setF('currency', e.target.value)}>
-                      {projCurrency !== 'TWD' && <option value={projCurrency}>{projCurrency}</option>}
-                      <option value="TWD">TWD</option>
-                      {projCurrency !== 'JPY' && <option value="JPY">JPY</option>}
-                      {projCurrency !== 'KRW' && <option value="KRW">KRW</option>}
-                      {projCurrency !== 'USD' && <option value="USD">USD</option>}
-                    </select>
-                  </Field>
-                  <Field label="總費用"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
-                </Row>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
+                  <CurrencyPicker
+                    value={editForm.currency || projCurrency}
+                    onChange={v => setF('currency', v)}
+                    projCurrency={projCurrency}
+                  />
+                </div>
+                <Field label="總費用"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
                 <Field label="預約編號"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
                 <Field label="備註"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} value={editForm.notes || ''} onChange={e => setF('notes', e.target.value)} /></Field>
               </>)}
@@ -800,19 +797,15 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
               <Field label="預訂名稱 *"><input style={inSt} placeholder="台北101門票" value={customForm.title} onChange={e => setC('title', e.target.value)} /></Field>
               <Field label="日期（選填）"><input style={{ ...inSt, padding: '10px 8px' }} type="date" value={customForm.date} onChange={e => setC('date', e.target.value)} /></Field>
               <Field label="訂單編號（選填）"><input style={inSt} placeholder="預訂確認碼" value={customForm.confirmCode} onChange={e => setC('confirmCode', e.target.value)} /></Field>
-              <Row>
-                <div style={{ width: 90, flexShrink: 0 }}>
-                  <label style={lblSt}>幣別</label>
-                  <select style={selSt} value={customForm.currency} onChange={e => setC('currency', e.target.value)}>
-                    {projCurrency !== 'TWD' && <option value={projCurrency}>{projCurrency}</option>}
-                    <option value="TWD">TWD</option>
-                    {projCurrency !== 'JPY' && <option value="JPY">JPY</option>}
-                    {projCurrency !== 'KRW' && <option value="KRW">KRW</option>}
-                    {projCurrency !== 'USD' && <option value="USD">USD</option>}
-                  </select>
-                </div>
-                <Field label="費用（選填）"><input style={inSt} type="number" placeholder="0" value={customForm.cost} onChange={e => setC('cost', e.target.value)} /></Field>
-              </Row>
+              <div>
+                <label style={lblSt}>幣別</label>
+                <CurrencyPicker
+                  value={customForm.currency}
+                  onChange={v => setC('currency', v)}
+                  projCurrency={projCurrency}
+                />
+              </div>
+              <Field label="費用（選填）"><input style={inSt} type="number" placeholder="0" value={customForm.cost} onChange={e => setC('cost', e.target.value)} /></Field>
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={customForm.notes} onChange={e => setC('notes', e.target.value)} /></Field>
               <div>
                 <label style={lblSt}>QR Code（選填）</label>

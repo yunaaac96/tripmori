@@ -2,10 +2,11 @@ import { useState, useEffect, useRef } from 'react';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import PageHeader from '../../components/layout/PageHeader';
+import CurrencyPicker from '../../components/CurrencyPicker';
 
 type SplitMode = 'equal' | 'weighted' | 'amount';
 type SortMode = 'newest' | 'oldest' | 'largest';
-type Currency = 'JPY' | 'TWD' | 'KRW' | 'IDR' | 'EUR' | 'USD';
+type Currency = string;
 
 const EMPTY_FORM = {
   description: '', amount: '', currency: 'JPY' as Currency,
@@ -70,16 +71,17 @@ function PieChart({ data }: { data: { key: string; value: number; label: string 
 }
 
 // ── Settlement Form ────────────────────────────────────────────────────────
-function SettlementForm({ memberNames, onAdd, onClose, firestore }: {
+function SettlementForm({ memberNames, onAdd, onClose, firestore, projCurrency }: {
   memberNames: string[];
   onAdd: (from: string, to: string, amount: string, currency: string) => Promise<void>;
   onClose: () => void;
   firestore: any;
+  projCurrency: string;
 }) {
   const [from, setFrom] = useState(memberNames[0] || '');
   const [to, setTo] = useState(memberNames[1] || memberNames[0] || '');
   const [amount, setAmount] = useState('');
-  const [currency, setCurrency] = useState<'TWD' | 'JPY'>('TWD');
+  const [currency, setCurrency] = useState<string>(projCurrency || 'TWD');
   const [saving, setSaving] = useState(false);
 
   const handleSubmit = async () => {
@@ -122,18 +124,13 @@ function SettlementForm({ memberNames, onAdd, onClose, firestore }: {
               ))}
             </div>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
-              <input style={iStyle} type="number" inputMode="decimal" placeholder="0" value={amount} onChange={e => setAmount(e.target.value)} />
-            </div>
-            <div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>幣別</label>
-              <select style={{ ...iStyle, width: 80 }} value={currency} onChange={e => setCurrency(e.target.value as 'TWD' | 'JPY')}>
-                <option value="TWD">TWD</option>
-                <option value="JPY">JPY</option>
-              </select>
-            </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
+            <input style={iStyle} type="number" inputMode="decimal" placeholder="0" value={amount} onChange={e => setAmount(e.target.value)} />
+          </div>
+          <div>
+            <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
+            <CurrencyPicker value={currency} onChange={setCurrency} projCurrency={projCurrency} />
           </div>
           {from === to && from && <p style={{ fontSize: 12, color: '#9A3A3A', margin: 0 }}>付款人與收款人不能相同</p>}
           <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
@@ -195,7 +192,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   // Approximate exchange rates to TWD (for display convenience)
   const CURRENCY_TO_TWD: Record<string, number> = {
-    JPY: JPY_TO_TWD, TWD: 1, KRW: 0.024, IDR: 0.0021, EUR: 34, USD: 32,
+    TWD: 1, JPY: JPY_TO_TWD,
+    KRW: 0.024, IDR: 0.0021, EUR: 36, USD: 33, GBP: 42, AUD: 21, NZD: 19,
+    CAD: 24, CHF: 37, SGD: 24, HKD: 4.1, MOP: 4.1, CNY: 4.6, THB: 0.9,
+    MYR: 7.4, VND: 0.0013, PHP: 0.58, AED: 9, SAR: 8.8, TRY: 0.97,
+    ZAR: 1.8, MXN: 1.7, BRL: 6.5, INR: 0.4,
   };
   const toTWD = (amount: number, currency: string) =>
     Math.round(amount * (CURRENCY_TO_TWD[currency] ?? 1));
@@ -543,6 +544,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
           onAdd={handleAddSettlement}
           onClose={() => setShowSettleForm(false)}
           firestore={firestore}
+          projCurrency={projCurrency}
         />
       )}
 
@@ -574,12 +576,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   <input style={iStyle} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
                 </div>
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>幣別</label>
-                  <select style={{ ...iStyle, width: 90 }} value={form.currency} onChange={e => set('currency', e.target.value as Currency)}>
-                    {(Object.keys(CURRENCY_DISPLAY) as Currency[]).map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
+                  <CurrencyPicker value={form.currency} onChange={v => set('currency', v)} projCurrency={projCurrency} />
                 </div>
               </div>
               {form.amount && (
