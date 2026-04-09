@@ -569,22 +569,22 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <input ref={descRef} style={iStyle} placeholder="例：藥妝店購物" value={form.description} onChange={e => set('description', e.target.value)} />
               </div>
 
-              {/* Amount + Currency */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8 }}>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
-                  <input style={iStyle} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
-                </div>
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
-                  <CurrencyPicker value={form.currency} onChange={v => set('currency', v)} projCurrency={projCurrency} />
-                </div>
+              {/* Amount */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
+                <input style={iStyle} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
+                {form.amount && (
+                  <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0', textAlign: 'right' }}>
+                    ≈ NT$ {toTWD(Number(form.amount), form.currency).toLocaleString()}
+                  </p>
+                )}
               </div>
-              {form.amount && (
-                <p style={{ fontSize: 12, color: C.barkLight, margin: '-6px 0 0', textAlign: 'right' }}>
-                  ≈ NT$ {toTWD(Number(form.amount), form.currency).toLocaleString()}
-                </p>
-              )}
+
+              {/* Currency */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
+                <CurrencyPicker value={form.currency} onChange={v => set('currency', v)} projCurrency={projCurrency} />
+              </div>
 
               {/* Payment Method */}
               <div>

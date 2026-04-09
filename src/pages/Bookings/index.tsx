@@ -53,6 +53,7 @@ const DEFAULT_CAR = {
   returnLocation: '臨空豐崎營業所（那霸機場）', returnTime: '2026-04-26  13:30',
   totalCost: '26290', currency: 'JPY', confirmCode: 'OTS1402455',
   notes: '需國際駕照、日文譯本',
+  qrUrl: '/ots-qr.png',
 };
 
 // ── Custom booking types ─────────────────────────────────
@@ -213,7 +214,9 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
   const [deleting, setDeleting]         = useState<string | null>(null);
   const [toggling, setToggling]         = useState<string | null>(null);
 
-  const qrFileRef = useRef<HTMLInputElement>(null);
+  const qrFileRef    = useRef<HTMLInputElement>(null);
+  const carQrFileRef = useRef<HTMLInputElement>(null);
+  const [uploadingCarQr, setUploadingCarQr] = useState(false);
   const setC = (k: string, v: string) => setCustomForm(p => ({ ...p, [k]: v }));
 
   const openEditBooking = (b: any) => {
@@ -264,6 +267,19 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
       setC('qrUrl', url);
     } catch (e) { console.error(e); alert('QR Code 上傳失敗'); }
     setUploading(false);
+  };
+
+  const handleUploadCarQR = async (file: File) => {
+    if (!TRIP_ID) return;
+    setUploadingCarQr(true);
+    try {
+      const storage = getStorage();
+      const sRef = storageRef(storage, `bookings/${TRIP_ID}/${Date.now()}_car_qr`);
+      await uploadBytes(sRef, file);
+      const url = await getDownloadURL(sRef);
+      setF('qrUrl', url);
+    } catch (e) { console.error(e); alert('QR Code 上傳失敗'); }
+    setUploadingCarQr(false);
   };
 
   const handleCustomSave = async () => {
@@ -476,24 +492,17 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
             </div>
           )}
           <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: '0 0 10px' }}>⚠️ {car.notes}</p>
-          {!isVisitor && (
+          {!isVisitor && car.qrUrl && (
             <>
               <button onClick={() => setShowCarQR(v => !v)}
                 style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
                 <span>{showCarQR ? '▲' : '▼'}</span>
-                {showCarQR ? '收起 QR Code' : '📱 展開報到 QR Code'}
+                {showCarQR ? '收起 QR Code' : '📱 展開取車 QR Code'}
               </button>
               {showCarQR && (
                 <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>OTS 取車報到 QR Code</p>
-                  {!carQrErr ? (
-                    <img src={QR_SRC} alt="OTS QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block' }} onError={() => setCarQrErr(true)} />
-                  ) : (
-                    <div style={{ padding: '20px 16px', background: '#FAE0E0', borderRadius: 10 }}>
-                      <p style={{ fontSize: 12, color: '#9A3A3A', margin: 0, fontWeight: 600 }}>QR Code 圖片未找到</p>
-                      <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>請將圖片命名為 ots-qr.png<br/>放入 public/ 資料夾</p>
-                    </div>
-                  )}
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>取車報到 QR Code</p>
+                  <img src={car.qrUrl} alt="取車 QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block', borderRadius: 8 }} />
                   <p style={{ fontSize: 10, color: C.barkLight, margin: '10px 0 0' }}>{car.confirmCode}　{car.pickupLocation}</p>
                 </div>
               )}
@@ -755,6 +764,25 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 <Field label="總費用"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
                 <Field label="預約編號"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
                 <Field label="備註"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} value={editForm.notes || ''} onChange={e => setF('notes', e.target.value)} /></Field>
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>取車 QR Code（選填）</label>
+                  <input ref={carQrFileRef} type="file" accept="image/*" style={{ display: 'none' }}
+                    onChange={async e => { const f = e.target.files?.[0]; if (f) await handleUploadCarQR(f); e.target.value = ''; }} />
+                  {editForm.qrUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)' }}>
+                      <img src={editForm.qrUrl} alt="QR" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain' }} />
+                      <div>
+                        <p style={{ fontSize: 11, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 已上傳</p>
+                        <button onClick={() => setF('qrUrl', '')} style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 600 }}>✕ 移除</button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => carQrFileRef.current?.click()} disabled={uploadingCarQr}
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: uploadingCarQr ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
+                      {uploadingCarQr ? '⏳ 上傳中...' : '📱 上傳 QR Code 圖片'}
+                    </button>
+                  )}
+                </div>
               </>)}
 
               {/* Action buttons */}
