@@ -104,8 +104,8 @@ function App() {
 
       const updated = Array.from(map.values());
       localStorage.setItem('tripmori_projects', JSON.stringify(updated));
-      // Notify ProjectHub (same-tab) that the project list has changed
-      window.dispatchEvent(new StorageEvent('storage', { key: 'tripmori_projects' }));
+      // Directly update React state — reliable regardless of mount timing
+      setSyncedProjects(updated);
       setActiveProjectState(prev => {
         if (prev) {
           const synced = updated.find(p => p.id === prev.id);
@@ -175,6 +175,7 @@ function App() {
             if (idx >= 0) {
               projects.splice(idx, 1);
               localStorage.setItem('tripmori_projects', JSON.stringify(projects));
+              setSyncedProjects(projects);
               // 若正顯示此行程，退回 hub
               setActiveProjectState(prev =>
                 prev?.id === '74pfE7RXyEIusEdRV0rZ' ? null : prev
@@ -191,6 +192,7 @@ function App() {
         if (lastId) localStorage.setItem('tripmori_last_project', lastId);
         localStorage.removeItem('tripmori_active_project');
         localStorage.removeItem('tripmori_projects');
+        setSyncedProjects([]);
         setActiveProjectState(null);
       }
     });
@@ -289,6 +291,8 @@ function App() {
   // 啟動 Splash：每次 App mount（含桌機首次開啟）都先顯示動畫
   const [splashDone, setSplashDone] = useState(false);
   const [notifications, setNotifications] = useState<Record<string, boolean>>({ '成員': false, '日誌': false });
+  // Projects synced from Firestore — passed directly to ProjectHub to avoid storage event timing issues
+  const [syncedProjects, setSyncedProjects] = useState<StoredProject[]>(() => loadProjects());
   const [visitorKeyInput, setVisitorKeyInput] = useState('');
   const [visitorKeyError, setVisitorKeyError] = useState('');
   const [visitorKeyBusy, setVisitorKeyBusy]   = useState(false);
@@ -505,7 +509,7 @@ function App() {
 
   // ── Show ProjectHub if no active project ──────────────────────
   if (!activeProject) {
-    return <ProjectHub onEnterProject={handleEnterProject} />;
+    return <ProjectHub onEnterProject={handleEnterProject} syncedProjects={syncedProjects} />;
   }
 
   if (loading) return <SplashScreen />;

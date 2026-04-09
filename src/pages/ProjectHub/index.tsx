@@ -148,6 +148,7 @@ const DEFAULT_PACKING: string[] = [
 // ─────────────────────────────────────────────────────────────────
 interface Props {
   onEnterProject: (project: StoredProject) => void;
+  syncedProjects?: StoredProject[];
 }
 
 const ROLE_LABEL: Record<TripRole, { label: string; color: string; bg: string }> = {
@@ -160,7 +161,7 @@ type View = 'hub' | 'create' | 'create-step2' | 'create-step3' | 'join-collab';
 
 const googleProvider = new GoogleAuthProvider();
 
-export default function ProjectHub({ onEnterProject }: Props) {
+export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
   const [projects, setProjects] = useState<StoredProject[]>(() => loadProjects());
   const [view, setView]       = useState<View>('hub');
   const [busy, setBusy]       = useState(false);
@@ -168,7 +169,19 @@ export default function ProjectHub({ onEnterProject }: Props) {
   const [error, setError]     = useState('');
   const [googleUser, setGoogleUser] = useState<User | null>(null);
 
-  // Re-read projects whenever syncUserTrips (or another tab) updates localStorage
+  // When App.tsx finishes syncUserTrips, it passes the updated list directly as a prop
+  // This is reliable regardless of mount timing — no storage event needed
+  useEffect(() => {
+    if (syncedProjects !== undefined) {
+      // If synced list is non-empty, use it; if empty (logout/no account), still show
+      // whatever is in localStorage (visitor trips etc. that we can't query in Firestore)
+      const local = loadProjects();
+      const merged = syncedProjects.length > 0 ? syncedProjects : local;
+      setProjects(merged);
+    }
+  }, [syncedProjects]);
+
+  // Cross-tab sync (other browser tabs updating localStorage)
   useEffect(() => {
     const handler = (e: StorageEvent) => {
       if (e.key === 'tripmori_projects') setProjects(loadProjects());
