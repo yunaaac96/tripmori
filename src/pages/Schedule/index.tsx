@@ -494,17 +494,30 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     .filter(e => (e.date || '').replace(/\//g, '-') === activeDay)
     .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
-  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setSelectedEvent(null); setTravelCalcStatus('idle'); setMode('add'); };
+  const FLIGHT_KW = /機場|airport|起飛|降落|抵達|出發|航班|班機|飛機|✈/i;
+  const isFlightEvt = (e: any) => FLIGHT_KW.test(e?.title || '') || FLIGHT_KW.test(e?.location || '');
+
+  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setSelectedEvent(null); setTravelCalcStatus('idle'); setTravelMode('car'); setMode('add'); };
   const openEdit = (event: any) => {
+    const evtDate = (event.date || '').replace(/\//g, '-') || activeDay;
+    const dayEvts = events
+      .filter(e => (e.date || '').replace(/\//g, '-') === evtDate)
+      .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+    const idx = dayEvts.findIndex(e => e.id === event.id);
+    const nextEvt = idx >= 0 && idx < dayEvts.length - 1 ? dayEvts[idx + 1] : null;
+    const autoFlight = isFlightEvt(event) && isFlightEvt(nextEvt);
     setForm({
       title: event.title || '', startTime: event.startTime || '', endTime: event.endTime || '',
       travelTime: event.travelTime || '',
       category: event.category || 'attraction', location: event.location || '',
       notes: event.notes || '', mapUrl: event.mapUrl || '',
       cost: event.cost ? String(event.cost) : '', currency: event.currency || 'JPY',
-      date: (event.date || '').replace(/\//g, '-') || activeDay,
+      date: evtDate,
     });
-    setSelectedEvent(event); setTravelCalcStatus('idle'); setMode('edit');
+    setSelectedEvent(event);
+    setTravelCalcStatus('idle');
+    setTravelMode(autoFlight ? 'flight' : 'car');
+    setMode('edit');
   };
 
   const handleSave = async () => {
@@ -806,8 +819,6 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               </div>
               {/* 預計車程 — auto-calc */}
               {(() => {
-                const FLIGHT_KW = /機場|airport|起飛|降落|抵達|出發|航班|班機|飛機|✈/i;
-                const isFlightEvt = (e: any) => FLIGHT_KW.test(e?.title || '') || FLIGHT_KW.test(e?.location || '');
 
                 const formDay = form.date || activeDay;
                 const dayEvts = events
