@@ -60,9 +60,16 @@ function App() {
       const ownedQ  = query(collection(db, 'trips'), where('ownerUid',         '==',             uid));
       const emailQ  = query(collection(db, 'trips'), where('ownerEmail',       '==',             email.toLowerCase()));
       const editorQ = query(collection(db, 'trips'), where('allowedEditorUids','array-contains', uid));
-      const [ownedSnap, emailSnap, editorSnap] = await Promise.all([
+      const [ownedResult, emailResult, editorResult] = await Promise.allSettled([
         getDocs(ownedQ), getDocs(emailQ), getDocs(editorQ),
       ]);
+      const ownedSnap  = ownedResult.status  === 'fulfilled' ? ownedResult.value  : null;
+      const emailSnap  = emailResult.status  === 'fulfilled' ? emailResult.value  : null;
+      const editorSnap = editorResult.status === 'fulfilled' ? editorResult.value : null;
+      if (ownedResult.status  === 'rejected') console.warn('syncUserTrips: ownedQ failed',  ownedResult.reason);
+      if (emailResult.status  === 'rejected') console.warn('syncUserTrips: emailQ failed',  emailResult.reason);
+      if (editorResult.status === 'rejected') console.warn('syncUserTrips: editorQ failed', editorResult.reason);
+
       const existing = loadProjects();
       const map = new Map(existing.map(p => [p.id, p]));
       const merge = (snap: any, role: TripRole) => {
@@ -85,21 +92,21 @@ function App() {
           map.set(d.id, p);
         });
       };
-      merge(ownedSnap,  'owner');
-      merge(emailSnap,  'owner');
-      merge(editorSnap, 'editor');
+      if (ownedSnap)  merge(ownedSnap,  'owner');
+      if (emailSnap)  merge(emailSnap,  'owner');
+      if (editorSnap) merge(editorSnap, 'editor');
 
       // Build set of trip IDs that actually exist in Firestore for this user
       const firestoreIds = new Set<string>();
-      [ownedSnap, emailSnap, editorSnap].forEach(snap =>
-        snap.forEach((d: any) => firestoreIds.add(d.id))
-      );
-      // Remove from map any owner/editor trips that no longer exist in Firestore
-      // (visitor trips stay — we can't query them)
+      [ownedSnap, emailSnap, editorSnap].forEach(snap => {
+        if (snap) snap.forEach((d: any) => firestoreIds.add(d.id));
+      });
+      // Only remove stale trips if the corresponding query succeeded
+      const ownerQueriesOK = ownedResult.status === 'fulfilled' || emailResult.status === 'fulfilled';
+      const editorQueryOK  = editorResult.status === 'fulfilled';
       map.forEach((p, id) => {
-        if ((p.role === 'owner' || p.role === 'editor') && !firestoreIds.has(id)) {
-          map.delete(id);
-        }
+        if (p.role === 'owner'  && ownerQueriesOK && !firestoreIds.has(id)) map.delete(id);
+        if (p.role === 'editor' && editorQueryOK  && !firestoreIds.has(id)) map.delete(id);
       });
 
       const updated = Array.from(map.values());
@@ -370,12 +377,13 @@ function App() {
           }
           const data = tripSnap.data();
 
-          // Sync title (and other top-level fields) back into activeProject for all roles
+          // Sync title + emoji back into activeProject for all roles
           setActiveProjectState(prev => {
             if (!prev) return prev;
             const newTitle = data.title || prev.title;
-            if (newTitle === prev.title) return prev;
-            const updated = { ...prev, title: newTitle };
+            const newEmoji = data.emoji || prev.emoji;
+            if (newTitle === prev.title && newEmoji === prev.emoji) return prev;
+            const updated = { ...prev, title: newTitle, emoji: newEmoji };
             saveProject(updated);
             return updated;
           });

@@ -479,15 +479,17 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
       if (memberName.trim()) {
         await addDoc(membersCol, {
           name: memberName.trim(), color: memberColor,
-          googleUid: user?.uid || null, email: user?.email || null,
+          googleUid: user?.uid || '',
+          googleEmail: (user?.email || '').toLowerCase(),
           createdAt: Timestamp.now(),
         });
+        localStorage.setItem('tripmori_current_user', memberName.trim());
       }
       // Save extra members
       await Promise.all(extraMembers.map(m =>
         addDoc(membersCol, {
           name: m.name, color: m.color,
-          googleUid: null, email: null,
+          googleUid: '', googleEmail: '',
           createdAt: Timestamp.now(),
         })
       ));

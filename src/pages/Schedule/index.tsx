@@ -185,6 +185,49 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [metaForm, setMetaForm] = useState({ startDate: '', endDate: '', description: '', currency: '' });
   const [savingMeta, setSavingMeta]   = useState(false);
 
+  // Bulk import (owner only)
+  const [showBulkImport, setShowBulkImport] = useState(false);
+  const [bulkText, setBulkText]             = useState('');
+  const [bulkImporting, setBulkImporting]   = useState(false);
+  const [bulkError, setBulkError]           = useState('');
+
+  const SCHEDULE_CATEGORY_ALIASES: Record<string, string> = {
+    attraction: 'attraction', 景點: 'attraction', 活動: 'attraction',
+    food: 'food', 餐廳: 'food', 飲食: 'food', 用餐: 'food',
+    transport: 'transport', 交通: 'transport',
+    hotel: 'hotel', 住宿: 'hotel', 飯店: 'hotel',
+    shopping: 'shopping', 購物: 'shopping',
+    misc: 'misc', 其他: 'misc',
+  };
+
+  const handleScheduleBulkImport = async () => {
+    if (!bulkText.trim()) { setShowBulkImport(false); return; }
+    setBulkImporting(true); setBulkError('');
+    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
+    const eventsToAdd: any[] = [];
+    const errors: string[] = [];
+    lines.forEach((line, idx) => {
+      const parts = line.split(',').map((s: string) => s.trim());
+      if (parts.length < 3) { errors.push(`第 ${idx + 1} 行格式不正確`); return; }
+      const [date, time, title, catRaw = '', location = ''] = parts;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors.push(`第 ${idx + 1} 行日期格式錯誤`); return; }
+      if (!/^\d{2}:\d{2}$/.test(time)) { errors.push(`第 ${idx + 1} 行時間格式錯誤`); return; }
+      if (!title) { errors.push(`第 ${idx + 1} 行缺少名稱`); return; }
+      const category = SCHEDULE_CATEGORY_ALIASES[catRaw] || 'attraction';
+      eventsToAdd.push({ date, startTime: time, endTime: '', title, category, location, notes: '', mapUrl: '', cost: 0, currency: 'JPY', travelTime: '' });
+    });
+    if (errors.length > 0) {
+      setBulkError(errors.slice(0, 3).join('\n') + (errors.length > 3 ? `\n⋯ 共 ${errors.length} 個錯誤` : ''));
+      setBulkImporting(false); return;
+    }
+    try {
+      const eventsCol = collection(doc(db, 'trips', TRIP_ID), 'events');
+      await Promise.all(eventsToAdd.map((ev: any) => addDoc(eventsCol, { ...ev, createdAt: Timestamp.now() })));
+      setShowBulkImport(false); setBulkText('');
+    } catch (e) { console.error(e); setBulkError('匯入失敗，請重試'); }
+    setBulkImporting(false);
+  };
+
   // Fetch staticFlights → extract outbound departure + return arrival timestamps
   useEffect(() => {
     if (!db || !TRIP_ID || !doc) return;
@@ -420,6 +463,40 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   return (
     <div style={{ fontFamily: FONT }}>
 
+      {/* ── Bulk Import Modal (owner only) ── */}
+      {showBulkImport && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>📋 批次匯入行程</p>
+              <button onClick={() => { setShowBulkImport(false); setBulkError(''); }} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+            </div>
+            <p style={{ fontSize: 12, color: C.barkLight, marginBottom: 10, lineHeight: 1.6 }}>
+              格式：<code style={{ background: 'var(--tm-input-bg)', padding: '1px 6px', borderRadius: 4 }}>YYYY-MM-DD,HH:MM,名稱,類別,地點</code><br />
+              類別可填：景點、餐廳、交通、住宿、購物、其他（可省略）<br />
+              以 # 開頭的行為註解，將略過
+            </p>
+            <textarea
+              value={bulkText}
+              onChange={e => setBulkText(e.target.value)}
+              placeholder={'2026-04-23,09:00,享用早午餐,餐廳,飯店餐廳\n2026-04-23,11:00,前往台北101,景點,台北101\n# 這是註解'}
+              rows={10}
+              style={{ ...inputStyle, width: '100%', fontFamily: 'monospace', fontSize: 12, resize: 'vertical', boxSizing: 'border-box' }}
+            />
+            {bulkError && (
+              <p style={{ fontSize: 12, color: '#e53935', whiteSpace: 'pre-line', margin: '8px 0 0' }}>{bulkError}</p>
+            )}
+            <button
+              onClick={handleScheduleBulkImport}
+              disabled={bulkImporting || !bulkText.trim()}
+              style={{ ...btnPrimary, width: '100%', marginTop: 14, opacity: bulkImporting || !bulkText.trim() ? 0.5 : 1 }}
+            >
+              {bulkImporting ? '匯入中…' : `匯入行程`}
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* ── Trip Meta Edit Modal (owner only) ── */}
       {editingMeta && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
@@ -570,9 +647,14 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
 
       <PageHeader title={project?.title || '行程'} subtitle={project?.description || undefined} emoji={project?.emoji || '✈️'} color={C.sage}>
         {firestore.role === 'owner' && (
-          <button onClick={openMetaEdit} style={{ marginTop: 8, fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
-            ✏️ 編輯旅行設定
-          </button>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
+            <button onClick={openMetaEdit} style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
+              ✏️ 編輯旅行設定
+            </button>
+            <button onClick={() => { setBulkError(''); setBulkText(''); setShowBulkImport(true); }} style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
+              📋 批次匯入
+            </button>
+          </div>
         )}
         {tripPhase !== 'during' && (
           <div style={{ marginTop: 14, background: tripPhase === 'after' ? '#E8F5E2' : C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
