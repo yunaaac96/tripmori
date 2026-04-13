@@ -7,6 +7,13 @@ import PageHeader from '../../components/layout/PageHeader';
 
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 
+// Same emoji list as ProjectHub create flow
+const EMOJI_OPTS = [
+  '✈️','🚢','🚞','🌸','🏝','🌊','⛩','🍜','🍣','🎌','🌴','🏔','🎡','🗾',
+  '🇯🇵','🇹🇼','🇰🇷','🇺🇸','🇫🇷','🇮🇹','🇬🇧','🇹🇭','🇦🇺','🇸🇬','🇭🇰','🇪🇸','🇩🇪','🇵🇹',
+  '⛷️','🏂','❄️','🎿','🗻','🏕️','🚂','🌅','🌃','🏖️','🌄','🌉','🏯','🎯',
+];
+
 function buildTripDates(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
   if (!startDate) return dates;
@@ -621,14 +628,19 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               <button onClick={() => setEditingMeta(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ flex: '0 0 72px' }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>Emoji</label>
-                  <input style={{ ...inputStyle, textAlign: 'center', fontSize: 22, padding: '8px 4px' }} value={metaForm.emoji} onChange={e => setMeta('emoji', e.target.value)} maxLength={2} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>旅行名稱</label>
-                  <input style={inputStyle} placeholder={project?.title || '旅行名稱'} value={metaForm.title} onChange={e => setMeta('title', e.target.value)} />
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>旅行名稱</label>
+                <input style={inputStyle} placeholder={project?.title || '旅行名稱'} value={metaForm.title} onChange={e => setMeta('title', e.target.value)} />
+              </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>旅行表情</label>
+                <div style={{ maxHeight: 116, overflowY: 'auto', display: 'flex', gap: 6, flexWrap: 'wrap', padding: '2px 0' }}>
+                  {EMOJI_OPTS.map(e => (
+                    <button key={e} onClick={() => setMeta('emoji', e)}
+                      style={{ width: 38, height: 38, fontSize: 20, borderRadius: 10, border: `2px solid ${metaForm.emoji === e ? C.sageDark : C.creamDark}`, background: metaForm.emoji === e ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', flexShrink: 0 }}>
+                      {e}
+                    </button>
+                  ))}
                 </div>
               </div>
               <div>
