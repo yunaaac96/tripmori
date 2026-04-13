@@ -692,6 +692,21 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     return null;
   };
 
+  // Extract [lon, lat] directly from a Google Maps URL (most accurate, no API needed)
+  const coordsFromMapUrl = (url: string): [number, number] | null => {
+    if (!url) return null;
+    // @lat,lon,zoom  (most common in place URLs)
+    const at = url.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+    if (at) return [parseFloat(at[2]), parseFloat(at[1])];
+    // ?q=lat,lon  or  &q=lat,lon
+    const q = url.match(/[?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+    if (q) return [parseFloat(q[2]), parseFloat(q[1])];
+    // ll=lat,lon
+    const ll = url.match(/[?&]ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+    if (ll) return [parseFloat(ll[2]), parseFloat(ll[1])];
+    return null;
+  };
+
   const fmtDuration = (seconds: number) => {
     const mins = Math.round(seconds / 60);
     if (mins < 60) return `約 ${mins} 分鐘`;
@@ -699,17 +714,19 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     return m > 0 ? `約 ${h} 小時 ${m} 分鐘` : `約 ${h} 小時`;
   };
 
-  const calcTravelTime = async (nextLoc: string, nextTitle?: string) => {
+  const calcTravelTime = async (nextLoc: string, nextTitle?: string, nextMapUrl?: string) => {
     const from = form.location.trim();
     const to   = nextLoc.trim();
     if (!from || !to) return;
     setTravelCalcStatus('loading');
-    // Step 1: geocode origin (no bias)
-    let fromC = await geocodePlace(from);
+    // Step 1: origin — try mapUrl coords first (most accurate), then geocode
+    let fromC: [number, number] | null = coordsFromMapUrl(form.mapUrl);
+    if (!fromC) fromC = await geocodePlace(from);
     if (!fromC && form.title.trim()) fromC = await geocodePlace(form.title.trim());
     if (!fromC) { setTravelCalcStatus('error'); return; }
-    // Step 2: geocode destination WITH origin bias — prevents cross-continent mistakes
-    let toC = await geocodePlace(to, fromC);
+    // Step 2: destination — try mapUrl coords first, then biased geocode
+    let toC: [number, number] | null = coordsFromMapUrl(nextMapUrl || '');
+    if (!toC) toC = await geocodePlace(to, fromC);
     if (!toC && nextTitle) toC = await geocodePlace(nextTitle, fromC);
     if (!toC) { setTravelCalcStatus('error'); return; }
     // Step 3: sanity check — >500km means geocoding returned wrong continent
@@ -986,7 +1003,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                             🗺 Google Maps
                           </a>
                         ) : (
-                          <button onClick={() => calcTravelTime(nextEvt.location || nextEvt.title, nextEvt.title)} disabled={!canCalc || travelCalcStatus === 'loading'}
+                          <button onClick={() => calcTravelTime(nextEvt.location || nextEvt.title, nextEvt.title, nextEvt.mapUrl)} disabled={!canCalc || travelCalcStatus === 'loading'}
                             style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: canCalc ? C.sageDark : C.creamDark, color: canCalc ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: canCalc ? 'pointer' : 'default', fontFamily: FONT, opacity: travelCalcStatus === 'loading' ? 0.7 : 1 }}>
                             {travelCalcStatus === 'loading' ? '…' : '自動估算'}
                           </button>
