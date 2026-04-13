@@ -291,19 +291,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 
-  // ── Project name (editable by owner, writes back to trip title) ──
-  const [editingTeamName, setEditingTeamName] = useState(false);
-  const [teamNameInput, setTeamNameInput] = useState('');
-
-  const handleSaveTeamName = async () => {
-    const val = teamNameInput.trim();
-    if (!val) { setEditingTeamName(false); return; }
-    try {
-      await updateDoc(doc(db, 'trips', TRIP_ID), { title: val });
-    } catch (e) { console.error(e); }
-    setEditingTeamName(false);
-  };
-
   const displayMembers = members;
 
   const memberNames = displayMembers.map((m: any) => m.name);
@@ -423,30 +410,9 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       <PageHeader
         title="旅伴"
         subtitle={headerSubtitle}
-        subtitleAction={firestore.role === 'owner' && !editingTeamName ? (
-          <button
-            onClick={() => { setTeamNameInput(displayTeamName); setEditingTeamName(true); }}
-            style={{ background: 'none', border: 'none', padding: '0 2px', fontSize: 13, cursor: 'pointer', lineHeight: 1, color: 'rgba(255,255,255,0.85)' }}
-          >✏️</button>
-        ) : undefined}
         emoji="👥"
         color={C.earth}
-      >
-        {editingTeamName && (
-          <div style={{ marginTop: 8, display: 'flex', gap: 6 }}>
-            <input
-              autoFocus
-              value={teamNameInput}
-              onChange={e => setTeamNameInput(e.target.value)}
-              onKeyDown={e => { if (e.key === 'Enter') handleSaveTeamName(); if (e.key === 'Escape') setEditingTeamName(false); }}
-              placeholder={defaultTeamName}
-              style={{ flex: 1, padding: '6px 10px', borderRadius: 10, border: 'none', fontSize: 14, fontFamily: FONT, outline: 'none', background: 'rgba(255,255,255,0.25)', color: 'white' }}
-            />
-            <button onClick={handleSaveTeamName} style={{ padding: '6px 12px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.3)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✓</button>
-            <button onClick={() => setEditingTeamName(false)} style={{ padding: '6px 10px', borderRadius: 10, border: 'none', background: 'rgba(255,255,255,0.15)', color: 'white', fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>✕</button>
-          </div>
-        )}
-      </PageHeader>
+      />
 
       {/* Copy toast */}
       {copied && (

@@ -189,7 +189,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
 
   // Trip meta edit (owner only)
   const [editingMeta, setEditingMeta] = useState(false);
-  const [metaForm, setMetaForm] = useState({ startDate: '', endDate: '', description: '', currency: '' });
+  const [metaForm, setMetaForm] = useState({ title: '', emoji: '', startDate: '', endDate: '', description: '', currency: '' });
   const [savingMeta, setSavingMeta]   = useState(false);
 
   // Bulk import (owner only) — multi-section format
@@ -229,18 +229,6 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
 
       const tripRef    = doc(db, 'trips', TRIP_ID);
       const tripUpdate: any = {};
-
-      // ── [TRIP] ────────────────────────────────────────────────────
-      const tripSec = sections.find(s => s.type === 'TRIP');
-      if (tripSec) {
-        const d = tripSec.data;
-        if (d.title)       tripUpdate.title       = d.title;
-        if (d.emoji)       tripUpdate.emoji        = d.emoji;
-        if (d.startDate)   tripUpdate.startDate    = d.startDate;
-        if (d.endDate)     tripUpdate.endDate      = d.endDate;
-        if (d.currency)    tripUpdate.currency     = d.currency;
-        if (d.description) tripUpdate.description  = d.description;
-      }
 
       // ── [FLIGHT] (replaces all flights) ──────────────────────────
       const flightSecs = sections.filter(s => s.type === 'FLIGHT');
@@ -524,6 +512,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       const snap = await getDoc(doc(db, 'trips', TRIP_ID));
       const d = snap.exists() ? snap.data() : {};
       setMetaForm({
+        title:       d.title       || project?.title       || '',
+        emoji:       d.emoji       || project?.emoji       || '✈️',
         startDate:   d.startDate   || project?.startDate   || '',
         endDate:     d.endDate     || project?.endDate     || '',
         description: d.description || project?.description || '',
@@ -531,6 +521,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       });
     } catch {
       setMetaForm({
+        title:       project?.title       || '',
+        emoji:       project?.emoji       || '✈️',
         startDate:   project?.startDate   || '',
         endDate:     project?.endDate     || '',
         description: project?.description || '',
@@ -544,6 +536,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     setSavingMeta(true);
     try {
       await updateDoc(doc(db, 'trips', TRIP_ID), {
+        title:       metaForm.title.trim() || project?.title,
+        emoji:       metaForm.emoji.trim() || project?.emoji,
         startDate:   metaForm.startDate,
         endDate:     metaForm.endDate || metaForm.startDate,
         description: metaForm.description.trim(),
@@ -552,9 +546,12 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       if (onProjectUpdate && project) {
         onProjectUpdate({
           ...project,
+          title:       metaForm.title.trim()       || project?.title,
+          emoji:       metaForm.emoji.trim()       || project?.emoji,
           startDate:   metaForm.startDate,
           endDate:     metaForm.endDate || metaForm.startDate,
           description: metaForm.description.trim(),
+          currency:    metaForm.currency,
         });
       }
       setEditingMeta(false);
@@ -587,18 +584,17 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
             {/* Format reference card */}
             <div style={{ background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontSize: 11, color: C.barkLight, lineHeight: 1.8 }}>
               <p style={{ fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>支援的區塊（以 <code>[區塊名稱]</code> 開頭）：</p>
-              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[TRIP]</code> 旅行基本設定（title / emoji / startDate / endDate / currency / description）</p>
               <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[FLIGHT]</code> 機票（可多段：direction / airline / flightNo / date / depAirport / depTime / arrAirport / arrTime / notes / costPerPerson）</p>
               <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[HOTEL]</code> 住宿（可多筆：name / checkIn / checkOut / roomType / totalCost / currency / confirmCode / pin / notes / mapUrl）</p>
               <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[CAR]</code> 租車（company / carType / pickupLocation / pickupTime / returnLocation / returnTime / totalCost / currency / confirmCode / notes）</p>
               <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[BOOKING]</code> 其他預訂（title / type / date / cost / currency / confirmCode / notes）</p>
               <p style={{ margin: 0 }}><code style={{ color: C.earth }}>[EVENT]</code> 行程（date / time / title / category / location / endTime / cost / currency / notes）</p>
-              <p style={{ margin: '6px 0 0', fontSize: 10 }}>✦ 以 # 開頭的行為註解　✦ FLIGHT/HOTEL 匯入後會取代現有資料　✦ BOOKING/EVENT 則為新增</p>
+              <p style={{ margin: '6px 0 0', fontSize: 10 }}>✦ 以 # 開頭的行為註解　✦ FLIGHT/HOTEL/CAR 匯入後會取代現有資料　✦ BOOKING/EVENT 則為新增</p>
             </div>
             <textarea
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
-              placeholder={`[TRIP]\ntitle = 沖繩 4 日遊\nemoji = 🌺\nstartDate = 2026-04-23\nendDate = 2026-04-26\ncurrency = JPY\n\n[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepTime = 06:50\narrAirport = OKA\narrTime = 09:20\n\n[HOTEL]\nname = 沖繩海景飯店\ncheckIn = 2026-04-23 14:00\ncheckOut = 2026-04-25 11:00\nroomType = 海景雙人房\ntotalCost = 8000\ncurrency = TWD\nconfirmCode = ABC123\n\n[EVENT]\ndate = 2026-04-23\ntime = 11:00\ntitle = 午餐：牧志公設市場\ncategory = 餐廳\nlocation = 那霸市牧志`}
+              placeholder={`[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepTime = 06:50\narrAirport = OKA\narrTime = 09:20\ncostPerPerson = 3500\n\n[FLIGHT]\ndirection = 回程\nairline = 台灣虎航\nflightNo = IT 231\ndate = 2026-04-26\ndepAirport = OKA\ndepTime = 10:00\narrAirport = TPE\narrTime = 12:30\n\n[HOTEL]\nname = 沖繩海景飯店\ncheckIn = 2026-04-23 14:00\ncheckOut = 2026-04-26 11:00\nroomType = 海景雙人房\ntotalCost = 8000\ncurrency = TWD\nconfirmCode = ABC123\npin = 1234\n\n[CAR]\ncompany = OTS\ncarType = S級別 1台\npickupLocation = 那霸機場\npickupTime = 2026-04-23 11:00\nreturnLocation = 那霸機場\nreturnTime = 2026-04-26 13:30\ntotalCost = 26290\ncurrency = JPY\nconfirmCode = OTS123\n\n[BOOKING]\ntitle = 美麗海水族館門票\ntype = activity\ndate = 2026-04-24\ncost = 2180\ncurrency = JPY\nconfirmCode = \n\n[EVENT]\ndate = 2026-04-23\ntime = 09:00\ntitle = 抵達那霸機場\ncategory = 交通\nlocation = 那霸機場\n\n[EVENT]\ndate = 2026-04-23\ntime = 12:00\ntitle = 午餐：牧志公設市場\ncategory = 餐廳\nlocation = 那霸市牧志`}
               rows={14}
               style={{ ...inputStyle, width: '100%', fontFamily: 'monospace', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
             />
@@ -625,6 +621,16 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               <button onClick={() => setEditingMeta(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <div style={{ flex: '0 0 72px' }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>Emoji</label>
+                  <input style={{ ...inputStyle, textAlign: 'center', fontSize: 22, padding: '8px 4px' }} value={metaForm.emoji} onChange={e => setMeta('emoji', e.target.value)} maxLength={2} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>旅行名稱</label>
+                  <input style={inputStyle} placeholder={project?.title || '旅行名稱'} value={metaForm.title} onChange={e => setMeta('title', e.target.value)} />
+                </div>
+              </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>出發 → 回程日期</label>
                 <DateRangePicker
