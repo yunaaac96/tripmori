@@ -610,8 +610,21 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
 
   // ── Travel time auto-calc ──
   const geocodePlace = async (q: string): Promise<[number, number] | null> => {
+    // Try Open-Meteo first (no User-Agent restriction, handles CJK well)
     try {
-      const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`, { headers: { 'Accept-Language': 'zh,en' } });
+      const res  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=zh&format=json`);
+      const data = await res.json();
+      if (data.results?.[0]) {
+        const r = data.results[0];
+        return [r.longitude, r.latitude];
+      }
+    } catch {}
+    // Fallback: Nominatim (sequential to respect rate limit)
+    try {
+      const res  = await fetch(
+        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
+        { headers: { 'User-Agent': 'Tripmori/1.0 (travel planner app)', 'Accept-Language': 'zh-TW,zh,en' } }
+      );
       const data = await res.json();
       if (data?.[0]) return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
     } catch {}
@@ -628,7 +641,9 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     const to   = nextLoc.trim();
     if (!from || !to) return;
     setTravelCalcStatus('loading');
-    const [fromC, toC] = await Promise.all([geocodePlace(from), geocodePlace(to)]);
+    // Sequential geocoding to avoid rate limits
+    const fromC = await geocodePlace(from);
+    const toC   = await geocodePlace(to);
     if (!fromC || !toC) { setTravelCalcStatus('error'); return; }
     const profile = travelMode === 'walk' ? 'foot' : 'driving';
     try {
