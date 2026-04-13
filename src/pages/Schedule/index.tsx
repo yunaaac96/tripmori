@@ -1193,13 +1193,26 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                 </div>
               </div>
               {/* Travel time connector between events */}
-              {event.travelTime && !isLast && (
-                <div style={{ display: 'flex', alignItems: 'center', margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
-                  <div style={{ background: 'var(--tm-note-1)', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
-                    🚗 {event.travelTime}
+              {event.travelTime && !isLast && (() => {
+                const isTransit = event.travelTime.startsWith('🚌');
+                const nextEvt = dayEvents[idx + 1];
+                const mapsHref = isTransit && event.location && nextEvt?.location
+                  ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(event.location)}&destination=${encodeURIComponent(nextEvt.location)}&travelmode=transit`
+                  : null;
+                return (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
+                    <div style={{ background: 'var(--tm-note-1)', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
+                      {event.travelTime}
+                    </div>
+                    {mapsHref && (
+                      <a href={mapsHref} target="_blank" rel="noopener noreferrer"
+                        style={{ fontSize: 11, fontWeight: 700, color: '#4285F4', background: '#EAF2FF', borderRadius: 8, padding: '4px 8px', textDecoration: 'none', whiteSpace: 'nowrap', boxShadow: '0 1px 4px #4285F433' }}>
+                        🗺 Google Maps
+                      </a>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
               </div>
             );
           })}
