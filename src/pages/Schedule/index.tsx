@@ -192,13 +192,13 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [metaForm, setMetaForm] = useState({ startDate: '', endDate: '', description: '', currency: '' });
   const [savingMeta, setSavingMeta]   = useState(false);
 
-  // Bulk import (owner only)
+  // Bulk import (owner only) — multi-section format
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkText, setBulkText]             = useState('');
   const [bulkImporting, setBulkImporting]   = useState(false);
   const [bulkError, setBulkError]           = useState('');
 
-  const SCHEDULE_CATEGORY_ALIASES: Record<string, string> = {
+  const CATEGORY_ALIASES_MAP: Record<string, string> = {
     attraction: 'attraction', 景點: 'attraction', 活動: 'attraction',
     food: 'food', 餐廳: 'food', 飲食: 'food', 用餐: 'food',
     transport: 'transport', 交通: 'transport',
@@ -210,26 +210,132 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const handleScheduleBulkImport = async () => {
     if (!bulkText.trim()) { setShowBulkImport(false); return; }
     setBulkImporting(true); setBulkError('');
-    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-    const eventsToAdd: any[] = [];
-    const errors: string[] = [];
-    lines.forEach((line, idx) => {
-      const parts = line.split(',').map((s: string) => s.trim());
-      if (parts.length < 3) { errors.push(`第 ${idx + 1} 行格式不正確`); return; }
-      const [date, time, title, catRaw = '', location = ''] = parts;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors.push(`第 ${idx + 1} 行日期格式錯誤`); return; }
-      if (!/^\d{2}:\d{2}$/.test(time)) { errors.push(`第 ${idx + 1} 行時間格式錯誤`); return; }
-      if (!title) { errors.push(`第 ${idx + 1} 行缺少名稱`); return; }
-      const category = SCHEDULE_CATEGORY_ALIASES[catRaw] || 'attraction';
-      eventsToAdd.push({ date, startTime: time, endTime: '', title, category, location, notes: '', mapUrl: '', cost: 0, currency: 'JPY', travelTime: '' });
-    });
-    if (errors.length > 0) {
-      setBulkError(errors.slice(0, 3).join('\n') + (errors.length > 3 ? `\n⋯ 共 ${errors.length} 個錯誤` : ''));
-      setBulkImporting(false); return;
-    }
     try {
-      const eventsCol = collection(doc(db, 'trips', TRIP_ID), 'events');
-      await Promise.all(eventsToAdd.map((ev: any) => addDoc(eventsCol, { ...ev, createdAt: Timestamp.now() })));
+      // ── Parse sections ──────────────────────────────────────────────
+      type ParsedSection = { type: string; data: Record<string, string> };
+      const sections: ParsedSection[] = [];
+      let cur: ParsedSection | null = null;
+      for (const rawLine of bulkText.split('\n')) {
+        const line = rawLine.trim();
+        if (!line || line.startsWith('#')) continue;
+        const hdr = line.match(/^\[([A-Z_]+)\]$/);
+        if (hdr) { if (cur) sections.push(cur); cur = { type: hdr[1], data: {} }; continue; }
+        if (cur) {
+          const eq = line.indexOf('=');
+          if (eq > 0) cur.data[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
+        }
+      }
+      if (cur) sections.push(cur);
+
+      const tripRef    = doc(db, 'trips', TRIP_ID);
+      const tripUpdate: any = {};
+
+      // ── [TRIP] ────────────────────────────────────────────────────
+      const tripSec = sections.find(s => s.type === 'TRIP');
+      if (tripSec) {
+        const d = tripSec.data;
+        if (d.title)       tripUpdate.title       = d.title;
+        if (d.emoji)       tripUpdate.emoji        = d.emoji;
+        if (d.startDate)   tripUpdate.startDate    = d.startDate;
+        if (d.endDate)     tripUpdate.endDate      = d.endDate;
+        if (d.currency)    tripUpdate.currency     = d.currency;
+        if (d.description) tripUpdate.description  = d.description;
+      }
+
+      // ── [FLIGHT] (replaces all flights) ──────────────────────────
+      const flightSecs = sections.filter(s => s.type === 'FLIGHT');
+      if (flightSecs.length) {
+        tripUpdate.staticFlights = flightSecs.map((s, i) => {
+          const d = s.data;
+          return {
+            id: `f${i + 1}`, direction: d.direction || '去程',
+            airline: d.airline || '', flightNo: d.flightNo || '',
+            date: d.date || '',
+            dep: { airport: d.depAirport || '', name: d.depName || '', time: d.depTime || '' },
+            arr: { airport: d.arrAirport || '', name: d.arrName || '', time: d.arrTime || '' },
+            notes: d.notes || '', costPerPerson: d.costPerPerson || '',
+          };
+        });
+      }
+
+      // ── [HOTEL] (replaces all hotels) ────────────────────────────
+      const hotelSecs = sections.filter(s => s.type === 'HOTEL');
+      if (hotelSecs.length) {
+        tripUpdate.staticHotels = hotelSecs.map((s, i) => {
+          const d = s.data;
+          return {
+            id: `h${i + 1}`, name: d.name || '', nameJa: d.nameJa || '',
+            address: d.address || '', roomType: d.roomType || '',
+            checkIn: d.checkIn || '', checkOut: d.checkOut || '',
+            totalCost: d.totalCost || '', currency: d.currency || 'JPY',
+            costPerPerson: d.costPerPerson || '',
+            confirmCode: d.confirmCode || '', pin: d.pin || '',
+            notes: d.notes || '', mapUrl: d.mapUrl || '',
+          };
+        });
+      }
+
+      // ── [CAR] ─────────────────────────────────────────────────────
+      const carSec = sections.find(s => s.type === 'CAR');
+      if (carSec) {
+        const d = carSec.data;
+        tripUpdate.staticCar = {
+          company: d.company || '', carType: d.carType || '',
+          pickupLocation: d.pickupLocation || '', pickupTime: d.pickupTime || '',
+          returnLocation: d.returnLocation || '', returnTime: d.returnTime || '',
+          totalCost: d.totalCost || '', currency: d.currency || 'JPY',
+          confirmCode: d.confirmCode || '', notes: d.notes || '',
+        };
+      }
+
+      // Write all trip-doc updates at once
+      if (Object.keys(tripUpdate).length) {
+        await updateDoc(tripRef, tripUpdate);
+        if (onProjectUpdate && project) {
+          const up = { ...project };
+          if (tripUpdate.title)       up.title       = tripUpdate.title;
+          if (tripUpdate.emoji)       up.emoji        = tripUpdate.emoji;
+          if (tripUpdate.startDate)   up.startDate    = tripUpdate.startDate;
+          if (tripUpdate.endDate)     up.endDate      = tripUpdate.endDate;
+          if (tripUpdate.currency)    up.currency     = tripUpdate.currency;
+          if (tripUpdate.description) up.description  = tripUpdate.description;
+          onProjectUpdate(up);
+        }
+      }
+
+      // ── [BOOKING] (appends) ───────────────────────────────────────
+      const bookingSecs = sections.filter(s => s.type === 'BOOKING');
+      if (bookingSecs.length) {
+        const bookingsCol = collection(doc(db, 'trips', TRIP_ID), 'bookings');
+        await Promise.all(bookingSecs.map(s => {
+          const d = s.data;
+          return addDoc(bookingsCol, {
+            title: d.title || '', type: d.type || 'activity',
+            confirmCode: d.confirmCode || '', notes: d.notes || '',
+            date: d.date || '', cost: d.cost || '', currency: d.currency || 'JPY',
+            createdAt: Timestamp.now(),
+          });
+        }));
+      }
+
+      // ── [EVENT] (appends) ─────────────────────────────────────────
+      const eventSecs = sections.filter(s => s.type === 'EVENT');
+      if (eventSecs.length) {
+        const eventsCol = collection(doc(db, 'trips', TRIP_ID), 'events');
+        await Promise.all(eventSecs.map(s => {
+          const d = s.data;
+          return addDoc(eventsCol, {
+            date: d.date || '', startTime: d.time || d.startTime || '',
+            endTime: d.endTime || '', title: d.title || '',
+            category: CATEGORY_ALIASES_MAP[d.category] || 'attraction',
+            location: d.location || '', notes: d.notes || '',
+            mapUrl: d.mapUrl || '', cost: d.cost ? Number(d.cost) : 0,
+            currency: d.currency || 'JPY', travelTime: d.travelTime || '',
+            createdAt: Timestamp.now(),
+          });
+        }));
+      }
+
       setShowBulkImport(false); setBulkText('');
     } catch (e) { console.error(e); setBulkError('匯入失敗，請重試'); }
     setBulkImporting(false);
@@ -473,22 +579,28 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       {/* ── Bulk Import Modal (owner only) ── */}
       {showBulkImport && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
-          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>📋 批次匯入行程</p>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '92vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>📋 一鍵匯入</p>
               <button onClick={() => { setShowBulkImport(false); setBulkError(''); }} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
-            <p style={{ fontSize: 12, color: C.barkLight, marginBottom: 10, lineHeight: 1.6 }}>
-              格式：<code style={{ background: 'var(--tm-input-bg)', padding: '1px 6px', borderRadius: 4 }}>YYYY-MM-DD,HH:MM,名稱,類別,地點</code><br />
-              類別可填：景點、餐廳、交通、住宿、購物、其他（可省略）<br />
-              以 # 開頭的行為註解，將略過
-            </p>
+            {/* Format reference card */}
+            <div style={{ background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontSize: 11, color: C.barkLight, lineHeight: 1.8 }}>
+              <p style={{ fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>支援的區塊（以 <code>[區塊名稱]</code> 開頭）：</p>
+              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[TRIP]</code> 旅行基本設定（title / emoji / startDate / endDate / currency / description）</p>
+              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[FLIGHT]</code> 機票（可多段：direction / airline / flightNo / date / depAirport / depTime / arrAirport / arrTime / notes / costPerPerson）</p>
+              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[HOTEL]</code> 住宿（可多筆：name / checkIn / checkOut / roomType / totalCost / currency / confirmCode / pin / notes / mapUrl）</p>
+              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[CAR]</code> 租車（company / carType / pickupLocation / pickupTime / returnLocation / returnTime / totalCost / currency / confirmCode / notes）</p>
+              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[BOOKING]</code> 其他預訂（title / type / date / cost / currency / confirmCode / notes）</p>
+              <p style={{ margin: 0 }}><code style={{ color: C.earth }}>[EVENT]</code> 行程（date / time / title / category / location / endTime / cost / currency / notes）</p>
+              <p style={{ margin: '6px 0 0', fontSize: 10 }}>✦ 以 # 開頭的行為註解　✦ FLIGHT/HOTEL 匯入後會取代現有資料　✦ BOOKING/EVENT 則為新增</p>
+            </div>
             <textarea
               value={bulkText}
               onChange={e => setBulkText(e.target.value)}
-              placeholder={'2026-04-23,09:00,享用早午餐,餐廳,飯店餐廳\n2026-04-23,11:00,前往台北101,景點,台北101\n# 這是註解'}
-              rows={10}
-              style={{ ...inputStyle, width: '100%', fontFamily: 'monospace', fontSize: 12, resize: 'vertical', boxSizing: 'border-box' }}
+              placeholder={`[TRIP]\ntitle = 沖繩 4 日遊\nemoji = 🌺\nstartDate = 2026-04-23\nendDate = 2026-04-26\ncurrency = JPY\n\n[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepTime = 06:50\narrAirport = OKA\narrTime = 09:20\n\n[HOTEL]\nname = 沖繩海景飯店\ncheckIn = 2026-04-23 14:00\ncheckOut = 2026-04-25 11:00\nroomType = 海景雙人房\ntotalCost = 8000\ncurrency = TWD\nconfirmCode = ABC123\n\n[EVENT]\ndate = 2026-04-23\ntime = 11:00\ntitle = 午餐：牧志公設市場\ncategory = 餐廳\nlocation = 那霸市牧志`}
+              rows={14}
+              style={{ ...inputStyle, width: '100%', fontFamily: 'monospace', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
             />
             {bulkError && (
               <p style={{ fontSize: 12, color: '#e53935', whiteSpace: 'pre-line', margin: '8px 0 0' }}>{bulkError}</p>
@@ -498,7 +610,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               disabled={bulkImporting || !bulkText.trim()}
               style={{ ...btnPrimary, width: '100%', marginTop: 14, opacity: bulkImporting || !bulkText.trim() ? 0.5 : 1 }}
             >
-              {bulkImporting ? '匯入中…' : `匯入行程`}
+              {bulkImporting ? '匯入中…' : '🚀 一鍵匯入'}
             </button>
           </div>
         </div>
