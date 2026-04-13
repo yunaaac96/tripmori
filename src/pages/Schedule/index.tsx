@@ -617,69 +617,107 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   // Strip trailing street number (e.g. "若狹1-25-11" → "若狹")
   const stripStreetNum = (q: string) => q.replace(/[\d\-－]+$/, '').trim();
 
-  const nominatimFetch = async (q: string): Promise<[number, number] | null> => {
+  // Haversine distance check (km) — rejects cross-continent geocoding mistakes
+  const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number) => {
+    const R = 6371, toRad = (d: number) => d * Math.PI / 180;
+    const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  };
+
+  const nominatimFetch = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
     try {
-      const res = await fetch(
-        `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
-        { headers: { 'User-Agent': 'Tripmori/1.0', 'Accept-Language': 'ja,zh-TW,zh,en' } }
-      );
+      let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=3`;
+      if (bias) {
+        const [blon, blat] = bias, d = 3;
+        url += `&viewbox=${blon-d},${blat+d},${blon+d},${blat-d}&bounded=1`;
+      }
+      const res = await fetch(url, { headers: { 'User-Agent': 'Tripmori/1.0', 'Accept-Language': 'ja,zh-TW,zh,en' } });
       const data = await res.json();
       if (data?.[0]) return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
     } catch {}
     return null;
   };
 
-  const openMeteoFetch = async (q: string): Promise<[number, number] | null> => {
+  const openMeteoFetch = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
     try {
-      const res  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=zh&format=json`);
-      const data = await res.json();
-      if (data.results?.[0]) return [data.results[0].longitude, data.results[0].latitude];
+      let url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=zh&format=json`;
+      const data = await (await fetch(url)).json();
+      if (!data.results?.length) return null;
+      if (bias) {
+        // Pick the result closest to bias coords
+        const [blon, blat] = bias;
+        const best = data.results.reduce((a: any, b: any) =>
+          haversineKm(blon, blat, a.longitude, a.latitude) <= haversineKm(blon, blat, b.longitude, b.latitude) ? a : b
+        );
+        return [best.longitude, best.latitude];
+      }
+      return [data.results[0].longitude, data.results[0].latitude];
     } catch {}
     return null;
   };
 
-  const geocodePlace = async (q: string): Promise<[number, number] | null> => {
+  const geocodePlace = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
     const norm = normalizeAddr(q);
-    // 1. Full address → Nominatim
+    const short = stripStreetNum(norm);
+    // With bias: constrained search is more reliable — try biased first
+    if (bias) {
+      const r0 = await nominatimFetch(norm, bias);
+      if (r0) return r0;
+      if (short && short !== norm) {
+        const r1 = await nominatimFetch(short, bias);
+        if (r1) return r1;
+      }
+      const r2 = await openMeteoFetch(norm, bias);
+      if (r2) return r2;
+      if (short && short !== norm) {
+        const r3 = await openMeteoFetch(short, bias);
+        if (r3) return r3;
+      }
+      return null;
+    }
+    // No bias: broader fallback chain
     const r1 = await nominatimFetch(norm);
     if (r1) return r1;
-    // 2. Strip street number → Open-Meteo (city/area name lookup)
-    const short = stripStreetNum(norm);
     if (short && short !== norm) {
       const r2 = await openMeteoFetch(short);
       if (r2) return r2;
     }
-    // 3. Full query → Open-Meteo
     const r3 = await openMeteoFetch(norm);
     if (r3) return r3;
-    // 4. Strip street number → Nominatim
     if (short && short !== norm) {
       const r4 = await nominatimFetch(short);
       if (r4) return r4;
     }
     return null;
   };
+
   const fmtDuration = (seconds: number) => {
     const mins = Math.round(seconds / 60);
     if (mins < 60) return `約 ${mins} 分鐘`;
     const h = Math.floor(mins / 60), m = mins % 60;
     return m > 0 ? `約 ${h} 小時 ${m} 分鐘` : `約 ${h} 小時`;
   };
+
   const calcTravelTime = async (nextLoc: string, nextTitle?: string) => {
     const from = form.location.trim();
     const to   = nextLoc.trim();
     if (!from || !to) return;
     setTravelCalcStatus('loading');
-    // Sequential geocoding to avoid rate limits
+    // Step 1: geocode origin (no bias)
     let fromC = await geocodePlace(from);
-    // If location geocoding fails, try the event title as search term
     if (!fromC && form.title.trim()) fromC = await geocodePlace(form.title.trim());
-    let toC = await geocodePlace(to);
-    if (!toC && nextTitle) toC = await geocodePlace(nextTitle);
-    if (!fromC || !toC) { setTravelCalcStatus('error'); return; }
+    if (!fromC) { setTravelCalcStatus('error'); return; }
+    // Step 2: geocode destination WITH origin bias — prevents cross-continent mistakes
+    let toC = await geocodePlace(to, fromC);
+    if (!toC && nextTitle) toC = await geocodePlace(nextTitle, fromC);
+    if (!toC) { setTravelCalcStatus('error'); return; }
+    // Step 3: sanity check — >500km means geocoding returned wrong continent
+    if (haversineKm(fromC[0], fromC[1], toC[0], toC[1]) > 500) { setTravelCalcStatus('error'); return; }
     const profile = travelMode === 'walk' ? 'foot' : 'driving';
     try {
       const res  = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${fromC[0]},${fromC[1]};${toC[0]},${toC[1]}?overview=false`);
+      if (!res.ok) { setTravelCalcStatus('error'); return; }
       const data = await res.json();
       if (data.code === 'Ok' && data.routes?.[0]) {
         let secs = data.routes[0].duration;
