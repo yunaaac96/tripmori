@@ -204,6 +204,25 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [bulkText, setBulkText]             = useState('');
   const [bulkImporting, setBulkImporting]   = useState(false);
   const [bulkError, setBulkError]           = useState('');
+  const [bulkTab, setBulkTab]               = useState<'flight'|'hotel'|'car'|'booking'|'event'>('flight');
+  const [bulkCopied, setBulkCopied]         = useState(false);
+
+  const BULK_TEMPLATES = {
+    flight: `[FLIGHT]\ndirection = 去程\nairline = \nflightNo = \ndate = YYYY-MM-DD\ndepAirport = \ndepTime = HH:MM\narrAirport = \narrTime = HH:MM\nnotes = \ncostPerPerson = `,
+    hotel:  `[HOTEL]\nname = \ncheckIn = YYYY-MM-DD HH:MM\ncheckOut = YYYY-MM-DD HH:MM\nroomType = \ntotalCost = \ncurrency = JPY\nconfirmCode = \npin = \nnotes = \nmapUrl = `,
+    car:    `[CAR]\ncompany = \ncarType = \npickupLocation = \npickupTime = YYYY-MM-DD HH:MM\nreturnLocation = \nreturnTime = YYYY-MM-DD HH:MM\ntotalCost = \ncurrency = JPY\nconfirmCode = \nnotes = `,
+    booking:`[BOOKING]\ntitle = \ntype = activity\ndate = YYYY-MM-DD\ncost = \ncurrency = JPY\nconfirmCode = \nnotes = `,
+    event:  `[EVENT]\ndate = YYYY-MM-DD\ntime = HH:MM\ntitle = \ncategory = 景點\nlocation = \nendTime = \ncost = \ncurrency = JPY\nnotes = `,
+  };
+
+  const BULK_FULL_TEMPLATE = Object.values(BULK_TEMPLATES).join('\n\n');
+
+  const copyToClipboard = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setBulkCopied(true);
+      setTimeout(() => setBulkCopied(false), 2000);
+    });
+  };
 
   const CATEGORY_ALIASES_MAP: Record<string, string> = {
     attraction: 'attraction', 景點: 'attraction', 活動: 'attraction',
@@ -584,37 +603,76 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       {showBulkImport && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '92vh', overflowY: 'auto' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+
+            {/* Header */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>📋 一鍵匯入</p>
-              <button onClick={() => { setShowBulkImport(false); setBulkError(''); }} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <button onClick={() => { setShowBulkImport(false); setBulkError(''); setBulkText(''); }} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
-            {/* Format reference card */}
-            <div style={{ background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 12, padding: '10px 12px', marginBottom: 12, fontSize: 11, color: C.barkLight, lineHeight: 1.8 }}>
-              <p style={{ fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>支援的區塊（以 <code>[區塊名稱]</code> 開頭）：</p>
-              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[FLIGHT]</code> 機票（可多段：direction / airline / flightNo / date / depAirport / depTime / arrAirport / arrTime / notes / costPerPerson）</p>
-              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[HOTEL]</code> 住宿（可多筆：name / checkIn / checkOut / roomType / totalCost / currency / confirmCode / pin / notes / mapUrl）</p>
-              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[CAR]</code> 租車（company / carType / pickupLocation / pickupTime / returnLocation / returnTime / totalCost / currency / confirmCode / notes）</p>
-              <p style={{ margin: '0 0 2px' }}><code style={{ color: C.earth }}>[BOOKING]</code> 其他預訂（title / type / date / cost / currency / confirmCode / notes）</p>
-              <p style={{ margin: 0 }}><code style={{ color: C.earth }}>[EVENT]</code> 行程（date / time / title / category / location / endTime / cost / currency / notes）</p>
-              <p style={{ margin: '6px 0 0', fontSize: 10 }}>✦ 以 # 開頭的行為註解　✦ FLIGHT/HOTEL/CAR 匯入後會取代現有資料　✦ BOOKING/EVENT 則為新增</p>
+
+            {/* Step 1 — copy template */}
+            <div style={{ background: 'var(--tm-card-bg)', border: `1.5px solid ${C.creamDark}`, borderRadius: 14, padding: '12px 14px', marginBottom: 12 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px' }}>① 選擇範本並複製</p>
+
+              {/* Section tabs */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
+                {([
+                  { key: 'flight',  label: '✈️ 機票'  },
+                  { key: 'hotel',   label: '🏨 住宿'  },
+                  { key: 'car',     label: '🚗 租車'  },
+                  { key: 'booking', label: '🎡 預訂'  },
+                  { key: 'event',   label: '📅 行程'  },
+                ] as const).map(t => (
+                  <button key={t.key} onClick={() => setBulkTab(t.key)}
+                    style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${bulkTab === t.key ? C.sageDark : C.creamDark}`, background: bulkTab === t.key ? C.sage : 'var(--tm-card-bg)', color: bulkTab === t.key ? 'white' : C.bark, fontWeight: 600, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              {/* Template preview */}
+              <pre style={{ margin: '0 0 10px', padding: '8px 10px', background: 'var(--tm-input-bg)', borderRadius: 8, fontSize: 11, color: C.bark, lineHeight: 1.7, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {BULK_TEMPLATES[bulkTab]}
+              </pre>
+
+              {/* Copy buttons */}
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => copyToClipboard(BULK_TEMPLATES[bulkTab])}
+                  style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: `1.5px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                  複製此段落
+                </button>
+                <button onClick={() => copyToClipboard(BULK_FULL_TEMPLATE)}
+                  style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                  {bulkCopied ? '✓ 已複製！' : '複製完整範本'}
+                </button>
+              </div>
+              <p style={{ fontSize: 10, color: C.barkLight, margin: '8px 0 0', lineHeight: 1.5 }}>
+                ✦ FLIGHT / HOTEL / CAR 匯入後取代現有資料　✦ BOOKING / EVENT 為新增
+              </p>
             </div>
-            <textarea
-              value={bulkText}
-              onChange={e => setBulkText(e.target.value)}
-              placeholder={`[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepTime = 06:50\narrAirport = OKA\narrTime = 09:20\ncostPerPerson = 3500\n\n[FLIGHT]\ndirection = 回程\nairline = 台灣虎航\nflightNo = IT 231\ndate = 2026-04-26\ndepAirport = OKA\ndepTime = 10:00\narrAirport = TPE\narrTime = 12:30\n\n[HOTEL]\nname = 沖繩海景飯店\ncheckIn = 2026-04-23 14:00\ncheckOut = 2026-04-26 11:00\nroomType = 海景雙人房\ntotalCost = 8000\ncurrency = TWD\nconfirmCode = ABC123\npin = 1234\n\n[CAR]\ncompany = OTS\ncarType = S級別 1台\npickupLocation = 那霸機場\npickupTime = 2026-04-23 11:00\nreturnLocation = 那霸機場\nreturnTime = 2026-04-26 13:30\ntotalCost = 26290\ncurrency = JPY\nconfirmCode = OTS123\n\n[BOOKING]\ntitle = 美麗海水族館門票\ntype = activity\ndate = 2026-04-24\ncost = 2180\ncurrency = JPY\nconfirmCode = \n\n[EVENT]\ndate = 2026-04-23\ntime = 09:00\ntitle = 抵達那霸機場\ncategory = 交通\nlocation = 那霸機場\n\n[EVENT]\ndate = 2026-04-23\ntime = 12:00\ntitle = 午餐：牧志公設市場\ncategory = 餐廳\nlocation = 那霸市牧志`}
-              rows={14}
-              style={{ ...inputStyle, width: '100%', fontFamily: 'monospace', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
-            />
-            {bulkError && (
-              <p style={{ fontSize: 12, color: '#e53935', whiteSpace: 'pre-line', margin: '8px 0 0' }}>{bulkError}</p>
-            )}
-            <button
-              onClick={handleScheduleBulkImport}
-              disabled={bulkImporting || !bulkText.trim()}
-              style={{ ...btnPrimary, width: '100%', marginTop: 14, opacity: bulkImporting || !bulkText.trim() ? 0.5 : 1 }}
-            >
-              {bulkImporting ? '匯入中…' : '🚀 一鍵匯入'}
-            </button>
+
+            {/* Step 2 — paste & import */}
+            <div style={{ background: 'var(--tm-card-bg)', border: `1.5px solid ${C.creamDark}`, borderRadius: 14, padding: '12px 14px' }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 8px' }}>② 貼上並填入內容後匯入</p>
+              <textarea
+                value={bulkText}
+                onChange={e => setBulkText(e.target.value)}
+                placeholder={'將複製的範本貼至此處，填入對應內容後按下匯入…\n\n範例：\n[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepTime = 06:50\narrAirport = OKA\narrTime = 09:20'}
+                rows={10}
+                style={{ ...inputStyle, width: '100%', fontFamily: 'monospace', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
+              />
+              {bulkError && (
+                <p style={{ fontSize: 12, color: '#e53935', whiteSpace: 'pre-line', margin: '8px 0 0' }}>{bulkError}</p>
+              )}
+              <button
+                onClick={handleScheduleBulkImport}
+                disabled={bulkImporting || !bulkText.trim()}
+                style={{ ...btnPrimary, width: '100%', marginTop: 10, opacity: bulkImporting || !bulkText.trim() ? 0.5 : 1 }}
+              >
+                {bulkImporting ? '匯入中…' : '🚀 一鍵匯入'}
+              </button>
+            </div>
+
           </div>
         </div>
       )}
