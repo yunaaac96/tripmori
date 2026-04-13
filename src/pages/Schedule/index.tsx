@@ -81,7 +81,9 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [activeDay, setActiveDay]   = useState(() => project?.startDate || '2026-04-23');
   const [mode, setMode]             = useState<Mode>('view');
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const [form, setForm]             = useState({ ...EMPTY_EVENT_FORM });
+  const [form, setForm]             = useState({ ...EMPTY_EVENT_FORM, date: '' });
+  const [travelMode, setTravelMode] = useState<'car' | 'transit' | 'walk'>('car');
+  const [travelCalcStatus, setTravelCalcStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [saving, setSaving]         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
@@ -492,7 +494,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     .filter(e => (e.date || '').replace(/\//g, '-') === activeDay)
     .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
 
-  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM }); setSelectedEvent(null); setMode('add'); };
+  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setSelectedEvent(null); setTravelCalcStatus('idle'); setMode('add'); };
   const openEdit = (event: any) => {
     setForm({
       title: event.title || '', startTime: event.startTime || '', endTime: event.endTime || '',
@@ -500,8 +502,9 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       category: event.category || 'attraction', location: event.location || '',
       notes: event.notes || '', mapUrl: event.mapUrl || '',
       cost: event.cost ? String(event.cost) : '', currency: event.currency || 'JPY',
+      date: (event.date || '').replace(/\//g, '-') || activeDay,
     });
-    setSelectedEvent(event); setMode('edit');
+    setSelectedEvent(event); setTravelCalcStatus('idle'); setMode('edit');
   };
 
   const handleSave = async () => {
@@ -513,7 +516,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       travelTime: form.travelTime || '',
       category: form.category, location: form.location || '', notes: form.notes || '',
       mapUrl: form.mapUrl || '', cost: form.cost ? Number(form.cost) : 0,
-      currency: form.currency, date: activeDay,
+      currency: form.currency, date: form.date || activeDay,
     };
     try {
       if (mode === 'add') {
@@ -522,7 +525,10 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
         await updateDoc(doc(db, 'trips', TRIP_ID, 'events', selectedEvent.id), payload);
       }
     } catch (e) { console.error(e); }
-    setSaving(false); setMode('view'); setSelectedEvent(null);
+    setSaving(false);
+    // Navigate to the event's date (may have changed during edit)
+    if (payload.date) setActiveDay(payload.date);
+    setMode('view'); setSelectedEvent(null);
   };
 
   const handleDelete = async () => {
@@ -588,6 +594,42 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const setMeta = (key: string, val: string) => setMetaForm(p => ({ ...p, [key]: val }));
 
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));
+
+  // ── Travel time auto-calc ──
+  const geocodePlace = async (q: string): Promise<[number, number] | null> => {
+    try {
+      const res  = await fetch(`https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`, { headers: { 'Accept-Language': 'zh,en' } });
+      const data = await res.json();
+      if (data?.[0]) return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
+    } catch {}
+    return null;
+  };
+  const fmtDuration = (seconds: number) => {
+    const mins = Math.round(seconds / 60);
+    if (mins < 60) return `約 ${mins} 分鐘`;
+    const h = Math.floor(mins / 60), m = mins % 60;
+    return m > 0 ? `約 ${h} 小時 ${m} 分鐘` : `約 ${h} 小時`;
+  };
+  const calcTravelTime = async (nextLoc: string) => {
+    const from = form.location.trim();
+    const to   = nextLoc.trim();
+    if (!from || !to) return;
+    setTravelCalcStatus('loading');
+    const [fromC, toC] = await Promise.all([geocodePlace(from), geocodePlace(to)]);
+    if (!fromC || !toC) { setTravelCalcStatus('error'); return; }
+    const profile = travelMode === 'walk' ? 'foot' : 'driving';
+    try {
+      const res  = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${fromC[0]},${fromC[1]};${toC[0]},${toC[1]}?overview=false`);
+      const data = await res.json();
+      if (data.code === 'Ok' && data.routes?.[0]) {
+        let secs = data.routes[0].duration;
+        if (travelMode === 'transit') secs = secs * 1.35;
+        const icon = travelMode === 'car' ? '🚗' : travelMode === 'transit' ? '🚌' : '🚶';
+        set('travelTime', `${icon} ${fmtDuration(secs)}`);
+        setTravelCalcStatus('done');
+      } else { setTravelCalcStatus('error'); }
+    } catch { setTravelCalcStatus('error'); }
+  };
 
   // Build a Google Maps URL: prefer explicit mapUrl, fallback to search by location name
   const getMapUrl = (event: any): string | null => {
@@ -736,6 +778,21 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>行程名稱 *</label><input style={inputStyle} placeholder="享用早午餐 / 前往台北101 / Check-in…" value={form.title} onChange={e => set('title', e.target.value)} /></div>
+              {/* 日期選擇 */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>📅 日期</label>
+                <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
+                  {DAY_OPTIONS.map(opt => {
+                    const selected = form.date === opt.date;
+                    return (
+                      <button key={opt.date} onClick={() => set('date', opt.date)} style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 12, border: `2px solid ${selected ? C.sageDark : C.creamDark}`, background: selected ? C.sageDark : 'var(--tm-card-bg)', color: selected ? 'white' : C.bark, fontWeight: selected ? 700 : 400, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                        <span style={{ fontSize: 11, opacity: 0.8 }}>{opt.week}</span>
+                        <span>{opt.label}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
               {/* 時間欄：flex 取代 grid，避免 iOS time input overflow */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -747,11 +804,65 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                   <input style={{ ...inputStyle, padding: '10px 8px' }} type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} />
                 </div>
               </div>
-              {/* 預計車程 */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>🚗 前往下一站預計車程（選填）</label>
-                <input style={inputStyle} placeholder="例：約 30 分鐘" value={form.travelTime} onChange={e => set('travelTime', e.target.value)} />
-              </div>
+              {/* 預計車程 — auto-calc */}
+              {(() => {
+                const formDay = form.date || activeDay;
+                const dayEvts = events
+                  .filter(e => (e.date || '').replace(/\//g, '-') === formDay)
+                  .sort((a, b) => (a.startTime || '').localeCompare(b.startTime || ''));
+                let nextEvt: any = null;
+                if (mode === 'edit' && selectedEvent) {
+                  const idx = dayEvts.findIndex(e => e.id === selectedEvent.id);
+                  nextEvt = idx >= 0 && idx < dayEvts.length - 1 ? dayEvts[idx + 1] : null;
+                } else if (form.startTime) {
+                  nextEvt = dayEvts.find(e => (e.startTime || '') > form.startTime) ?? null;
+                }
+                const canCalc = !!(form.location.trim() && nextEvt?.location?.trim());
+                const MODES: { key: 'car' | 'transit' | 'walk'; icon: string; label: string }[] = [
+                  { key: 'car',     icon: '🚗', label: '開車' },
+                  { key: 'transit', icon: '🚌', label: '大眾運輸' },
+                  { key: 'walk',    icon: '🚶', label: '步行' },
+                ];
+                return (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>前往下一站交通時間（選填）</label>
+                    {/* Mode selector */}
+                    <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                      {MODES.map(m => (
+                        <button key={m.key} onClick={() => { setTravelMode(m.key); setTravelCalcStatus('idle'); }}
+                          style={{ flex: 1, padding: '7px 4px', borderRadius: 10, border: `2px solid ${travelMode === m.key ? C.sageDark : C.creamDark}`, background: travelMode === m.key ? C.sageDark : 'var(--tm-card-bg)', color: travelMode === m.key ? 'white' : C.bark, fontWeight: travelMode === m.key ? 700 : 400, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                          {m.icon} {m.label}
+                        </button>
+                      ))}
+                    </div>
+                    {/* Next stop context + calc button */}
+                    {nextEvt && (
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                        <div style={{ flex: 1, fontSize: 11, color: C.barkLight, background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 8, padding: '6px 10px', lineHeight: 1.4, minWidth: 0 }}>
+                          <span style={{ opacity: 0.7 }}>→ </span>
+                          <span style={{ fontWeight: 600, color: C.bark }}>{nextEvt.title}</span>
+                          {nextEvt.location ? <span style={{ opacity: 0.7 }}> · {nextEvt.location}</span> : null}
+                        </div>
+                        {travelMode === 'transit' ? (
+                          <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(form.location.trim())}&destination=${encodeURIComponent(nextEvt.location?.trim() || nextEvt.title)}&travelmode=transit`}
+                            target="_blank" rel="noopener noreferrer"
+                            style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: canCalc ? '#4285F4' : C.creamDark, color: canCalc ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: canCalc ? 'pointer' : 'default', fontFamily: FONT, textDecoration: 'none', display: 'inline-block', pointerEvents: canCalc ? 'auto' : 'none', whiteSpace: 'nowrap' }}>
+                            🗺 Google Maps
+                          </a>
+                        ) : (
+                          <button onClick={() => calcTravelTime(nextEvt.location || nextEvt.title)} disabled={!canCalc || travelCalcStatus === 'loading'}
+                            style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: canCalc ? C.sageDark : C.creamDark, color: canCalc ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: canCalc ? 'pointer' : 'default', fontFamily: FONT, opacity: travelCalcStatus === 'loading' ? 0.7 : 1 }}>
+                            {travelCalcStatus === 'loading' ? '…' : '自動估算'}
+                          </button>
+                        )}
+                      </div>
+                    )}
+                    {travelCalcStatus === 'error' && <p style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px' }}>無法取得路線，請手動輸入或確認地點名稱</p>}
+                    {!nextEvt && <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px' }}>當天無下一站行程，可手動填寫</p>}
+                    <input style={inputStyle} placeholder="例：🚗 約 30 分鐘" value={form.travelTime} onChange={e => { set('travelTime', e.target.value); setTravelCalcStatus('idle'); }} />
+                  </div>
+                );
+              })()}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
