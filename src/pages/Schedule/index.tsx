@@ -609,25 +609,53 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));
 
   // ── Travel time auto-calc ──
-  const geocodePlace = async (q: string): Promise<[number, number] | null> => {
-    // Try Open-Meteo first (no User-Agent restriction, handles CJK well)
+  // Normalize fullwidth chars & common CJK address separators
+  const normalizeAddr = (q: string) =>
+    q.replace(/[－―‐]/g, '-').replace(/[０-９]/g, c => String.fromCharCode(c.charCodeAt(0) - 0xFEE0)).trim();
+
+  // Strip trailing street number (e.g. "若狹1-25-11" → "若狹")
+  const stripStreetNum = (q: string) => q.replace(/[\d\-－]+$/, '').trim();
+
+  const nominatimFetch = async (q: string): Promise<[number, number] | null> => {
     try {
-      const res  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=zh&format=json`);
-      const data = await res.json();
-      if (data.results?.[0]) {
-        const r = data.results[0];
-        return [r.longitude, r.latitude];
-      }
-    } catch {}
-    // Fallback: Nominatim (sequential to respect rate limit)
-    try {
-      const res  = await fetch(
+      const res = await fetch(
         `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=1`,
-        { headers: { 'User-Agent': 'Tripmori/1.0 (travel planner app)', 'Accept-Language': 'zh-TW,zh,en' } }
+        { headers: { 'User-Agent': 'Tripmori/1.0', 'Accept-Language': 'ja,zh-TW,zh,en' } }
       );
       const data = await res.json();
       if (data?.[0]) return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
     } catch {}
+    return null;
+  };
+
+  const openMeteoFetch = async (q: string): Promise<[number, number] | null> => {
+    try {
+      const res  = await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=1&language=zh&format=json`);
+      const data = await res.json();
+      if (data.results?.[0]) return [data.results[0].longitude, data.results[0].latitude];
+    } catch {}
+    return null;
+  };
+
+  const geocodePlace = async (q: string): Promise<[number, number] | null> => {
+    const norm = normalizeAddr(q);
+    // 1. Full address → Nominatim
+    const r1 = await nominatimFetch(norm);
+    if (r1) return r1;
+    // 2. Strip street number → Open-Meteo (city/area name lookup)
+    const short = stripStreetNum(norm);
+    if (short && short !== norm) {
+      const r2 = await openMeteoFetch(short);
+      if (r2) return r2;
+    }
+    // 3. Full query → Open-Meteo
+    const r3 = await openMeteoFetch(norm);
+    if (r3) return r3;
+    // 4. Strip street number → Nominatim
+    if (short && short !== norm) {
+      const r4 = await nominatimFetch(short);
+      if (r4) return r4;
+    }
     return null;
   };
   const fmtDuration = (seconds: number) => {
@@ -636,14 +664,17 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     const h = Math.floor(mins / 60), m = mins % 60;
     return m > 0 ? `約 ${h} 小時 ${m} 分鐘` : `約 ${h} 小時`;
   };
-  const calcTravelTime = async (nextLoc: string) => {
+  const calcTravelTime = async (nextLoc: string, nextTitle?: string) => {
     const from = form.location.trim();
     const to   = nextLoc.trim();
     if (!from || !to) return;
     setTravelCalcStatus('loading');
     // Sequential geocoding to avoid rate limits
-    const fromC = await geocodePlace(from);
-    const toC   = await geocodePlace(to);
+    let fromC = await geocodePlace(from);
+    // If location geocoding fails, try the event title as search term
+    if (!fromC && form.title.trim()) fromC = await geocodePlace(form.title.trim());
+    let toC = await geocodePlace(to);
+    if (!toC && nextTitle) toC = await geocodePlace(nextTitle);
     if (!fromC || !toC) { setTravelCalcStatus('error'); return; }
     const profile = travelMode === 'walk' ? 'foot' : 'driving';
     try {
@@ -910,7 +941,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                             🗺 Google Maps
                           </a>
                         ) : (
-                          <button onClick={() => calcTravelTime(nextEvt.location || nextEvt.title)} disabled={!canCalc || travelCalcStatus === 'loading'}
+                          <button onClick={() => calcTravelTime(nextEvt.location || nextEvt.title, nextEvt.title)} disabled={!canCalc || travelCalcStatus === 'loading'}
                             style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: canCalc ? C.sageDark : C.creamDark, color: canCalc ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: canCalc ? 'pointer' : 'default', fontFamily: FONT, opacity: travelCalcStatus === 'loading' ? 0.7 : 1 }}>
                             {travelCalcStatus === 'loading' ? '…' : '自動估算'}
                           </button>
