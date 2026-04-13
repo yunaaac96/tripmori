@@ -516,7 +516,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     });
     setSelectedEvent(event);
     setTravelCalcStatus('idle');
-    setTravelMode(autoFlight ? 'flight' : 'car');
+    const isTransitSaved = event.travelTime === '__transit__' || (event.travelTime || '').startsWith('🚌');
+    setTravelMode(autoFlight ? 'flight' : isTransitSaved ? 'transit' : 'car');
     setMode('edit');
   };
 
@@ -913,7 +914,13 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                         const highlight = m.key === 'flight' && flightDetected;
                         const active = travelMode === m.key;
                         return (
-                          <button key={m.key} onClick={() => { setTravelMode(m.key); setTravelCalcStatus('idle'); }}
+                          <button key={m.key} onClick={() => {
+                            setTravelMode(m.key);
+                            setTravelCalcStatus('idle');
+                            // transit mode: auto-store sentinel; leaving transit: clear it
+                            if (m.key === 'transit') set('travelTime', '__transit__');
+                            else if (form.travelTime === '__transit__') set('travelTime', '');
+                          }}
                             style={{ flex: 1, padding: '7px 4px', borderRadius: 10, border: `2px solid ${active ? C.sageDark : highlight ? '#4285F4' : C.creamDark}`, background: active ? C.sageDark : 'var(--tm-card-bg)', color: active ? 'white' : highlight ? '#2A6A9A' : C.bark, fontWeight: active || highlight ? 700 : 400, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
                             {m.icon}<br /><span style={{ fontSize: 10 }}>{m.label}</span>
                           </button>
@@ -949,8 +956,15 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                       </div>
                     )}
                     {travelCalcStatus === 'error' && <p style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px' }}>無法取得路線，請手動輸入或確認地點名稱</p>}
-                    {!nextEvt && <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px' }}>當天無下一站行程，可手動填寫</p>}
-                    <input style={inputStyle} placeholder="例：🚗 約 30 分鐘" value={form.travelTime} onChange={e => { set('travelTime', e.target.value); setTravelCalcStatus('idle'); }} />
+                    {!nextEvt && travelMode !== 'transit' && <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px' }}>當天無下一站行程，可手動填寫</p>}
+                    {travelMode === 'transit' ? (
+                      <div style={{ background: '#EAF2FF', border: '1.5px solid #4285F4', borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#2A6A9A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span>🗺</span>
+                        <span>儲存後行程卡片將顯示「大眾運輸最佳通勤時間」Google Maps 快捷鍵</span>
+                      </div>
+                    ) : (
+                      <input style={inputStyle} placeholder="例：🚗 約 30 分鐘" value={form.travelTime} onChange={e => { set('travelTime', e.target.value); setTravelCalcStatus('idle'); }} />
+                    )}
                   </div>
                 );
               })()}
@@ -1194,22 +1208,26 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               </div>
               {/* Travel time connector between events */}
               {event.travelTime && !isLast && (() => {
-                const isTransit = event.travelTime.startsWith('🚌');
+                const isTransit = event.travelTime === '__transit__' || event.travelTime.startsWith('🚌');
                 const nextEvt = dayEvents[idx + 1];
                 const mapsHref = isTransit && event.location && nextEvt?.location
                   ? `https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(event.location)}&destination=${encodeURIComponent(nextEvt.location)}&travelmode=transit`
                   : null;
+                if (isTransit && mapsHref) {
+                  return (
+                    <div style={{ margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
+                      <a href={mapsHref} target="_blank" rel="noopener noreferrer"
+                        style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 10, background: '#4285F4', color: 'white', fontWeight: 700, fontSize: 12, textDecoration: 'none', boxShadow: '0 2px 6px #4285F455', fontFamily: FONT }}>
+                        🗺 大眾運輸最佳通勤時間
+                      </a>
+                    </div>
+                  );
+                }
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
                     <div style={{ background: 'var(--tm-note-1)', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
                       {event.travelTime}
                     </div>
-                    {mapsHref && (
-                      <a href={mapsHref} target="_blank" rel="noopener noreferrer"
-                        style={{ fontSize: 11, fontWeight: 700, color: '#4285F4', background: '#EAF2FF', borderRadius: 8, padding: '4px 8px', textDecoration: 'none', whiteSpace: 'nowrap', boxShadow: '0 1px 4px #4285F433' }}>
-                        🗺 Google Maps
-                      </a>
-                    )}
                   </div>
                 );
               })()}
