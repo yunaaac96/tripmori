@@ -95,7 +95,7 @@ export default function JournalPage({ journals, members, journalComments, firest
 
   const handleSave = async () => {
     const authorToSave = form.author || currentUser;
-    if (!form.content || !authorToSave) return;
+    if (!form.content || !authorToSave || !googleUid) return;
     setSaving(true);
     try {
       await addDoc(collection(db, 'trips', TRIP_ID, 'journals'), {
@@ -238,7 +238,7 @@ export default function JournalPage({ journals, members, journalComments, firest
               {/* 作者 */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--tm-bark-light)', display: 'block', marginBottom: 6 }}>誰的日誌 *</label>
-                {googleUid && currentUser ? (
+                {(googleUid && currentUser) ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: C.sage }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: 'white', flexShrink: 0 }}>
                       {currentUser[0]?.toUpperCase()}
@@ -248,16 +248,11 @@ export default function JournalPage({ journals, members, journalComments, firest
                       <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', margin: 0 }}>Google 帳號已驗證</p>
                     </div>
                   </div>
-                ) : !googleUid ? (
-                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                    {memberNames.map(name => (
-                      <button key={name} onClick={() => set('author', name)}
-                        style={{ flex: '1 1 auto', minWidth: 64, padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${form.author===name?C.sageDark:C.creamDark}`, background: form.author===name?C.sage:'var(--tm-card-bg)', color: form.author===name?'white':'var(--tm-bark)', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
-                        {name}
-                      </button>
-                    ))}
+                ) : (
+                  <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
+                    🔐 請先至成員頁綁定 Google 帳號後即可發佈日誌
                   </div>
-                ) : null}
+                )}
               </div>
               {/* 日期 */}
               <div>
@@ -475,7 +470,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                         <p style={{ fontSize: 12, color: 'var(--tm-bark-light)', textAlign: 'center', fontStyle: 'italic', margin: 0 }}>訪客模式無法留言</p>
                       ) : isEditorUnbound ? (
                         <p style={{ fontSize: 12, color: 'var(--tm-bark-light)', textAlign: 'center', fontStyle: 'italic', margin: 0 }}>請先綁定成員卡才能留言</p>
-                      ) : currentUser ? (
+                      ) : (googleUid && currentUser) ? (
                         <div style={{ position: 'relative' }}>
                           {/* @mention dropdown */}
                           {mentionMenuFor === j.id && memberNames.length > 0 && (
@@ -517,7 +512,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                         </div>
                       ) : (
                         <p style={{ fontSize: 12, color: 'var(--tm-bark-light)', textAlign: 'center', fontStyle: 'italic', margin: 0 }}>
-                          請先在成員頁選擇身份後即可留言
+                          請先登入 Google 並綁定成員卡後即可留言
                         </p>
                       )}
                     </div>

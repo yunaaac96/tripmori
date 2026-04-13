@@ -109,7 +109,8 @@ function App() {
       setActiveProjectState(prev => {
         if (prev) {
           const synced = updated.find(p => p.id === prev.id);
-          return synced ? synced : prev;
+          if (synced) { setActiveProject(synced.id); return synced; }
+          return prev;
         }
         // No active project — try to restore the last used one
         const lastId = localStorage.getItem('tripmori_last_project');
@@ -176,11 +177,13 @@ function App() {
               projects.splice(idx, 1);
               localStorage.setItem('tripmori_projects', JSON.stringify(projects));
               setSyncedProjects(projects);
-              // 若正顯示此行程，退回 hub
-              setActiveProjectState(prev =>
-                prev?.id === '74pfE7RXyEIusEdRV0rZ' ? null : prev
-              );
-              localStorage.removeItem('tripmori_active_project');
+              setActiveProjectState(prev => {
+                if (prev?.id === '74pfE7RXyEIusEdRV0rZ') {
+                  localStorage.removeItem('tripmori_active_project');
+                  return null;
+                }
+                return prev;
+              });
             }
           }
         });
@@ -639,17 +642,11 @@ function App() {
                 </div>
               )}
 
-              {/* Skip / handle later */}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                <button onClick={() => { setShowMemberBind(false); setActiveTab('成員'); }}
-                  style={{ padding: '12px', borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT }}>
-                  ＋ 前往成員頁新增成員卡
-                </button>
-                <button onClick={() => { setShowMemberBind(false); setUpgradeStep('none'); }}
-                  style={{ padding: '10px', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'transparent', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                  稍後再綁定
-                </button>
-              </div>
+              {/* Go to Members page to create a card */}
+              <button onClick={() => { setShowMemberBind(false); setActiveTab('成員'); }}
+                style={{ padding: '12px', borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, width: '100%' }}>
+                ＋ 前往成員頁新增成員卡
+              </button>
             </div>
           </div>
         )}

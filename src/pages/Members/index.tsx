@@ -230,7 +230,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
 
   const handleAddNote = async (memberId: string) => {
     const content = (noteInput[memberId] || '').trim();
-    if (!content || !currentUser) return;
+    if (!content || !googleUid || !currentUser) return;
     setSavingNote(memberId);
     try {
       await addDoc(collection(db, 'trips', TRIP_ID, 'memberNotes'), {
@@ -304,10 +304,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     setEditingTeamName(false);
   };
 
-  const displayMembers = members.length > 0 ? members : [
-    { id: 'uu',    name: 'uu',    color: '#ebcef5', role: '行程規劃', avatarUrl: '' },
-    { id: 'brian', name: 'brian', color: '#aaa9ab', role: '交通達人', avatarUrl: '' },
-  ];
+  const displayMembers = members;
 
   const memberNames = displayMembers.map((m: any) => m.name);
 
@@ -458,6 +455,36 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
+      {/* Google sign-in / status — shown first, right below header */}
+      {!googleUid && !firestore.isReadOnly && (
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
+          <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600 }}>
+            🔐 登入 Google 後可綁定成員卡，以自己的身份留言
+          </p>
+          <button onClick={handleGoogleSignIn} disabled={signingIn}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: signingIn ? '#F5F5F5' : 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
+            <span style={{ fontSize: 16 }}>G</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
+          </button>
+          {authError && (
+            <p style={{ fontSize: 11, color: '#C0392B', margin: '6px 0 0', fontWeight: 600 }}>{authError}</p>
+          )}
+        </div>
+      )}
+      {googleUid && (
+        <div style={{ margin: '12px 16px 0', background: '#E0F0D8', borderRadius: 16, padding: '10px 14px', border: '1.5px solid #C2E0B4', display: 'flex', alignItems: 'center', gap: 8 }}>
+          <span style={{ fontSize: 14 }}>✅</span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
+            <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0' }}>{googleEmail}</p>
+          </div>
+          <button onClick={() => signOut(auth).catch(console.error)}
+            style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
+            登出
+          </button>
+        </div>
+      )}
+
       {/* Share project keys (Owner only) */}
       {project?.role === 'owner' && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
@@ -528,36 +555,6 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               );
             })}
           </div>}
-        </div>
-      )}
-
-      {/* Google sign-in card (shown when not yet signed in with Google) */}
-      {!googleUid && !firestore.isReadOnly && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
-          <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600 }}>
-            🔐 登入 Google 後可綁定成員卡，以自己的身份留言
-          </p>
-          <button onClick={handleGoogleSignIn} disabled={signingIn}
-            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: signingIn ? '#F5F5F5' : 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
-            <span style={{ fontSize: 16 }}>G</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
-          </button>
-          {authError && (
-            <p style={{ fontSize: 11, color: '#C0392B', margin: '6px 0 0', fontWeight: 600 }}>{authError}</p>
-          )}
-        </div>
-      )}
-      {googleUid && (
-        <div style={{ margin: '12px 16px 0', background: '#E0F0D8', borderRadius: 16, padding: '10px 14px', border: '1.5px solid #C2E0B4', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 14 }}>✅</span>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
-            <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0' }}>{googleEmail}</p>
-          </div>
-          <button onClick={() => signOut(auth).catch(console.error)}
-            style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
-            登出
-          </button>
         </div>
       )}
 
@@ -658,10 +655,12 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                       : m.name?.[0]?.toUpperCase()
                     }
                   </div>
+                  {canEdit && (
                   <div onClick={() => { existingMemberId.current = m.id; fileExistingRef.current?.click(); }}
                     style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: C.earth, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>
                     {isUploading ? '…' : '📷'}
                   </div>
+                )}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -735,7 +734,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   )}
 
                   {/* Add note input */}
-                  {currentUser ? (
+                  {(googleUid && currentUser) ? (
                     <div style={{ background: 'var(--tm-card-bg)', borderRadius: 14, padding: '10px 12px', boxShadow: '0 1px 6px rgba(107,92,78,0.1)' }}>
                       <textarea
                         value={noteInput[m.id] || ''}
