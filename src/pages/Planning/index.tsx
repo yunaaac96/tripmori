@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { C, FONT } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
+import { auth } from '../../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 
 const MEMBER_COLORS: Record<string, string> = {
   uu: '#ebcef5', brian: '#aaa9ab', all: '#E0F0D8',
@@ -20,6 +22,16 @@ const getDueStatus = (dueDate: string, checked: boolean): 'normal' | 'soon' | 'o
 export default function PlanningPage({ lists, members, firestore }: any) {
   const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const isOwner = role === 'owner';
+
+  // Current Google user identity
+  const [googleUid, setGoogleUid] = useState<string | null>(null);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, user => {
+      setGoogleUid(user && !user.isAnonymous ? user.uid : null);
+    });
+    return unsub;
+  }, []);
 
   const [filterBy, setFilterBy]           = useState<string>('all');
   const [activeSection, setActiveSection] = useState<string>('todo');
@@ -41,17 +53,57 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     ? members.map((m: any) => m.name)
     : ['uu', 'brian'];
 
-  const packing  = lists.filter((l: any) => l.listType === 'packing');
+  // Visibility filter for packing: private items only visible to their owner
+  const visiblePacking = lists.filter((l: any) => {
+    if (l.listType !== 'packing') return false;
+    if (!l.privateOwnerUid) return true; // assigned/global item — visible to all
+    return l.privateOwnerUid === googleUid; // private — only visible to creator
+  });
+
+  const packing  = visiblePacking;
   const todos    = lists.filter((l: any) => l.listType === 'todo');
-  const allDone  = lists.filter((l: any) => l.checked).length;
+  const allDone  = lists.filter((l: any) => isPackingChecked(l) || (l.listType === 'todo' && l.checked)).length;
   const allTotal = lists.length;
+
+  function isPackingChecked(item: any): boolean {
+    if (item.listType !== 'packing') return false;
+    if (item.checkedBy && googleUid && googleUid in item.checkedBy) return item.checkedBy[googleUid];
+    return item.checked ?? false; // backward compat
+  }
+
+  // Can the current user toggle this packing item's checkbox?
+  function canCheckPacking(item: any): boolean {
+    if (!googleUid) return false;
+    if (item.privateOwnerUid) return item.privateOwnerUid === googleUid;
+    if (item.assignedTo === 'all') return true;
+    // Assigned to a specific member — check if that member's googleUid is mine
+    const assignedMember = members.find((m: any) => m.name === item.assignedTo);
+    return assignedMember?.googleUid === googleUid;
+  }
+
+  // Can the current user delete this item?
+  function canDeleteItem(item: any): boolean {
+    if (isOwner) return true;
+    if (item.listType === 'packing' && item.privateOwnerUid && item.privateOwnerUid === googleUid) return true;
+    return false;
+  }
 
   const set = (key: string, val: string) => setForm(p => ({ ...p, [key]: val }));
 
-  const toggleItem = async (itemId: string, current: boolean) => {
+  const toggleItem = async (item: any) => {
     if (isReadOnly) return;
-    try { await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', itemId), { checked: !current }); }
-    catch (e) { console.error(e); }
+    if (item.listType === 'packing') {
+      if (!canCheckPacking(item)) return;
+      const currentChecked = isPackingChecked(item);
+      try {
+        await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), {
+          [`checkedBy.${googleUid}`]: !currentChecked,
+        });
+      } catch (e) { console.error(e); }
+    } else {
+      try { await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), { checked: !item.checked }); }
+      catch (e) { console.error(e); }
+    }
   };
 
   const handleAdd = async () => {
@@ -59,9 +111,13 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     if (!form.text.trim()) return;
     setSaving(true);
     try {
+      const isPacking = form.listType === 'packing';
+      const isPrivate = isPacking && !isOwner && !!googleUid;
       await addDoc(collection(db, 'trips', TRIP_ID, 'lists'), {
         text: form.text.trim(), listType: form.listType,
-        assignedTo: form.assignedTo, dueDate: form.dueDate || '',
+        assignedTo: isPrivate ? googleUid : form.assignedTo,
+        privateOwnerUid: isPrivate ? googleUid : null,
+        dueDate: form.dueDate || '',
         checked: false, createdAt: new Date().toISOString(),
       });
       setForm({ ...EMPTY_FORM, listType: form.listType });
@@ -74,9 +130,12 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     if (!editTarget || !form.text.trim()) return;
     setSaving(true);
     try {
+      const isPacking = form.listType === 'packing';
+      const isPrivate = isPacking && !!editTarget.privateOwnerUid;
       await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', editTarget.id), {
         text: form.text.trim(), listType: form.listType,
-        assignedTo: form.assignedTo, dueDate: form.dueDate || '',
+        assignedTo: isPrivate ? editTarget.privateOwnerUid : form.assignedTo,
+        dueDate: form.dueDate || '',
       });
       setEditTarget(null); setShowSheet(false);
     } catch (e) { console.error(e); }
@@ -84,7 +143,6 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   };
 
   const handleDelete = async (itemId: string) => {
-    if (!isOwner) return; // only owner can delete planning items
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'lists', itemId)); }
     catch (e) { console.error(e); }
     setConfirmDelete(null);
@@ -92,23 +150,34 @@ export default function PlanningPage({ lists, members, firestore }: any) {
 
   const openAdd = (type: string) => {
     if (isReadOnly) return;
+    if (type === 'packing' && !isOwner && !googleUid) return; // non-google users can't add packing
     setEditTarget(null);
     setForm({ ...EMPTY_FORM, listType: type });
     setShowSheet(true);
   };
 
   const openEdit = (item: any) => {
-    if (isReadOnly) return;
+    if (isReadOnly && !item.privateOwnerUid) return;
+    if (!canDeleteItem(item) && item.listType === 'packing' && !isOwner) return;
     setEditTarget(item);
     setForm({ text: item.text, listType: item.listType, assignedTo: item.assignedTo || 'all', dueDate: item.dueDate || '' });
     setShowSheet(true);
   };
 
   const applyFilter = (items: any[]) => {
-    const filtered = filterBy === 'all' ? items : items.filter((i: any) => i.assignedTo === filterBy || i.assignedTo === 'all');
+    const filtered = filterBy === 'all' ? items : items.filter((i: any) => {
+      // Private items: show when filtering by self
+      if (i.privateOwnerUid) {
+        const myMemberName = members.find((m: any) => m.googleUid === googleUid)?.name;
+        return myMemberName === filterBy;
+      }
+      return i.assignedTo === filterBy || i.assignedTo === 'all';
+    });
     // 未勾選 → 上方（依建立時間舊→新），已勾選 → 下方（依建立時間舊→新）
     return [...filtered].sort((a, b) => {
-      if (a.checked !== b.checked) return a.checked ? 1 : -1;
+      const aChecked = a.listType === 'packing' ? isPackingChecked(a) : (a.checked ?? false);
+      const bChecked = b.listType === 'packing' ? isPackingChecked(b) : (b.checked ?? false);
+      if (aChecked !== bChecked) return aChecked ? 1 : -1;
       const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return ta - tb;
@@ -116,6 +185,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   };
 
   const isEdit = !!editTarget;
+  const isEditingPrivatePacking = isEdit && !!editTarget?.privateOwnerUid;
 
   const SECTIONS = [
     { id: 'todo',    label: '✅ 待辦', items: todos   },
@@ -146,7 +216,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         </div>
       )}
 
-      {/* ── 底部新增/編輯面板 (inlined to prevent remount on rerender) ── */}
+      {/* ── 底部新增/編輯面板 ── */}
       {!isReadOnly && showSheet && (
         <div
           style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
@@ -188,18 +258,27 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                 </div>
               </div>
 
-              {/* 負責人 */}
-              <div>
-                <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>負責人</label>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {[{ id: 'all', label: '🌿 全體' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
-                    <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
-                      style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                      {opt.label}
-                    </button>
-                  ))}
+              {/* 負責人 — 待辦：全員皆可選；行李：擁有者可指派給所有人（全體可見），非擁有者的行李自動設為私人 */}
+              {(form.listType === 'todo' || (form.listType === 'packing' && isOwner && !isEditingPrivatePacking)) && (
+                <div>
+                  <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>負責人</label>
+                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                    {[{ id: 'all', label: '🌿 全體' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
+                      <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
+                        style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {/* 非擁有者新增行李：提示為私人項目 */}
+              {form.listType === 'packing' && !isOwner && !isEditingPrivatePacking && (
+                <p style={{ fontSize: 12, color: C.barkLight, margin: 0, padding: '4px 10px', background: 'var(--tm-card-bg)', borderRadius: 8, border: `1px solid ${C.creamDark}` }}>
+                  🔒 行李項目將設為「僅自己可見」的私人項目
+                </p>
+              )}
 
               {/* 截止日期 */}
               <div>
@@ -214,7 +293,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
 
               {/* 按鈕 */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
-                {isEdit && isOwner && (
+                {isEdit && canDeleteItem(editTarget) && (
                   <button
                     onClick={() => { setConfirmDelete(editTarget.id); setShowSheet(false); }}
                     style={{ padding: '12px 16px', borderRadius: 12, border: `1.5px solid #FAE0E0`, background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
@@ -269,8 +348,8 @@ export default function PlanningPage({ lists, members, firestore }: any) {
               style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${activeSection === s.id ? C.earth : C.creamDark}`, background: activeSection === s.id ? C.earth : 'var(--tm-card-bg)', color: activeSection === s.id ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
               {s.label}
               <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.75 }}>
-                ({(s.id === 'todo' ? todos : packing).filter((i: any) => !i.checked).length})
-              </span>
+                ({(s.id === 'todo' ? todos : packing).filter((i: any) => s.id === 'packing' ? !isPackingChecked(i) : !i.checked).length})
+            </span>
             </button>
           ))}
         </div>
@@ -289,26 +368,32 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {filtered.map((item: any) => {
-                        const color = MEMBER_COLORS[item.assignedTo] || C.creamDark;
-                        const status = getDueStatus(item.dueDate, item.checked);
+                        const isPacking = item.listType === 'packing';
+                        const isPrivateItem = isPacking && !!item.privateOwnerUid;
+                        const checked = isPacking ? isPackingChecked(item) : (item.checked ?? false);
+                        const canCheck = isPacking ? canCheckPacking(item) : !isReadOnly;
+                        const color = isPrivateItem ? '#E8D5F5' : (MEMBER_COLORS[item.assignedTo] || C.creamDark);
+                        const badgeLabel = isPrivateItem ? '🔒 僅自己' : item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—');
+                        const status = getDueStatus(item.dueDate, checked);
                         const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
                         const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : '1.5px solid transparent';
+                        const showEdit = isOwner || (isPacking && item.privateOwnerUid === googleUid);
                         return (
                           <div key={item.id}
-                            style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: item.checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                            style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                             <div
-                              onClick={() => toggleItem(item.id, item.checked)}
-                              style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${item.checked ? C.sageDark : C.creamDark}`, background: item.checked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', transition: 'all 0.2s' }}>
-                              {item.checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                              onClick={() => canCheck && toggleItem(item)}
+                              style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${checked ? C.sageDark : C.creamDark}`, background: checked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: canCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: canCheck ? 1 : 0.4 }}>
+                              {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                             </div>
-                            <div onClick={() => toggleItem(item.id, item.checked)} style={{ flex: 1, minWidth: 0, cursor: 'pointer' }}>
-                              <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: item.checked ? 'line-through' : 'none' }}>{item.text}</p>
+                            <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
                               {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0' }}>{status === 'overdue' ? '⚠️ 已逾期：' : status === 'soon' ? '⏰ 即將到期：' : '截止：'}{item.dueDate}</p>}
                             </div>
                             <div style={{ background: color, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: C.bark, flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
-                              {item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—')}
+                              {badgeLabel}
                             </div>
-                            {!isReadOnly && (
+                            {showEdit && (
                               <button
                                 onClick={e => { e.stopPropagation(); openEdit(item); }}
                                 style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -320,12 +405,14 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                       })}
                     </div>
                   )}
-                  {!isReadOnly && (
+                  {/* 新增按鈕：待辦 → 不限；行李 → 擁有者 或 已綁定Google的成員 */}
+                  {!isReadOnly && (s.id === 'todo' || isOwner || (s.id === 'packing' && googleUid)) && (
                     <button
                       onClick={() => openAdd(s.id)}
                       style={{ marginTop: 12, width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxSizing: 'border-box' }}>
                       <span style={{ fontSize: 16 }}>＋</span>
                       新增{s.id === 'packing' ? '行李' : '待辦'}項目
+                      {s.id === 'packing' && !isOwner && <span style={{ fontSize: 10, opacity: 0.65 }}>（私人）</span>}
                     </button>
                   )}
                 </>
