@@ -82,7 +82,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [mode, setMode]             = useState<Mode>('view');
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
   const [form, setForm]             = useState({ ...EMPTY_EVENT_FORM, date: '' });
-  const [travelMode, setTravelMode] = useState<'car' | 'transit' | 'walk'>('car');
+  const [travelMode, setTravelMode] = useState<'car' | 'transit' | 'walk' | 'flight'>('car');
   const [travelCalcStatus, setTravelCalcStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [saving, setSaving]         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -806,6 +806,9 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               </div>
               {/* 預計車程 — auto-calc */}
               {(() => {
+                const FLIGHT_KW = /機場|airport|起飛|降落|抵達|出發|航班|班機|飛機|✈/i;
+                const isFlightEvt = (e: any) => FLIGHT_KW.test(e?.title || '') || FLIGHT_KW.test(e?.location || '');
+
                 const formDay = form.date || activeDay;
                 const dayEvts = events
                   .filter(e => (e.date || '').replace(/\//g, '-') === formDay)
@@ -817,33 +820,64 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                 } else if (form.startTime) {
                   nextEvt = dayEvts.find(e => (e.startTime || '') > form.startTime) ?? null;
                 }
+
                 const canCalc = !!(form.location.trim() && nextEvt?.location?.trim());
-                const MODES: { key: 'car' | 'transit' | 'walk'; icon: string; label: string }[] = [
+                const flightDetected = isFlightEvt({ title: form.title, location: form.location }) && isFlightEvt(nextEvt);
+
+                // Flight duration: nextEvt.startTime − form.startTime (time math)
+                const calcFlightTime = () => {
+                  if (!form.startTime || !nextEvt?.startTime) return;
+                  const [dh, dm] = form.startTime.split(':').map(Number);
+                  const [ah, am] = nextEvt.startTime.split(':').map(Number);
+                  let mins = (ah * 60 + am) - (dh * 60 + dm);
+                  if (mins <= 0) mins += 24 * 60; // overnight flight
+                  const h = Math.floor(mins / 60), m = mins % 60;
+                  const label = h > 0 ? (m > 0 ? `${h} 小時 ${m} 分鐘` : `${h} 小時`) : `${m} 分鐘`;
+                  set('travelTime', `🛫 約 ${label}`);
+                  setTravelCalcStatus('done');
+                };
+
+                const MODES: { key: 'car' | 'transit' | 'walk' | 'flight'; icon: string; label: string }[] = [
+                  { key: 'flight',  icon: '✈️', label: '飛機' },
                   { key: 'car',     icon: '🚗', label: '開車' },
                   { key: 'transit', icon: '🚌', label: '大眾運輸' },
                   { key: 'walk',    icon: '🚶', label: '步行' },
                 ];
+
                 return (
                   <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>前往下一站交通時間（選填）</label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight }}>前往下一站交通時間（選填）</label>
+                      {flightDetected && <span style={{ fontSize: 10, background: '#E0F0FF', color: '#2A6A9A', borderRadius: 6, padding: '2px 6px', fontWeight: 700 }}>✈️ 偵測到航班</span>}
+                    </div>
                     {/* Mode selector */}
                     <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
-                      {MODES.map(m => (
-                        <button key={m.key} onClick={() => { setTravelMode(m.key); setTravelCalcStatus('idle'); }}
-                          style={{ flex: 1, padding: '7px 4px', borderRadius: 10, border: `2px solid ${travelMode === m.key ? C.sageDark : C.creamDark}`, background: travelMode === m.key ? C.sageDark : 'var(--tm-card-bg)', color: travelMode === m.key ? 'white' : C.bark, fontWeight: travelMode === m.key ? 700 : 400, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                          {m.icon} {m.label}
-                        </button>
-                      ))}
+                      {MODES.map(m => {
+                        const highlight = m.key === 'flight' && flightDetected;
+                        const active = travelMode === m.key;
+                        return (
+                          <button key={m.key} onClick={() => { setTravelMode(m.key); setTravelCalcStatus('idle'); }}
+                            style={{ flex: 1, padding: '7px 4px', borderRadius: 10, border: `2px solid ${active ? C.sageDark : highlight ? '#4285F4' : C.creamDark}`, background: active ? C.sageDark : 'var(--tm-card-bg)', color: active ? 'white' : highlight ? '#2A6A9A' : C.bark, fontWeight: active || highlight ? 700 : 400, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                            {m.icon}<br /><span style={{ fontSize: 10 }}>{m.label}</span>
+                          </button>
+                        );
+                      })}
                     </div>
-                    {/* Next stop context + calc button */}
+                    {/* Next stop context + action button */}
                     {nextEvt && (
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                         <div style={{ flex: 1, fontSize: 11, color: C.barkLight, background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 8, padding: '6px 10px', lineHeight: 1.4, minWidth: 0 }}>
                           <span style={{ opacity: 0.7 }}>→ </span>
                           <span style={{ fontWeight: 600, color: C.bark }}>{nextEvt.title}</span>
                           {nextEvt.location ? <span style={{ opacity: 0.7 }}> · {nextEvt.location}</span> : null}
+                          {nextEvt.startTime ? <span style={{ opacity: 0.6 }}> {nextEvt.startTime}</span> : null}
                         </div>
-                        {travelMode === 'transit' ? (
+                        {travelMode === 'flight' ? (
+                          <button onClick={calcFlightTime} disabled={!form.startTime || !nextEvt.startTime}
+                            style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: (form.startTime && nextEvt.startTime) ? '#4285F4' : C.creamDark, color: (form.startTime && nextEvt.startTime) ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: (form.startTime && nextEvt.startTime) ? 'pointer' : 'default', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                            🛫 帶入
+                          </button>
+                        ) : travelMode === 'transit' ? (
                           <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(form.location.trim())}&destination=${encodeURIComponent(nextEvt.location?.trim() || nextEvt.title)}&travelmode=transit`}
                             target="_blank" rel="noopener noreferrer"
                             style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: canCalc ? '#4285F4' : C.creamDark, color: canCalc ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: canCalc ? 'pointer' : 'default', fontFamily: FONT, textDecoration: 'none', display: 'inline-block', pointerEvents: canCalc ? 'auto' : 'none', whiteSpace: 'nowrap' }}>
