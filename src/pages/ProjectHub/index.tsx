@@ -8,6 +8,7 @@ import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Time
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 import CurrencySearch from '../../components/CurrencySearch';
+import DateRangePicker from '../../components/DateRangePicker';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
 
@@ -717,15 +718,13 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
             <p style={{ fontSize: 11, color: C.barkLight, margin: '5px 0 0' }}>請按「📍 定位」取得座標以啟用即時天氣功能</p>
           )}
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>出發日期 *</label>
-            <input style={{ ...inputSt, padding: '10px 8px' }} type="date" value={newStart} onChange={e => setNewStart(e.target.value)} />
-          </div>
-          <div style={{ flex: 1 }}>
-            <label style={labelStyle}>回程日期</label>
-            <input style={{ ...inputSt, padding: '10px 8px' }} type="date" value={newEnd} onChange={e => setNewEnd(e.target.value)} />
-          </div>
+        <div>
+          <label style={labelStyle}>出發 → 回程日期 *</label>
+          <DateRangePicker
+            startDate={newStart}
+            endDate={newEnd}
+            onChange={(start, end) => { setNewStart(start); setNewEnd(end); }}
+          />
         </div>
         <div>
           <label style={labelStyle}>旅行簡介（選填）</label>

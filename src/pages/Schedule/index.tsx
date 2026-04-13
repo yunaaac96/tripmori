@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getDoc } from 'firebase/firestore';
 import CurrencySearch from '../../components/CurrencySearch';
+import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 
@@ -84,6 +85,12 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [weather, setWeather]       = useState<Record<string, WeatherDay>>({});
   const [weatherSubtitle, setWeatherSubtitle] = useState('氣象資訊載入中…');
   const [weatherLocationKey, setWeatherLocationKey] = useState(0); // increments to re-trigger fetch
+
+  // ── Day selector scroll (desktop) ──
+  const dayScrollRef = useRef<HTMLDivElement>(null);
+  const scrollDays = (dir: 'left' | 'right') => {
+    dayScrollRef.current?.scrollBy({ left: dir === 'right' ? 180 : -180, behavior: 'smooth' });
+  };
 
   // ── Location edit (double-tap weather card) ──
   const [showLocEdit, setShowLocEdit] = useState(false);
@@ -506,15 +513,13 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               <button onClick={() => setEditingMeta(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              <div style={{ display: 'flex', gap: 8 }}>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>出發日期</label>
-                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="date" value={metaForm.startDate} onChange={e => setMeta('startDate', e.target.value)} />
-                </div>
-                <div style={{ flex: 1, minWidth: 0 }}>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>回程日期</label>
-                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="date" value={metaForm.endDate} onChange={e => setMeta('endDate', e.target.value)} />
-                </div>
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>出發 → 回程日期</label>
+                <DateRangePicker
+                  startDate={metaForm.startDate}
+                  endDate={metaForm.endDate}
+                  onChange={(start, end) => { setMeta('startDate', start); setMeta('endDate', end); }}
+                />
               </div>
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>旅行簡介</label>
@@ -683,17 +688,31 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
 
       <div style={{ padding: '16px 16px 0', textAlign: 'left' }}>
         {/* Day selector */}
-        <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', marginBottom: 14 }}>
-          {DAY_OPTIONS.map(day => {
-            const active = day.date === activeDay;
-            return (
-              <button key={day.date} onClick={() => setActiveDay(day.date)}
-                style={{ flexShrink: 0, minWidth: 58, padding: '10px 12px', textAlign: 'center', borderRadius: 16, border: `2px solid ${active ? C.sageDark : 'transparent'}`, background: active ? C.sage : 'var(--tm-card-bg)', boxShadow: C.shadowSm, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
-                <div style={{ fontSize: 15, fontWeight: 700, color: active ? 'white' : C.bark }}>{day.label}</div>
-                <div style={{ fontSize: 10, color: active ? 'rgba(255,255,255,0.85)' : C.barkLight, fontWeight: 600 }}>{day.week}</div>
-              </button>
-            );
-          })}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 14 }}>
+          {DAY_OPTIONS.length > 5 && (
+            <button onClick={() => scrollDays('left')}
+              style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+              ‹
+            </button>
+          )}
+          <div ref={dayScrollRef} style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollbarWidth: 'none', flex: 1 }}>
+            {DAY_OPTIONS.map(day => {
+              const active = day.date === activeDay;
+              return (
+                <button key={day.date} onClick={() => setActiveDay(day.date)}
+                  style={{ flexShrink: 0, minWidth: 58, padding: '10px 12px', textAlign: 'center', borderRadius: 16, border: `2px solid ${active ? C.sageDark : 'transparent'}`, background: active ? C.sage : 'var(--tm-card-bg)', boxShadow: C.shadowSm, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: active ? 'white' : C.bark }}>{day.label}</div>
+                  <div style={{ fontSize: 10, color: active ? 'rgba(255,255,255,0.85)' : C.barkLight, fontWeight: 600 }}>{day.week}</div>
+                </button>
+              );
+            })}
+          </div>
+          {DAY_OPTIONS.length > 5 && (
+            <button onClick={() => scrollDays('right')}
+              style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+              ›
+            </button>
+          )}
         </div>
 
         {/* Weather card + add button */}
