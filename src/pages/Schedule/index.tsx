@@ -71,7 +71,7 @@ const FALLBACK_CLIMATE: WeatherDay = {
   outfit: outfitForTemp(26),
 };
 
-export default function SchedulePage({ events, project, firestore, onProjectUpdate }: { events: any[]; members: any[]; project: any; firestore: any; onProjectUpdate?: (p: any) => void }) {
+export default function SchedulePage({ events, members = [], project, firestore, onProjectUpdate }: { events: any[]; members: any[]; project: any; firestore: any; onProjectUpdate?: (p: any) => void }) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const isOwner = role === 'owner';
 
@@ -85,6 +85,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [travelMode, setTravelMode] = useState<'car' | 'transit' | 'walk' | 'flight'>('car');
   const [travelCalcStatus, setTravelCalcStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [travelCalcMsg, setTravelCalcMsg] = useState('');
+  const [formParticipants, setFormParticipants] = useState<string[]>([]);
   const [saving, setSaving]         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
@@ -498,7 +499,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const FLIGHT_KW = /機場|airport|起飛|降落|抵達|出發|航班|班機|飛機|✈/i;
   const isFlightEvt = (e: any) => FLIGHT_KW.test(e?.title || '') || FLIGHT_KW.test(e?.location || '');
 
-  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setSelectedEvent(null); setTravelCalcStatus('idle'); setTravelCalcMsg(''); setTravelMode('car'); setMode('add'); };
+  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setFormParticipants([]); setSelectedEvent(null); setTravelCalcStatus('idle'); setTravelCalcMsg(''); setTravelMode('car'); setMode('add'); };
   const openEdit = (event: any) => {
     const evtDate = (event.date || '').replace(/\//g, '-') || activeDay;
     const dayEvts = events
@@ -516,6 +517,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       date: evtDate,
     });
     setSelectedEvent(event);
+    setFormParticipants(event.participants || []);
     setTravelCalcStatus('idle'); setTravelCalcMsg('');
     const isTransitSaved = event.travelTime === '__transit__' || (event.travelTime || '').startsWith('🚌');
     setTravelMode(autoFlight ? 'flight' : isTransitSaved ? 'transit' : 'car');
@@ -538,6 +540,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       })(),
       cost: form.cost ? Number(form.cost) : 0,
       currency: form.currency, date: form.date || activeDay,
+      participants: formParticipants,
     };
     try {
       if (mode === 'add') {
@@ -1046,6 +1049,27 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
               </div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地點</label><input style={inputStyle} placeholder="店名 / 景點名稱" value={form.location} onChange={e => set('location', e.target.value)} /></div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>備註</label><textarea style={{ ...inputStyle, minHeight: 72, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={form.notes} onChange={e => set('notes', e.target.value)} /></div>
+              {members.length > 0 && (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>參與人 <span style={{ fontWeight: 400, color: C.barkLight, opacity: 0.7 }}>(選填)</span></label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                    {members.map((m: any) => {
+                      const sel = formParticipants.includes(m.id);
+                      return (
+                        <button key={m.id} onClick={() => setFormParticipants(prev => sel ? prev.filter(id => id !== m.id) : [...prev, m.id])}
+                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: sel ? 1 : 0.4, transition: 'opacity 0.15s' }}>
+                          <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {m.avatarUrl
+                              ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                          </div>
+                          <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-all' }}>{m.name}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結 / 地址</label>
                 <input style={inputStyle} placeholder="貼上 Google Maps 連結，或直接輸入地址" value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} />
@@ -1269,6 +1293,22 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                           🗺 查看地圖
                         </a>
                       )}
+                      {event.participants?.length > 0 && (() => {
+                        const ptcMembers = (event.participants as string[])
+                          .map((id: string) => members.find((m: any) => m.id === id))
+                          .filter(Boolean);
+                        return ptcMembers.length > 0 ? (
+                          <div style={{ display: 'flex', gap: -4, marginTop: 6, flexWrap: 'wrap' }}>
+                            {ptcMembers.map((m: any, i: number) => (
+                              <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
+                                {m.avatarUrl
+                                  ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  : <span style={{ fontSize: 10, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                              </div>
+                            ))}
+                          </div>
+                        ) : null;
+                      })()}
                     </div>
                     {!isReadOnly && (
                       <button onClick={() => openEdit(event)}
