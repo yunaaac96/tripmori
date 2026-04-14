@@ -380,7 +380,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
             <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
             {f.notes && (
               <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
-                <p style={{ fontSize: 11, color: C.barkLight, margin: 0, fontStyle: 'italic' }}>💡 {f.notes}</p>
+                <p style={{ fontSize: 11, color: C.barkLight, margin: 0, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>💡 {f.notes}</p>
               </div>
             )}
           </div>
@@ -438,7 +438,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 </div>
               </div>
             )}
-            {h.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '4px 0 6px' }}>💡 {h.notes}</p>}
+            {h.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '4px 0 6px', whiteSpace: 'pre-wrap' }}>💡 {h.notes}</p>}
             {h.mapUrl && (
               <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: 12, color: C.sky, fontWeight: 600, textDecoration: 'none' }}>
@@ -611,7 +611,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                   </div>
                 )
               )}
-              {b.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '0 0 8px' }}>💡 {b.notes}</p>}
+              {b.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>💡 {b.notes}</p>}
               {!isVisitor && b.qrUrl && (
                 <>
                   <button onClick={() => setShowQrFor(isQrOpen ? null : b.id)}
