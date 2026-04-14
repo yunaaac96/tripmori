@@ -706,14 +706,30 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const coordsFromMapUrl = (url: string): [number, number] | null => {
     if (!url) return null;
     // @lat,lon,zoom  (most common in place URLs)
-    const at = url.match(/@(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+    const at = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (at) return [parseFloat(at[2]), parseFloat(at[1])];
     // ?q=lat,lon  or  &q=lat,lon
-    const q = url.match(/[?&]q=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+    const q = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (q) return [parseFloat(q[2]), parseFloat(q[1])];
     // ll=lat,lon
-    const ll = url.match(/[?&]ll=(-?\d+\.?\d+),(-?\d+\.?\d+)/);
+    const ll = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/);
     if (ll) return [parseFloat(ll[2]), parseFloat(ll[1])];
+    return null;
+  };
+
+  // Try to extract a text query from a Google Maps URL (for short links / search URLs)
+  const placeNameFromMapUrl = (url: string): string | null => {
+    if (!url) return null;
+    // /place/PlaceName/ — URL-encoded place name
+    const place = url.match(/\/place\/([^/@?]+)/);
+    if (place) return decodeURIComponent(place[1].replace(/\+/g, ' '));
+    // ?q=text or &query=text (search URLs)
+    const qText = url.match(/[?&](?:q|query)=([^&]+)/);
+    if (qText) {
+      const decoded = decodeURIComponent(qText[1].replace(/\+/g, ' '));
+      // Only use if it's not pure lat,lon
+      if (!/^-?\d+\.\d+,-?\d+\.\d+$/.test(decoded)) return decoded;
+    }
     return null;
   };
 
@@ -731,16 +747,45 @@ export default function SchedulePage({ events, members = [], project, firestore,
     const to   = nextLoc.trim();
     if (!from || !to) return;
     setTravelCalcStatus('loading'); setTravelCalcMsg('');
-    // Step 1: origin — mapUrl coords first, then geocode
+    // Step 1: origin — mapUrl coords first, then geocode with multiple fallbacks
     let fromC: [number, number] | null = coordsFromMapUrl(form.mapUrl);
     if (!fromC) fromC = await geocodePlace(from);
     if (!fromC && form.title.trim()) fromC = await geocodePlace(form.title.trim());
-    if (!fromC) return err(`無法定位起點「${from}」，請確認地點名稱`);
+    // Extra: extract place name from mapUrl (handles short/search URLs) and geocode that
+    if (!fromC) {
+      const nameFromUrl = placeNameFromMapUrl(form.mapUrl);
+      if (nameFromUrl && nameFromUrl !== from) fromC = await geocodePlace(nameFromUrl);
+    }
+    // Extra: try combining title + location as a single query (more context for geocoder)
+    if (!fromC && form.title.trim() && from) fromC = await geocodePlace(`${form.title.trim()} ${from}`);
+    if (!fromC) {
+      const hasMapUrl = form.mapUrl.trim().startsWith('http');
+      const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/i.test(form.mapUrl);
+      return err(
+        isShortLink
+          ? `地圖短網址無法解析座標。請在 Google Maps 開啟後點「分享」→「複製連結」取得完整網址（含 @緯度,經度）`
+          : hasMapUrl
+          ? `地圖連結無法解析座標，且地點名稱「${from.slice(0,20)}」查無定位結果。請確認地點名稱或改用含 @緯度,經度 的完整 Google Maps 連結`
+          : `無法定位起點「${from.slice(0,20)}」，請確認地點名稱或填入 Google Maps 連結`
+      );
+    }
     // Step 2: destination — mapUrl coords first, then biased geocode
     let toC: [number, number] | null = coordsFromMapUrl(nextMapUrl || '');
     if (!toC) toC = await geocodePlace(to, fromC);
     if (!toC && nextTitle) toC = await geocodePlace(nextTitle, fromC);
-    if (!toC) return err(`無法定位終點「${to.slice(0,15)}…」，請確認地點名稱`);
+    if (!toC) {
+      const nameFromUrl = placeNameFromMapUrl(nextMapUrl || '');
+      if (nameFromUrl && nameFromUrl !== to) toC = await geocodePlace(nameFromUrl, fromC);
+    }
+    if (!toC && nextTitle && to) toC = await geocodePlace(`${nextTitle} ${to}`, fromC);
+    if (!toC) {
+      const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/i.test(nextMapUrl || '');
+      return err(
+        isShortLink
+          ? `終點地圖短網址無法解析座標。請使用完整 Google Maps 連結（含 @緯度,經度）`
+          : `無法定位終點「${to.slice(0,15)}…」，請確認地點名稱或填入 Google Maps 連結`
+      );
+    }
     // Step 3: distance sanity check
     const distKm = haversineKm(fromC[0], fromC[1], toC[0], toC[1]);
     if (distKm > 500) return err(`定位距離異常（${Math.round(distKm)}km），請確認兩站地點是否正確`);
