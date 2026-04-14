@@ -15,9 +15,10 @@ const firebaseConfig = {
 // 初始化 Firebase
 const app  = initializeApp(firebaseConfig);
 
-// 啟用離線持久化（新 API，取代已棄用的 enableIndexedDbPersistence）
+// 啟用離線持久化 + 自動偵測 Long Polling（解決 QUIC ERR_QUIC_PROTOCOL_ERROR）
 export const db = initializeFirestore(app, {
   cache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+  experimentalAutoDetectLongPolling: true,
 });
 
 export const storage = getStorage(app);
