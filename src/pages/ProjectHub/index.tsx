@@ -576,11 +576,19 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
         </div>
         <div>
           <label style={labelStyle}>卡片顏色</label>
-          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const }}>
+          <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' as const, alignItems: 'center' }}>
             {MEMBER_COLORS.map(c => (
               <button key={c} onClick={() => setMemberColor(c)}
                 style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${memberColor === c ? C.sageDark : 'transparent'}`, background: c, cursor: 'pointer', flexShrink: 0 }} />
             ))}
+            <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)', border: `3px solid ${!MEMBER_COLORS.includes(memberColor) ? C.sageDark : 'transparent'}` }} />
+              <input type="color" value={memberColor} onChange={e => setMemberColor(e.target.value)}
+                style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', borderRadius: '50%' }} />
+            </div>
+            {!MEMBER_COLORS.includes(memberColor) && (
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: memberColor, border: `3px solid ${C.sageDark}`, flexShrink: 0 }} />
+            )}
           </div>
         </div>
 
@@ -604,11 +612,19 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
             <div style={{ background: 'var(--tm-card-bg)', borderRadius: 14, padding: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
               <input style={inputSt} placeholder="旅伴名稱"
                 value={extraName} onChange={e => setExtraName(e.target.value)} />
-              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const, alignItems: 'center' }}>
                 {MEMBER_COLORS.map(c => (
                   <button key={c} onClick={() => setExtraColor(c)}
                     style={{ width: 30, height: 30, borderRadius: '50%', border: `3px solid ${extraColor === c ? C.sageDark : 'transparent'}`, background: c, cursor: 'pointer', flexShrink: 0 }} />
                 ))}
+                <div style={{ position: 'relative', width: 30, height: 30, flexShrink: 0 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)', border: `3px solid ${!MEMBER_COLORS.includes(extraColor) ? C.sageDark : 'transparent'}` }} />
+                  <input type="color" value={extraColor} onChange={e => setExtraColor(e.target.value)}
+                    style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', borderRadius: '50%' }} />
+                </div>
+                {!MEMBER_COLORS.includes(extraColor) && (
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: extraColor, border: `3px solid ${C.sageDark}`, flexShrink: 0 }} />
+                )}
               </div>
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => { setShowExtraForm(false); setExtraName(''); setExtraColor('#C8E6C9'); }}

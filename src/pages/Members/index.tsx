@@ -387,11 +387,21 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               </div>
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>標籤顏色</label>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
                   {PRESET_COLORS.map(c => (
                     <div key={c} onClick={() => set('color', c)}
                       style={{ width: 32, height: 32, borderRadius: '50%', background: c, cursor: 'pointer', border: form.color === c ? `3px solid ${C.bark}` : '3px solid transparent', boxShadow: form.color === c ? '0 0 0 2px white inset' : 'none', transition: 'all 0.15s' }} />
                   ))}
+                  {/* Custom color picker */}
+                  <div style={{ position: 'relative', width: 32, height: 32 }}>
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)', cursor: 'pointer', border: !PRESET_COLORS.includes(form.color) ? `3px solid ${C.bark}` : '3px solid transparent', boxShadow: !PRESET_COLORS.includes(form.color) ? '0 0 0 2px white inset' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }} />
+                    <input type="color" value={form.color} onChange={e => set('color', e.target.value)}
+                      style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', borderRadius: '50%' }} />
+                  </div>
+                  {/* Show selected custom color if not a preset */}
+                  {!PRESET_COLORS.includes(form.color) && (
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: form.color, border: `3px solid ${C.bark}`, boxShadow: '0 0 0 2px white inset' }} />
+                  )}
                 </div>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
