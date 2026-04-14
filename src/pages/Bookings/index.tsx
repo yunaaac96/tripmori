@@ -380,7 +380,10 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
             <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
             {f.notes && (
               <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
-                <p style={{ fontSize: 11, color: C.barkLight, margin: 0, fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>💡 {f.notes}</p>
+                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+                  <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
+                  <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{f.notes}</span>
+                </div>
               </div>
             )}
           </div>
@@ -438,7 +441,12 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 </div>
               </div>
             )}
-            {h.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '4px 0 6px', whiteSpace: 'pre-wrap' }}>💡 {h.notes}</p>}
+            {h.notes && (
+              <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', margin: '4px 0 6px' }}>
+                <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
+                <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{h.notes}</span>
+              </div>
+            )}
             {h.mapUrl && (
               <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: 12, color: C.sky, fontWeight: 600, textDecoration: 'none' }}>
@@ -611,7 +619,12 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                   </div>
                 )
               )}
-              {b.notes && <p style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', margin: '0 0 8px', whiteSpace: 'pre-wrap' }}>💡 {b.notes}</p>}
+              {b.notes && (
+                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', margin: '0 0 8px' }}>
+                  <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
+                  <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{b.notes}</span>
+                </div>
+              )}
               {!isVisitor && b.qrUrl && (
                 <>
                   <button onClick={() => setShowQrFor(isQrOpen ? null : b.id)}

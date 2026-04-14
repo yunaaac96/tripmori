@@ -1247,7 +1247,12 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                       <span style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-block', marginBottom: 4 }}>{cat.emoji} {cat.label}</span>
                       <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px', wordBreak: 'break-word' }}>{event.title}</p>
                       {event.location && <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>📍 {event.location}</p>}
-                      {event.notes   && <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0', fontStyle: 'italic', whiteSpace: 'pre-wrap' }}>💡 {event.notes}</p>}
+                      {event.notes   && (
+                        <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', margin: '4px 0 0' }}>
+                          <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
+                          <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{event.notes}</span>
+                        </div>
+                      )}
                       {mapUrl && (
                         <a href={mapUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
                           style={{ fontSize: 11, color: C.sky, fontWeight: 600, marginTop: 4, display: 'inline-block', textDecoration: 'none' }}>
