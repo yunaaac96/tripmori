@@ -28,6 +28,37 @@ export const FONT = "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif";
 export const cardStyle: React.CSSProperties = { background: 'var(--tm-card-bg)', borderRadius: 20, padding: '14px 16px', boxShadow: C.shadow, marginBottom: 10, border: '1px solid var(--tm-card-border)' };
 export const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-input-border)', background: 'var(--tm-input-bg)', fontSize: 16, color: 'var(--tm-bark)', outline: 'none', fontFamily: FONT, boxSizing: 'border-box' };
 export const btnPrimary = (color = C.sage): React.CSSProperties => ({ background: color, color: 'white', border: 'none', borderRadius: 14, padding: '12px 24px', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: C.shadowSm, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 });
+
+/** 超過 5 行自動摺疊，收起時顯示前 2 行 */
+export function ExpandableNotes({ notes, color, margin }: { notes: string; color: string; margin?: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const lineCount = (notes.match(/\n/g) || []).length + 1;
+  const isLong = lineCount > 5 || notes.length > 200;
+  return (
+    <div style={{ margin: margin ?? '4px 0 0' }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
+        <span style={{
+          fontSize: 11, color, fontStyle: 'italic', lineHeight: 1.5,
+          whiteSpace: 'pre-wrap',
+          ...(isLong && !expanded ? {
+            display: '-webkit-box', WebkitLineClamp: 2,
+            WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
+          } : {}),
+        }}>{notes}</span>
+      </div>
+      {isLong && (
+        <button onClick={() => setExpanded(v => !v)} style={{
+          background: 'none', border: 'none', padding: '3px 0 0 16px',
+          fontSize: 10, color, opacity: 0.7, cursor: 'pointer',
+          fontFamily: FONT, display: 'block',
+        }}>
+          {expanded ? '▲ 收起' : '▼ 展開全文'}
+        </button>
+      )}
+    </div>
+  );
+}
 export const CATEGORY_MAP: Record<string, { label: string; bg: string; text: string; emoji: string }> = {
   attraction:  { label: '景點', bg: '#E0F0D8', text: '#4A7A35', emoji: '🌿' },
   food:        { label: '美食', bg: '#FFF2CC', text: '#9A7200', emoji: '🍜' },

@@ -3,7 +3,7 @@ import { getDoc } from 'firebase/firestore';
 import { auth } from '../../config/firebase';
 import CurrencySearch from '../../components/CurrencySearch';
 import DateRangePicker from '../../components/DateRangePicker';
-import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary } from '../../App';
+import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary, ExpandableNotes } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
@@ -1343,12 +1343,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                       <span style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-block', marginBottom: 4 }}>{cat.emoji} {cat.label}</span>
                       <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px', wordBreak: 'break-word' }}>{event.title}</p>
                       {event.location && <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>📍 {event.location}</p>}
-                      {event.notes   && (
-                        <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', margin: '4px 0 0' }}>
-                          <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
-                          <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{event.notes}</span>
-                        </div>
-                      )}
+                      {event.notes && <ExpandableNotes notes={event.notes} color={C.barkLight} />}
                       {mapUrl && (
                         <a href={mapUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
                           style={{ fontSize: 11, color: C.sky, fontWeight: 600, marginTop: 4, display: 'inline-block', textDecoration: 'none' }}>

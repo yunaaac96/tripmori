@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { C, FONT, cardStyle } from '../../App';
+import { C, FONT, cardStyle, ExpandableNotes } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -380,10 +380,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
             <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
             {f.notes && (
               <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
-                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-                  <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
-                  <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{f.notes}</span>
-                </div>
+                <ExpandableNotes notes={f.notes} color={C.barkLight} margin="0" />
               </div>
             )}
           </div>
@@ -441,12 +438,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 </div>
               </div>
             )}
-            {h.notes && (
-              <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', margin: '4px 0 6px' }}>
-                <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
-                <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{h.notes}</span>
-              </div>
-            )}
+            {h.notes && <ExpandableNotes notes={h.notes} color={C.barkLight} margin="4px 0 6px" />}
             {h.mapUrl && (
               <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
                 style={{ fontSize: 12, color: C.sky, fontWeight: 600, textDecoration: 'none' }}>
@@ -619,12 +611,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                   </div>
                 )
               )}
-              {b.notes && (
-                <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start', margin: '0 0 8px' }}>
-                  <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
-                  <span style={{ fontSize: 11, color: C.barkLight, fontStyle: 'italic', whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{b.notes}</span>
-                </div>
-              )}
+              {b.notes && <ExpandableNotes notes={b.notes} color={C.barkLight} margin="0 0 8px" />}
               {!isVisitor && b.qrUrl && (
                 <>
                   <button onClick={() => setShowQrFor(isQrOpen ? null : b.id)}
