@@ -84,6 +84,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const [form, setForm]             = useState({ ...EMPTY_EVENT_FORM, date: '' });
   const [travelMode, setTravelMode] = useState<'car' | 'transit' | 'walk' | 'flight'>('car');
   const [travelCalcStatus, setTravelCalcStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
+  const [travelCalcMsg, setTravelCalcMsg] = useState('');
   const [saving, setSaving]         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
@@ -497,7 +498,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const FLIGHT_KW = /機場|airport|起飛|降落|抵達|出發|航班|班機|飛機|✈/i;
   const isFlightEvt = (e: any) => FLIGHT_KW.test(e?.title || '') || FLIGHT_KW.test(e?.location || '');
 
-  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setSelectedEvent(null); setTravelCalcStatus('idle'); setTravelMode('car'); setMode('add'); };
+  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setSelectedEvent(null); setTravelCalcStatus('idle'); setTravelCalcMsg(''); setTravelMode('car'); setMode('add'); };
   const openEdit = (event: any) => {
     const evtDate = (event.date || '').replace(/\//g, '-') || activeDay;
     const dayEvts = events
@@ -515,7 +516,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       date: evtDate,
     });
     setSelectedEvent(event);
-    setTravelCalcStatus('idle');
+    setTravelCalcStatus('idle'); setTravelCalcMsg('');
     const isTransitSaved = event.travelTime === '__transit__' || (event.travelTime || '').startsWith('🚌');
     setTravelMode(autoFlight ? 'flight' : isTransitSaved ? 'transit' : 'car');
     setMode('edit');
@@ -617,7 +618,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   // Strip trailing street number (e.g. "若狹1-25-11" → "若狹")
   const stripStreetNum = (q: string) => q.replace(/[\d\-－]+$/, '').trim();
 
-  // Haversine distance check (km) — rejects cross-continent geocoding mistakes
+  // Haversine distance check (km)
   const haversineKm = (lon1: number, lat1: number, lon2: number, lat2: number) => {
     const R = 6371, toRad = (d: number) => d * Math.PI / 180;
     const dLat = toRad(lat2 - lat1), dLon = toRad(lon2 - lon1);
@@ -625,14 +626,23 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
   };
 
-  const nominatimFetch = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
+  // Infer ISO country code from coordinates (for Nominatim countrycodes= filter)
+  const inferCountryCode = (lon: number, lat: number): string => {
+    if (lon >= 122 && lon <= 154 && lat >= 24 && lat <= 46) return 'jp';
+    if (lon >= 119 && lon <= 122.5 && lat >= 21 && lat <= 26) return 'tw';
+    if (lon >= 125 && lon <= 131 && lat >= 33 && lat <= 43) return 'kr';
+    if (lon >= 97  && lon <= 106  && lat >= 5  && lat <= 21) return 'th';
+    if (lon >= 100 && lon <= 104  && lat >= 1  && lat <= 2)  return 'sg';
+    if (lon >= 113 && lon <= 115  && lat >= 22 && lat <= 23) return 'hk';
+    return '';
+  };
+
+  const nominatimFetch = async (q: string, cc?: string): Promise<[number, number] | null> => {
     try {
       let url = `https://nominatim.openstreetmap.org/search?q=${encodeURIComponent(q)}&format=json&limit=3`;
-      if (bias) {
-        const [blon, blat] = bias, d = 3;
-        url += `&viewbox=${blon-d},${blat+d},${blon+d},${blat-d}&bounded=1`;
-      }
+      if (cc) url += `&countrycodes=${cc}`;
       const res = await fetch(url, { headers: { 'User-Agent': 'Tripmori/1.0', 'Accept-Language': 'ja,zh-TW,zh,en' } });
+      if (!res.ok) return null;
       const data = await res.json();
       if (data?.[0]) return [parseFloat(data[0].lon), parseFloat(data[0].lat)];
     } catch {}
@@ -641,15 +651,13 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
 
   const openMeteoFetch = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
     try {
-      let url = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=zh&format=json`;
-      const data = await (await fetch(url)).json();
+      const data = await (await fetch(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=5&language=zh&format=json`)).json();
       if (!data.results?.length) return null;
       if (bias) {
-        // Pick the result closest to bias coords
         const [blon, blat] = bias;
-        const best = data.results.reduce((a: any, b: any) =>
-          haversineKm(blon, blat, a.longitude, a.latitude) <= haversineKm(blon, blat, b.longitude, b.latitude) ? a : b
-        );
+        const best = [...data.results].sort((a: any, b: any) =>
+          haversineKm(blon, blat, a.longitude, a.latitude) - haversineKm(blon, blat, b.longitude, b.latitude)
+        )[0];
         return [best.longitude, best.latitude];
       }
       return [data.results[0].longitude, data.results[0].latitude];
@@ -660,34 +668,20 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
   const geocodePlace = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
     const norm = normalizeAddr(q);
     const short = stripStreetNum(norm);
-    // With bias: constrained search is more reliable — try biased first
-    if (bias) {
-      const r0 = await nominatimFetch(norm, bias);
-      if (r0) return r0;
-      if (short && short !== norm) {
-        const r1 = await nominatimFetch(short, bias);
-        if (r1) return r1;
-      }
-      const r2 = await openMeteoFetch(norm, bias);
-      if (r2) return r2;
-      if (short && short !== norm) {
-        const r3 = await openMeteoFetch(short, bias);
-        if (r3) return r3;
-      }
-      return null;
-    }
-    // No bias: broader fallback chain
-    const r1 = await nominatimFetch(norm);
-    if (r1) return r1;
-    if (short && short !== norm) {
-      const r2 = await openMeteoFetch(short);
-      if (r2) return r2;
-    }
-    const r3 = await openMeteoFetch(norm);
-    if (r3) return r3;
-    if (short && short !== norm) {
-      const r4 = await nominatimFetch(short);
-      if (r4) return r4;
+    const cc = bias ? inferCountryCode(bias[0], bias[1]) : '';
+    // Try each strategy in order, using country code (not bounded) to avoid over-restriction
+    const tries = [
+      () => nominatimFetch(norm, cc),
+      () => short && short !== norm ? nominatimFetch(short, cc) : Promise.resolve(null),
+      () => openMeteoFetch(norm, bias),
+      () => short && short !== norm ? openMeteoFetch(short, bias) : Promise.resolve(null),
+      // Last resort: no country filter at all
+      () => !cc ? null : nominatimFetch(norm),
+      () => !cc ? null : nominatimFetch(short),
+    ];
+    for (const t of tries) {
+      const r = await t();
+      if (r) return r;
     }
     return null;
   };
@@ -714,27 +708,31 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     return m > 0 ? `約 ${h} 小時 ${m} 分鐘` : `約 ${h} 小時`;
   };
 
+  const err = (msg: string) => { setTravelCalcStatus('error'); setTravelCalcMsg(msg); };
+
   const calcTravelTime = async (nextLoc: string, nextTitle?: string, nextMapUrl?: string) => {
     const from = form.location.trim();
     const to   = nextLoc.trim();
     if (!from || !to) return;
-    setTravelCalcStatus('loading');
-    // Step 1: origin — try mapUrl coords first (most accurate), then geocode
+    setTravelCalcStatus('loading'); setTravelCalcMsg('');
+    // Step 1: origin — mapUrl coords first, then geocode
     let fromC: [number, number] | null = coordsFromMapUrl(form.mapUrl);
     if (!fromC) fromC = await geocodePlace(from);
     if (!fromC && form.title.trim()) fromC = await geocodePlace(form.title.trim());
-    if (!fromC) { setTravelCalcStatus('error'); return; }
-    // Step 2: destination — try mapUrl coords first, then biased geocode
+    if (!fromC) return err(`無法定位起點「${from}」，請確認地點名稱`);
+    // Step 2: destination — mapUrl coords first, then biased geocode
     let toC: [number, number] | null = coordsFromMapUrl(nextMapUrl || '');
     if (!toC) toC = await geocodePlace(to, fromC);
     if (!toC && nextTitle) toC = await geocodePlace(nextTitle, fromC);
-    if (!toC) { setTravelCalcStatus('error'); return; }
-    // Step 3: sanity check — >500km means geocoding returned wrong continent
-    if (haversineKm(fromC[0], fromC[1], toC[0], toC[1]) > 500) { setTravelCalcStatus('error'); return; }
+    if (!toC) return err(`無法定位終點「${to.slice(0,15)}…」，請確認地點名稱`);
+    // Step 3: distance sanity check
+    const distKm = haversineKm(fromC[0], fromC[1], toC[0], toC[1]);
+    if (distKm > 500) return err(`定位距離異常（${Math.round(distKm)}km），請確認兩站地點是否正確`);
+    // Step 4: OSRM routing
     const profile = travelMode === 'walk' ? 'foot' : 'driving';
     try {
-      const res  = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${fromC[0]},${fromC[1]};${toC[0]},${toC[1]}?overview=false`);
-      if (!res.ok) { setTravelCalcStatus('error'); return; }
+      const res = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${fromC[0]},${fromC[1]};${toC[0]},${toC[1]}?overview=false`);
+      if (!res.ok) return err(`路線規劃失敗（HTTP ${res.status}），座標：${fromC.map(v=>v.toFixed(4))} → ${toC.map(v=>v.toFixed(4))}`);
       const data = await res.json();
       if (data.code === 'Ok' && data.routes?.[0]) {
         let secs = data.routes[0].duration;
@@ -742,8 +740,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
         const icon = travelMode === 'car' ? '🚗' : travelMode === 'transit' ? '🚌' : '🚶';
         set('travelTime', `${icon} ${fmtDuration(secs)}`);
         setTravelCalcStatus('done');
-      } else { setTravelCalcStatus('error'); }
-    } catch { setTravelCalcStatus('error'); }
+      } else { err(`OSRM 無法規劃路線（${data.code}）`); }
+    } catch (e) { err(`網路錯誤：${String(e).slice(0,40)}`); }
   };
 
   // Build a Google Maps URL: prefer explicit mapUrl, fallback to search by location name
@@ -971,8 +969,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                         return (
                           <button key={m.key} onClick={() => {
                             setTravelMode(m.key);
-                            setTravelCalcStatus('idle');
-                            // transit mode: auto-store sentinel; leaving transit: clear it
+                            setTravelCalcStatus('idle'); setTravelCalcMsg('');
                             if (m.key === 'transit') set('travelTime', '__transit__');
                             else if (form.travelTime === '__transit__') set('travelTime', '');
                           }}
@@ -1010,7 +1007,7 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                         )}
                       </div>
                     )}
-                    {travelCalcStatus === 'error' && <p style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px' }}>無法取得路線，請手動輸入或確認地點名稱</p>}
+                    {travelCalcStatus === 'error' && <p style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px', lineHeight: 1.5 }}>⚠️ {travelCalcMsg || '無法取得路線，請手動輸入或確認地點名稱'}</p>}
                     {!nextEvt && travelMode !== 'transit' && <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px' }}>當天無下一站行程，可手動填寫</p>}
                     {travelMode === 'transit' ? (
                       <div style={{ background: '#EAF2FF', border: '1.5px solid #4285F4', borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#2A6A9A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
