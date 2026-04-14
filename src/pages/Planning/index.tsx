@@ -173,11 +173,18 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       }
       return i.assignedTo === filterBy || i.assignedTo === 'all';
     });
-    // 未勾選 → 上方（依建立時間舊→新），已勾選 → 下方（依建立時間舊→新）
+    // 未勾選 → 上方，已勾選 → 下方；同層：全體優先，再依人名排序，最後依建立時間
     return [...filtered].sort((a, b) => {
       const aChecked = a.listType === 'packing' ? isPackingChecked(a) : (a.checked ?? false);
       const bChecked = b.listType === 'packing' ? isPackingChecked(b) : (b.checked ?? false);
       if (aChecked !== bChecked) return aChecked ? 1 : -1;
+      const aAssign = a.assignedTo || 'all';
+      const bAssign = b.assignedTo || 'all';
+      if (aAssign !== bAssign) {
+        if (aAssign === 'all') return -1;
+        if (bAssign === 'all') return 1;
+        return aAssign.localeCompare(bAssign, 'zh');
+      }
       const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
       return ta - tb;

@@ -530,7 +530,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       title: form.title, startTime: form.startTime, endTime: form.endTime || '',
       travelTime: form.travelTime || '',
       category: form.category, location: form.location || '', notes: form.notes || '',
-      mapUrl: form.mapUrl || '', cost: form.cost ? Number(form.cost) : 0,
+      mapUrl: (() => { const r = form.mapUrl.trim(); return r ? (r.startsWith('http') ? r : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r)}`) : ''; })(),
+      cost: form.cost ? Number(form.cost) : 0,
       currency: form.currency, date: form.date || activeDay,
     };
     try {
@@ -1028,12 +1029,12 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
                   ))}
                 </div>
               </div>
-              <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地點</label><input style={inputStyle} placeholder="地址或景點名" value={form.location} onChange={e => set('location', e.target.value)} /></div>
+              <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地點</label><input style={inputStyle} placeholder="店名 / 景點名稱" value={form.location} onChange={e => set('location', e.target.value)} /></div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>備註</label><textarea style={{ ...inputStyle, minHeight: 72, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={form.notes} onChange={e => set('notes', e.target.value)} /></div>
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結</label>
-                <input style={inputStyle} placeholder="https://maps.app.goo.gl/..." value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} />
-                <p style={{ fontSize: 10, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>選填，未填寫時將自動依「地點」欄位資訊導入地圖</p>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結 / 地址</label>
+                <input style={inputStyle} placeholder="貼上 Google Maps 連結，或直接輸入地址" value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} />
+                <p style={{ fontSize: 10, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>輸入地址會自動轉為 Google Maps 搜尋連結；未填時依「地點」欄位導入地圖</p>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 {mode === 'edit' && isOwner && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>🗑</button>}
