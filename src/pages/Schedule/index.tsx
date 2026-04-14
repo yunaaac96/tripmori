@@ -212,12 +212,22 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const [bulkTab, setBulkTab]               = useState<'flight'|'hotel'|'car'|'booking'|'event'>('flight');
   const [bulkCopied, setBulkCopied]         = useState(false);
 
+  // 空白格式（複製用）
   const BULK_TEMPLATES = {
-    flight: `[FLIGHT]\ndirection = 去程\nairline = \nflightNo = \ndate = YYYY-MM-DD\ndepAirport = \ndepTime = HH:MM\narrAirport = \narrTime = HH:MM\nnotes = \ncostPerPerson = `,
-    hotel:  `[HOTEL]\nname = \ncheckIn = YYYY-MM-DD HH:MM\ncheckOut = YYYY-MM-DD HH:MM\nroomType = \ntotalCost = \ncurrency = JPY\nconfirmCode = \npin = \nnotes = \nmapUrl = `,
-    car:    `[CAR]\ncompany = \ncarType = \npickupLocation = \npickupTime = YYYY-MM-DD HH:MM\nreturnLocation = \nreturnTime = YYYY-MM-DD HH:MM\ntotalCost = \ncurrency = JPY\nconfirmCode = \nnotes = `,
-    booking:`[BOOKING]\ntitle = \ntype = activity\ndate = YYYY-MM-DD\ncost = \ncurrency = JPY\nconfirmCode = \nnotes = `,
-    event:  `[EVENT]\ndate = YYYY-MM-DD\ntime = HH:MM\ntitle = \ncategory = 景點\nlocation = \nendTime = \ncost = \ncurrency = JPY\nnotes = `,
+    flight:  `[FLIGHT]\ndirection = \nairline = \nflightNo = \ndate = \ndepAirport = \ndepName = \ndepTime = \narrAirport = \narrName = \narrTime = \nnotes = \ncostPerPerson = `,
+    hotel:   `[HOTEL]\nname = \nnameJa = \naddress = \nroomType = \ncheckIn = \ncheckOut = \ntotalCost = \ncurrency = \nconfirmCode = \npin = \nnotes = \nmapUrl = `,
+    car:     `[CAR]\ncompany = \ncarType = \npickupLocation = \npickupTime = \nreturnLocation = \nreturnTime = \ntotalCost = \ncurrency = \nconfirmCode = \nnotes = `,
+    booking: `[BOOKING]\ntitle = \ntype = activity\ndate = \ncost = \ncurrency = \nconfirmCode = \nnotes = `,
+    event:   `[EVENT]\ndate = \ntime = \ntitle = \ncategory = 景點\nlocation = \nendTime = \ncost = \ncurrency = \nnotes = `,
+  };
+
+  // 填寫範例（預覽用）
+  const BULK_SAMPLES = {
+    flight:  `[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepName = 台北桃園\ndepTime = 06:50\narrAirport = OKA\narrName = 沖繩那霸\narrTime = 09:20\nnotes = 有加購行李 20kg\ncostPerPerson = 3500`,
+    hotel:   `[HOTEL]\nname = 雷克沖繩北谷溫泉度假村\nnameJa = レクー沖縄北谷スパ&リゾート\naddress = 沖繩縣中頭郡北谷町字美濱34番地2\nroomType = 海景雙人房\ncheckIn = 2026-04-23 14:00\ncheckOut = 2026-04-24 11:00\ntotalCost = 3943\ncurrency = TWD\nconfirmCode = ABC123456\npin = 5983\nnotes = 緊鄰美國村，步行可達沖繩海灘\nmapUrl = https://maps.app.goo.gl/xxxxx`,
+    car:     `[CAR]\ncompany = OTS\ncarType = S級別 1台\npickupLocation = 臨空豐崎營業所（那霸機場）\npickupTime = 2026-04-23 11:00\nreturnLocation = 臨空豐崎營業所（那霸機場）\nreturnTime = 2026-04-26 13:30\ntotalCost = 26290\ncurrency = JPY\nconfirmCode = OTS1402455\nnotes = 需國際駕照、日文譯本`,
+    booking: `[BOOKING]\ntitle = 美麗海水族館門票\ntype = activity\ndate = 2026-04-24\ncost = 2180\ncurrency = JPY\nconfirmCode = TKT-98765\nnotes = 需於入場前 15 分鐘取票`,
+    event:   `[EVENT]\ndate = 2026-04-23\ntime = 09:00\ntitle = ⛩ 首里城參觀\ncategory = 景點\nlocation = 首里城公園\nendTime = 11:00\ncost = 400\ncurrency = JPY\nnotes = 建議早上前往，人潮較少`,
   };
 
   const BULK_FULL_TEMPLATE = Object.values(BULK_TEMPLATES).join('\n\n');
@@ -885,20 +895,21 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 ))}
               </div>
 
-              {/* Template preview */}
+              {/* Template preview — shows filled example */}
+              <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 5px', lineHeight: 1.4 }}>📌 填寫範例（僅供參考，複製後欄位為空白）</p>
               <pre style={{ margin: '0 0 10px', padding: '8px 10px', background: 'var(--tm-input-bg)', borderRadius: 8, fontSize: 11, color: C.bark, lineHeight: 1.7, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                {BULK_TEMPLATES[bulkTab]}
+                {BULK_SAMPLES[bulkTab]}
               </pre>
 
-              {/* Copy buttons */}
+              {/* Copy buttons — always copies blank format */}
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => copyToClipboard(BULK_TEMPLATES[bulkTab])}
                   style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: `1.5px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                  複製此段落
+                  複製空白格式
                 </button>
                 <button onClick={() => copyToClipboard(BULK_FULL_TEMPLATE)}
                   style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                  {bulkCopied ? '✓ 已複製！' : '複製完整範本'}
+                  {bulkCopied ? '✓ 已複製！' : '複製全部空白格式'}
                 </button>
               </div>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '8px 0 0', lineHeight: 1.5 }}>
