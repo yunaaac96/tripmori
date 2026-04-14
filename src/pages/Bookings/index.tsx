@@ -140,8 +140,13 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const [editParticipants,   setEditParticipants]   = useState<string[]>([]);
   const [customParticipants, setCustomParticipants] = useState<string[]>([]);
 
-  // All-flights form (edit all flights at once)
+  // All-flights form (manage structure: add / remove flights)
   const [allFlightsForm, setAllFlightsForm] = useState<any[]>([]);
+
+  // Single-flight edit (per-card ✏️ — includes participants)
+  const [editFlightIdx,         setEditFlightIdx]         = useState<number | null>(null);
+  const [singleFlightForm,      setSingleFlightForm]      = useState<any>({});
+  const [singleFlightParticipants, setSingleFlightParticipants] = useState<string[]>([]);
 
   const projCurrency = project?.currency || 'JPY';
 
@@ -152,12 +157,38 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     date: '', notes: '', costPerPerson: '',
   });
 
+  // Section-level: manage all flights (add / remove) — does NOT touch participants
   const openFlightEdit = () => {
     const src = flights?.length ? flights.map((f: any) => ({ ...f })) : [BLANK_FLIGHT('去程', 0)];
     setAllFlightsForm(src);
-    // Use participants from first flight as representative (shared flight)
-    setEditParticipants(src[0]?.participants || []);
     setEditType('flight');
+  };
+
+  // Per-card: edit a single flight including its own participants
+  const openSingleFlightEdit = (idx: number) => {
+    const f = (flights || [])[idx];
+    if (!f) return;
+    setSingleFlightForm({ ...f, dep: { ...f.dep }, arr: { ...f.arr } });
+    setSingleFlightParticipants(f.participants || []);
+    setEditFlightIdx(idx);
+  };
+
+  const setSF    = (k: string, v: any)    => setSingleFlightForm((p: any) => ({ ...p, [k]: v }));
+  const setSFDep = (k: string, v: string) => setSingleFlightForm((p: any) => ({ ...p, dep: { ...p.dep, [k]: v } }));
+  const setSFArr = (k: string, v: string) => setSingleFlightForm((p: any) => ({ ...p, arr: { ...p.arr, [k]: v } }));
+
+  const handleSingleFlightSave = async () => {
+    if (!updateDoc || !db || !TRIP_ID || editFlightIdx === null) return;
+    setStaticSaving(true);
+    try {
+      const updated = (flights || []).map((f: any, i: number) =>
+        i === editFlightIdx ? { ...singleFlightForm, participants: singleFlightParticipants } : f
+      );
+      await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: updated });
+      setFlights(updated);
+      setEditFlightIdx(null);
+    } catch (e) { console.error(e); alert('儲存失敗，請重試'); }
+    setStaticSaving(false);
   };
 
   const openEdit = (type: EditType, idx = 0) => {
@@ -197,8 +228,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setStaticSaving(true);
     try {
       if (editType === 'flight') {
-        // Apply same participants to all flights (shared booking)
-        const updated = allFlightsForm.map((f: any) => ({ ...f, participants: editParticipants }));
+        // Preserve each flight's existing participants (managed per-card via openSingleFlightEdit)
+        const existing = flights || [];
+        const updated = allFlightsForm.map((f: any, i: number) => ({
+          ...f, participants: existing[i]?.participants || f.participants || [],
+        }));
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: updated });
         setFlights(updated);
       } else if (editType === 'hotel') {
@@ -394,7 +428,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       <div style={{ padding: '8px 16px 80px' }}>
 
         {/* ── 航班 ── */}
-        <SectionTitle action={!isReadOnly && flights?.length ? <EditBtn onClick={openFlightEdit} /> : undefined}>✈️ 航班資訊</SectionTitle>
+        <SectionTitle action={!isReadOnly && flights?.length ? (
+          <button onClick={openFlightEdit} style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, background: 'none', border: `1.5px solid ${C.sageDark}`, borderRadius: 10, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT }}>
+            ＋ 新增 / 管理
+          </button>
+        ) : undefined}>✈️ 航班資訊</SectionTitle>
         {!staticLoaded ? null : flights === null || flights.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px' }}>✈️</p>
@@ -409,10 +447,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           </div>
         ) : (flights || []).map((f, idx) => (
           <div key={f.id || idx} style={{ borderRadius: 24, overflow: 'hidden', boxShadow: C.shadow, marginBottom: 14 }}>
-            <div style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 20px', position: 'relative' }}>
-              {!isReadOnly && idx === 0 && (
+            <div style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 16px', position: 'relative' }}>
+              {/* Per-card ✏️ — opens single-flight editor */}
+              {!isReadOnly && (
                 <div style={{ position: 'absolute', top: 12, right: 12 }}>
-                  <button onClick={openFlightEdit}
+                  <button onClick={() => openSingleFlightEdit(idx)}
                     style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     ✏️
                   </button>
@@ -439,12 +478,24 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <p style={{ fontSize: 18, fontWeight: 700, margin: '4px 0 0' }}>{f.arr?.time}</p>
                 </div>
               </div>
+              {/* Participant avatar strip — bottom of green card */}
+              {(() => {
+                const ptc = (f.participants || []).map((id: string) => members.find((m: any) => m.id === id)).filter(Boolean);
+                return ptc.length > 0 ? (
+                  <div style={{ display: 'flex', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                    {ptc.map((m: any, i: number) => (
+                      <div key={m.id} title={m.name} style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: '2.5px solid white', background: m.color || 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: i === 0 ? 0 : -8, flexShrink: 0 }}>
+                        {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <span style={{ fontSize: 11, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                      </div>
+                    ))}
+                  </div>
+                ) : null;
+              })()}
             </div>
-            <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
-            {(f.notes || f.participants?.length > 0) && (
+            {f.notes && (
               <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
-                {f.notes && <ExpandableNotes notes={f.notes} color={C.barkLight} margin="0" />}
-                <ParticipantAvatars ids={f.participants} />
+                <ExpandableNotes notes={f.notes} color={C.barkLight} margin="0" />
               </div>
             )}
           </div>
@@ -866,6 +917,58 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   取消
                 </button>
                 <button onClick={handleStaticSave} disabled={staticSaving}
+                  style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: staticSaving ? 'default' : 'pointer', fontFamily: FONT, opacity: staticSaving ? 0.6 : 1 }}>
+                  {staticSaving ? '儲存中...' : '✓ 儲存'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── 單航班編輯 modal ── */}
+      {editFlightIdx !== null && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
+          onClick={e => { if (e.target === e.currentTarget) setEditFlightIdx(null); }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '92vh', overflowY: 'auto', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>✈️ 編輯航班</p>
+              <button onClick={() => setEditFlightIdx(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+            </div>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {/* Direction */}
+              <div style={{ display: 'flex', gap: 6 }}>
+                {(['去程', '回程'] as const).map(dir => (
+                  <button key={dir} onClick={() => setSF('direction', dir)}
+                    style={{ padding: '5px 18px', borderRadius: 10, border: `1.5px solid ${singleFlightForm.direction === dir ? C.sageDark : C.creamDark}`, background: singleFlightForm.direction === dir ? C.sage : 'var(--tm-card-bg)', color: singleFlightForm.direction === dir ? 'white' : C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                    {dir === '去程' ? '✈️ 去程' : '↩️ 回程'}
+                  </button>
+                ))}
+              </div>
+              <Row>
+                <Field label="日期"><input style={inSt} type="date" value={singleFlightForm.date || ''} onChange={e => setSF('date', e.target.value)} /></Field>
+                <Field label="航空公司"><input style={inSt} value={singleFlightForm.airline || ''} onChange={e => setSF('airline', e.target.value)} /></Field>
+                <Field label="航班號"><input style={inSt} value={singleFlightForm.flightNo || ''} onChange={e => setSF('flightNo', e.target.value)} /></Field>
+              </Row>
+              <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '2px 0 0' }}>出發</p>
+              <Row>
+                <Field label="機場代碼"><input style={inSt} value={singleFlightForm.dep?.airport || ''} onChange={e => setSFDep('airport', e.target.value)} /></Field>
+                <Field label="機場名稱"><input style={inSt} value={singleFlightForm.dep?.name || ''} onChange={e => setSFDep('name', e.target.value)} /></Field>
+                <Field label="時間"><input style={inSt} type="time" value={singleFlightForm.dep?.time || ''} onChange={e => setSFDep('time', e.target.value)} /></Field>
+              </Row>
+              <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '2px 0 0' }}>抵達</p>
+              <Row>
+                <Field label="機場代碼"><input style={inSt} value={singleFlightForm.arr?.airport || ''} onChange={e => setSFArr('airport', e.target.value)} /></Field>
+                <Field label="機場名稱"><input style={inSt} value={singleFlightForm.arr?.name || ''} onChange={e => setSFArr('name', e.target.value)} /></Field>
+                <Field label="時間"><input style={inSt} type="time" value={singleFlightForm.arr?.time || ''} onChange={e => setSFArr('time', e.target.value)} /></Field>
+              </Row>
+              <Field label="每人票價（選填）"><input style={inSt} type="number" value={singleFlightForm.costPerPerson || ''} onChange={e => setSF('costPerPerson', e.target.value)} /></Field>
+              <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={singleFlightForm.notes || ''} onChange={e => setSF('notes', e.target.value)} /></Field>
+              <ParticipantSelector value={singleFlightParticipants} onChange={setSingleFlightParticipants} />
+              <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <button onClick={() => setEditFlightIdx(null)}
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
+                <button onClick={handleSingleFlightSave} disabled={staticSaving}
                   style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: staticSaving ? 'default' : 'pointer', fontFamily: FONT, opacity: staticSaving ? 0.6 : 1 }}>
                   {staticSaving ? '儲存中...' : '✓ 儲存'}
                 </button>
