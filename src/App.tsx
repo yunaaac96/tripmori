@@ -29,11 +29,12 @@ export const cardStyle: React.CSSProperties = { background: 'var(--tm-card-bg)',
 export const inputStyle: React.CSSProperties = { width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-input-border)', background: 'var(--tm-input-bg)', fontSize: 16, color: 'var(--tm-bark)', outline: 'none', fontFamily: FONT, boxSizing: 'border-box' };
 export const btnPrimary = (color = C.sage): React.CSSProperties => ({ background: color, color: 'white', border: 'none', borderRadius: 14, padding: '12px 24px', fontWeight: 700, fontSize: 14, cursor: 'pointer', boxShadow: C.shadowSm, fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 });
 export const CATEGORY_MAP: Record<string, { label: string; bg: string; text: string; emoji: string }> = {
-  attraction: { label: '景點', bg: '#E0F0D8', text: '#4A7A35', emoji: '🌿' },
-  food:       { label: '美食', bg: '#FFF2CC', text: '#9A7200', emoji: '🍜' },
-  transport:  { label: '交通', bg: '#D8EDF8', text: '#2A6A9A', emoji: '🚌' },
-  hotel:      { label: '住宿', bg: '#FAE0E0', text: '#9A3A3A', emoji: '🏨' },
-  misc:       { label: '其他', bg: '#EFEFEF', text: '#7A7A7A', emoji: '📌' },
+  attraction:  { label: '景點', bg: '#E0F0D8', text: '#4A7A35', emoji: '🌿' },
+  food:        { label: '美食', bg: '#FFF2CC', text: '#9A7200', emoji: '🍜' },
+  experience:  { label: '體驗', bg: '#EDE0F8', text: '#7A3A9A', emoji: '🎨' },
+  transport:   { label: '交通', bg: '#D8EDF8', text: '#2A6A9A', emoji: '🚌' },
+  hotel:       { label: '住宿', bg: '#FAE0E0', text: '#9A3A3A', emoji: '🏨' },
+  misc:        { label: '其他', bg: '#EFEFEF', text: '#7A7A7A', emoji: '📌' },
 };
 export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; bg: string; label: string }> = {
   transport: { emoji: '🚌', bg: '#D8EDF8', label: '交通' },
