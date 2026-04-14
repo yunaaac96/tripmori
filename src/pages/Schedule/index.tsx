@@ -530,7 +530,12 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       title: form.title, startTime: form.startTime, endTime: form.endTime || '',
       travelTime: form.travelTime || '',
       category: form.category, location: form.location || '', notes: form.notes || '',
-      mapUrl: (() => { const r = form.mapUrl.trim(); return r ? (r.startsWith('http') ? r : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r)}`) : ''; })(),
+      mapUrl: (() => {
+        const r = form.mapUrl.trim();
+        if (r) return r.startsWith('http') ? r : `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(r)}`;
+        if (form.location.trim()) return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(form.location.trim())}`;
+        return '';
+      })(),
       cost: form.cost ? Number(form.cost) : 0,
       currency: form.currency, date: form.date || activeDay,
     };
