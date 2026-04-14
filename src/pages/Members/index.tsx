@@ -394,7 +394,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   ))}
                   {/* Custom color picker */}
                   <div style={{ position: 'relative', width: 32, height: 32 }}>
-                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)', cursor: 'pointer', border: !PRESET_COLORS.includes(form.color) ? `3px solid ${C.bark}` : '3px solid transparent', boxShadow: !PRESET_COLORS.includes(form.color) ? '0 0 0 2px white inset' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }} />
+                    <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'conic-gradient(#FAE0E0, #ebcef5, #D8EDF8, #E0F0D8, #FFF2CC, #FFD0B0, #F8BBD9, #FAE0E0)', cursor: 'pointer', border: !PRESET_COLORS.includes(form.color) ? `3px solid ${C.bark}` : '3px solid transparent', boxShadow: !PRESET_COLORS.includes(form.color) ? '0 0 0 2px white inset' : 'none', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14 }} />
                     <input type="color" value={form.color} onChange={e => set('color', e.target.value)}
                       style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', borderRadius: '50%' }} />
                   </div>

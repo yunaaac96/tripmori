@@ -582,7 +582,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                 style={{ width: 36, height: 36, borderRadius: '50%', border: `3px solid ${memberColor === c ? C.sageDark : 'transparent'}`, background: c, cursor: 'pointer', flexShrink: 0 }} />
             ))}
             <div style={{ position: 'relative', width: 36, height: 36, flexShrink: 0 }}>
-              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)', border: `3px solid ${!MEMBER_COLORS.includes(memberColor) ? C.sageDark : 'transparent'}` }} />
+              <div style={{ width: 36, height: 36, borderRadius: '50%', background: 'conic-gradient(#FAE0E0, #ebcef5, #D8EDF8, #E0F0D8, #FFF2CC, #FFD0B0, #F8BBD9, #FAE0E0)', border: `3px solid ${!MEMBER_COLORS.includes(memberColor) ? C.sageDark : 'transparent'}` }} />
               <input type="color" value={memberColor} onChange={e => setMemberColor(e.target.value)}
                 style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', borderRadius: '50%' }} />
             </div>
@@ -618,7 +618,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                     style={{ width: 30, height: 30, borderRadius: '50%', border: `3px solid ${extraColor === c ? C.sageDark : 'transparent'}`, background: c, cursor: 'pointer', flexShrink: 0 }} />
                 ))}
                 <div style={{ position: 'relative', width: 30, height: 30, flexShrink: 0 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'conic-gradient(red, yellow, lime, cyan, blue, magenta, red)', border: `3px solid ${!MEMBER_COLORS.includes(extraColor) ? C.sageDark : 'transparent'}` }} />
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: 'conic-gradient(#FAE0E0, #ebcef5, #D8EDF8, #E0F0D8, #FFF2CC, #FFD0B0, #F8BBD9, #FAE0E0)', border: `3px solid ${!MEMBER_COLORS.includes(extraColor) ? C.sageDark : 'transparent'}` }} />
                   <input type="color" value={extraColor} onChange={e => setExtraColor(e.target.value)}
                     style={{ position: 'absolute', inset: 0, opacity: 0, cursor: 'pointer', width: '100%', height: '100%', borderRadius: '50%' }} />
                 </div>
