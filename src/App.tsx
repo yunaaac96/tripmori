@@ -33,6 +33,7 @@ export const CATEGORY_MAP: Record<string, { label: string; bg: string; text: str
   food:       { label: '美食', bg: '#FFF2CC', text: '#9A7200', emoji: '🍜' },
   transport:  { label: '交通', bg: '#D8EDF8', text: '#2A6A9A', emoji: '🚌' },
   hotel:      { label: '住宿', bg: '#FAE0E0', text: '#9A3A3A', emoji: '🏨' },
+  misc:       { label: '其他', bg: '#EFEFEF', text: '#7A7A7A', emoji: '📌' },
 };
 export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; bg: string; label: string }> = {
   transport: { emoji: '🚌', bg: '#D8EDF8', label: '交通' },
