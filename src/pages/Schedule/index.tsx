@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getDoc } from 'firebase/firestore';
+import { auth } from '../../config/firebase';
 import CurrencySearch from '../../components/CurrencySearch';
 import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary } from '../../App';
@@ -1049,27 +1050,43 @@ export default function SchedulePage({ events, members = [], project, firestore,
               </div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地點</label><input style={inputStyle} placeholder="店名 / 景點名稱" value={form.location} onChange={e => set('location', e.target.value)} /></div>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>備註</label><textarea style={{ ...inputStyle, minHeight: 72, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={form.notes} onChange={e => set('notes', e.target.value)} /></div>
-              {members.length > 0 && (
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>參與人 <span style={{ fontWeight: 400, color: C.barkLight, opacity: 0.7 }}>(選填)</span></label>
-                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                    {members.map((m: any) => {
-                      const sel = formParticipants.includes(m.id);
-                      return (
-                        <button key={m.id} onClick={() => setFormParticipants(prev => sel ? prev.filter(id => id !== m.id) : [...prev, m.id])}
-                          style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: 'pointer', padding: 0, opacity: sel ? 1 : 0.4, transition: 'opacity 0.15s' }}>
-                          <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                            {m.avatarUrl
-                              ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
-                          </div>
-                          <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-all' }}>{m.name}</span>
-                        </button>
-                      );
-                    })}
+              {members.length > 0 && (() => {
+                // Find the current user's bound member card (by Google UID)
+                const myUid = auth.currentUser?.uid;
+                const myMember = myUid ? members.find((m: any) => m.googleUid === myUid) : null;
+                return (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>
+                      參與人 <span style={{ fontWeight: 400, opacity: 0.7 }}>(選填)</span>
+                    </label>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+                      {members.map((m: any) => {
+                        const sel = formParticipants.includes(m.id);
+                        // Owner can toggle all; editor can only toggle their own bound member card
+                        const canToggle = isOwner || myMember?.id === m.id;
+                        return (
+                          <button key={m.id}
+                            onClick={() => { if (canToggle) setFormParticipants(prev => sel ? prev.filter(id => id !== m.id) : [...prev, m.id]); }}
+                            title={!canToggle ? '編輯者僅能確認自己的參與狀態' : (sel ? '取消參與' : '確認參與')}
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.25, transition: 'opacity 0.15s' }}>
+                            <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                              {m.avatarUrl
+                                ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                : <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                            </div>
+                            <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-all' }}>{m.name}</span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {!isOwner && !myMember && (
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5 }}>
+                        💡 請至「成員」頁綁定帳號，即可確認自己的參與狀態
+                      </p>
+                    )}
                   </div>
-                </div>
-              )}
+                );
+              })()}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>地圖連結 / 地址</label>
                 <input style={inputStyle} placeholder="貼上 Google Maps 連結，或直接輸入地址" value={form.mapUrl} onChange={e => set('mapUrl', e.target.value)} />
