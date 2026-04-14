@@ -681,22 +681,70 @@ export default function SchedulePage({ events, members = [], project, firestore,
     return null;
   };
 
+  // Photon (komoot) — indexes OSM with better coverage for specific venues/resorts
+  const photonFetch = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
+    try {
+      let url = `https://photon.komoot.io/api/?q=${encodeURIComponent(q)}&limit=3&lang=en`;
+      if (bias) url += `&lat=${bias[1]}&lon=${bias[0]}`;
+      const data = await (await fetch(url)).json();
+      if (!data.features?.length) return null;
+      const f = bias
+        ? [...data.features].sort((a: any, b: any) =>
+            haversineKm(bias[0], bias[1], a.geometry.coordinates[0], a.geometry.coordinates[1]) -
+            haversineKm(bias[0], bias[1], b.geometry.coordinates[0], b.geometry.coordinates[1])
+          )[0]
+        : data.features[0];
+      return [f.geometry.coordinates[0], f.geometry.coordinates[1]];
+    } catch {}
+    return null;
+  };
+
+  // Try to resolve a Google Maps short URL by following the redirect
+  const resolveShortMapUrl = async (url: string): Promise<string> => {
+    if (!/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(url)) return url;
+    try {
+      const res = await fetch(url, { redirect: 'follow' });
+      return res.url || url;
+    } catch {}
+    return url;
+  };
+
+  // Generate progressively shorter name variants for geocoding fallback
+  const nameVariants = (q: string): string[] => {
+    const words = q.trim().split(/\s+/);
+    const variants: string[] = [];
+    // Drop words from the end (e.g. "Sumitra Luxury Villas & Resort by Pramana" → "Sumitra Luxury Villas")
+    for (let i = words.length - 1; i >= 2; i--) {
+      const v = words.slice(0, i).join(' ');
+      if (v !== q) variants.push(v);
+    }
+    // Drop words from the start too
+    if (words.length > 3) variants.push(words.slice(1).join(' '));
+    return variants;
+  };
+
   const geocodePlace = async (q: string, bias?: [number, number]): Promise<[number, number] | null> => {
     const norm = normalizeAddr(q);
     const short = stripStreetNum(norm);
     const cc = bias ? inferCountryCode(bias[0], bias[1]) : '';
-    // Try each strategy in order, using country code (not bounded) to avoid over-restriction
     const tries = [
       () => nominatimFetch(norm, cc),
       () => short && short !== norm ? nominatimFetch(short, cc) : Promise.resolve(null),
       () => openMeteoFetch(norm, bias),
       () => short && short !== norm ? openMeteoFetch(short, bias) : Promise.resolve(null),
-      // Last resort: no country filter at all
+      () => photonFetch(norm, bias),
+      // Last resort: no country filter
       () => !cc ? null : nominatimFetch(norm),
       () => !cc ? null : nominatimFetch(short),
+      () => !cc ? null : photonFetch(norm),
     ];
     for (const t of tries) {
       const r = await t();
+      if (r) return r;
+    }
+    // Progressive name shortening as final fallback
+    for (const variant of nameVariants(norm)) {
+      const r = await photonFetch(variant, bias) || await nominatimFetch(variant, cc);
       if (r) return r;
     }
     return null;
@@ -747,45 +795,32 @@ export default function SchedulePage({ events, members = [], project, firestore,
     const to   = nextLoc.trim();
     if (!from || !to) return;
     setTravelCalcStatus('loading'); setTravelCalcMsg('');
-    // Step 1: origin — mapUrl coords first, then geocode with multiple fallbacks
-    let fromC: [number, number] | null = coordsFromMapUrl(form.mapUrl);
+
+    // Resolve short URLs (maps.app.goo.gl → full URL with @lat,lon if CORS allows)
+    const fromMapUrl = await resolveShortMapUrl(form.mapUrl);
+    const toMapUrl   = await resolveShortMapUrl(nextMapUrl || '');
+
+    // Step 1: origin coords
+    let fromC: [number, number] | null = coordsFromMapUrl(fromMapUrl);
     if (!fromC) fromC = await geocodePlace(from);
     if (!fromC && form.title.trim()) fromC = await geocodePlace(form.title.trim());
-    // Extra: extract place name from mapUrl (handles short/search URLs) and geocode that
     if (!fromC) {
-      const nameFromUrl = placeNameFromMapUrl(form.mapUrl);
+      const nameFromUrl = placeNameFromMapUrl(fromMapUrl);
       if (nameFromUrl && nameFromUrl !== from) fromC = await geocodePlace(nameFromUrl);
     }
-    // Extra: try combining title + location as a single query (more context for geocoder)
     if (!fromC && form.title.trim() && from) fromC = await geocodePlace(`${form.title.trim()} ${from}`);
-    if (!fromC) {
-      const hasMapUrl = form.mapUrl.trim().startsWith('http');
-      const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/i.test(form.mapUrl);
-      return err(
-        isShortLink
-          ? `地圖短網址無法解析座標。請在 Google Maps 開啟後點「分享」→「複製連結」取得完整網址（含 @緯度,經度）`
-          : hasMapUrl
-          ? `地圖連結無法解析座標，且地點名稱「${from.slice(0,20)}」查無定位結果。請確認地點名稱或改用含 @緯度,經度 的完整 Google Maps 連結`
-          : `無法定位起點「${from.slice(0,20)}」，請確認地點名稱或填入 Google Maps 連結`
-      );
-    }
-    // Step 2: destination — mapUrl coords first, then biased geocode
-    let toC: [number, number] | null = coordsFromMapUrl(nextMapUrl || '');
+    if (!fromC) return err(`無法定位起點「${from.slice(0, 20)}」，請確認地點名稱是否正確`);
+
+    // Step 2: destination coords
+    let toC: [number, number] | null = coordsFromMapUrl(toMapUrl);
     if (!toC) toC = await geocodePlace(to, fromC);
     if (!toC && nextTitle) toC = await geocodePlace(nextTitle, fromC);
     if (!toC) {
-      const nameFromUrl = placeNameFromMapUrl(nextMapUrl || '');
+      const nameFromUrl = placeNameFromMapUrl(toMapUrl);
       if (nameFromUrl && nameFromUrl !== to) toC = await geocodePlace(nameFromUrl, fromC);
     }
     if (!toC && nextTitle && to) toC = await geocodePlace(`${nextTitle} ${to}`, fromC);
-    if (!toC) {
-      const isShortLink = /maps\.app\.goo\.gl|goo\.gl\/maps/i.test(nextMapUrl || '');
-      return err(
-        isShortLink
-          ? `終點地圖短網址無法解析座標。請使用完整 Google Maps 連結（含 @緯度,經度）`
-          : `無法定位終點「${to.slice(0,15)}…」，請確認地點名稱或填入 Google Maps 連結`
-      );
-    }
+    if (!toC) return err(`無法定位終點「${to.slice(0, 15)}…」，請確認地點名稱是否正確`);
     // Step 3: distance sanity check
     const distKm = haversineKm(fromC[0], fromC[1], toC[0], toC[1]);
     if (distKm > 500) return err(`定位距離異常（${Math.round(distKm)}km），請確認兩站地點是否正確`);
