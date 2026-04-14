@@ -1363,9 +1363,14 @@ export default function SchedulePage({ events, members = [], project, firestore,
               <div style={{ display: 'flex', alignItems: 'flex-start', marginBottom: event.travelTime ? 0 : (isLast ? 0 : 12), position: 'relative', zIndex: 1 }}>
                 {/* Time column */}
                 <div style={{ width: 50, flexShrink: 0, textAlign: 'right', paddingRight: 6, paddingTop: 14 }}>
-                  <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1 }}>
+                  <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600, whiteSpace: 'nowrap', lineHeight: 1, display: 'block' }}>
                     {event.startTime || ''}
                   </span>
+                  {event.endTime && (
+                    <span style={{ fontSize: 10, color: C.barkLight, opacity: 0.55, whiteSpace: 'nowrap', lineHeight: 1, display: 'block', marginTop: 3 }}>
+                      ~{event.endTime}
+                    </span>
+                  )}
                 </div>
                 {/* Dot column */}
                 <div style={{ width: 16, flexShrink: 0, display: 'flex', justifyContent: 'center', paddingTop: 14 }}>
