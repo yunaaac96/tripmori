@@ -32,8 +32,8 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const [googleEmail, setGoogleEmail]   = useState<string | null>(null);
   const [signingIn, setSigningIn]       = useState(false);
   const [authError, setAuthError]       = useState<string | null>(null);
-  const [bindingSummaryOpen, setBindingSummaryOpen] = useState(true);
-  const [editorListOpen, setEditorListOpen]         = useState(true);
+  const [bindingSummaryOpen, setBindingSummaryOpen] = useState(false);
+  const [editorListOpen, setEditorListOpen]         = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
