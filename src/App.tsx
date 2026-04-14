@@ -644,7 +644,7 @@ function App() {
         )}
 
         {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
-        {activeTab === '預訂' && <BookingsPage bookings={bookings} firestore={firestore} project={activeProject} />}
+        {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}

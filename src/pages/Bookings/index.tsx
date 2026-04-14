@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
+import { auth } from '../../config/firebase';
 import { C, FONT, cardStyle, ExpandableNotes } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
@@ -90,7 +91,7 @@ function EditBtn({ onClick }: { onClick: () => void }) {
 }
 
 // ── Main component ───────────────────────────────────────
-export default function BookingsPage({ bookings, firestore, project }: { bookings: any[]; firestore?: any; project?: any }) {
+export default function BookingsPage({ bookings, members = [], firestore, project }: { bookings: any[]; members?: any[]; firestore?: any; project?: any }) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore || {};
   const isOwner   = role === 'owner';
   const isVisitor = isReadOnly; // 訪客：隱藏訂單編號/PIN/費用/QR Code
@@ -135,6 +136,9 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
   const [editIndex, setEditIndex] = useState<number>(0);
   const [editForm,  setEditForm]  = useState<any>({});
   const [staticSaving, setStaticSaving] = useState(false);
+  // participants state (member IDs)
+  const [editParticipants,   setEditParticipants]   = useState<string[]>([]);
+  const [customParticipants, setCustomParticipants] = useState<string[]>([]);
 
   // All-flights form (edit all flights at once)
   const [allFlightsForm, setAllFlightsForm] = useState<any[]>([]);
@@ -151,14 +155,16 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
   const openFlightEdit = () => {
     const src = flights?.length ? flights.map((f: any) => ({ ...f })) : [BLANK_FLIGHT('去程', 0)];
     setAllFlightsForm(src);
+    // Use participants from first flight as representative (shared flight)
+    setEditParticipants(src[0]?.participants || []);
     setEditType('flight');
   };
 
   const openEdit = (type: EditType, idx = 0) => {
     setEditType(type);
     setEditIndex(idx);
-    if (type === 'hotel' && hotels[idx])  setEditForm({ currency: projCurrency, ...hotels[idx] });
-    if (type === 'car')    setEditForm({ currency: projCurrency, ...car });
+    if (type === 'hotel' && hotels[idx])  { setEditForm({ currency: projCurrency, ...hotels[idx] }); setEditParticipants(hotels[idx].participants || []); }
+    if (type === 'car')    { setEditForm({ currency: projCurrency, ...car }); setEditParticipants(car?.participants || []); }
   };
 
   // Helpers for hotel/car forms (single editForm)
@@ -191,15 +197,18 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
     setStaticSaving(true);
     try {
       if (editType === 'flight') {
-        await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: allFlightsForm });
-        setFlights(allFlightsForm);
+        // Apply same participants to all flights (shared booking)
+        const updated = allFlightsForm.map((f: any) => ({ ...f, participants: editParticipants }));
+        await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: updated });
+        setFlights(updated);
       } else if (editType === 'hotel') {
-        const updated = hotels.map((h, i) => i === editIndex ? editForm : h);
+        const updated = hotels.map((h: any, i: number) => i === editIndex ? { ...editForm, participants: editParticipants } : h);
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticHotels: updated });
         setHotels(updated);
       } else if (editType === 'car') {
-        await updateDoc(doc(db, 'trips', TRIP_ID), { staticCar: editForm });
-        setCar(editForm);
+        const updated = { ...editForm, participants: editParticipants };
+        await updateDoc(doc(db, 'trips', TRIP_ID), { staticCar: updated });
+        setCar(updated);
       }
       setEditType(null);
     } catch (e) { console.error(e); alert('儲存失敗，請重試'); }
@@ -233,11 +242,12 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
       date: b.date || '', cost: b.cost ? String(b.cost) : '',
       currency: b.currency || 'JPY', qrUrl: b.qrUrl || '',
     });
+    setCustomParticipants(b.participants || []);
     setShowAdd(true);
   };
 
   const closeCustomForm = () => {
-    setShowAdd(false); setEditBookingId(null); setCustomForm({ ...EMPTY_CUSTOM_FORM });
+    setShowAdd(false); setEditBookingId(null); setCustomForm({ ...EMPTY_CUSTOM_FORM }); setCustomParticipants([]);
   };
 
   const handleToggleUsed = async (b: any) => {
@@ -296,6 +306,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
       confirmCode: customForm.confirmCode.trim(), notes: customForm.notes.trim(),
       date: customForm.date, cost: customForm.cost ? parseFloat(customForm.cost) : null,
       currency: customForm.currency, qrUrl: customForm.qrUrl,
+      participants: customParticipants,
     };
     try {
       if (editBookingId && updateDoc && doc) {
@@ -323,6 +334,58 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
     const bo = b.sortOrder ?? (b.createdAt?.toMillis?.() || 0);
     return ao - bo;
   });
+
+  // ── Participant helpers ─────────────────────────────────
+  const myUid    = auth.currentUser?.uid;
+  const myMember = myUid ? members.find((m: any) => m.googleUid === myUid) : null;
+
+  const ParticipantAvatars = ({ ids }: { ids: string[] }) => {
+    if (!ids?.length) return null;
+    const ptc = ids.map((id: string) => members.find((m: any) => m.id === id)).filter(Boolean);
+    if (!ptc.length) return null;
+    return (
+      <div style={{ display: 'flex', marginTop: 8 }}>
+        {ptc.map((m: any, i: number) => (
+          <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
+            {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <span style={{ fontSize: 10, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+          </div>
+        ))}
+      </div>
+    );
+  };
+
+  const ParticipantSelector = ({ value, onChange }: { value: string[]; onChange: (ids: string[]) => void }) => {
+    if (!members.length) return null;
+    return (
+      <div>
+        <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>
+          參與人 <span style={{ fontWeight: 400, opacity: 0.7 }}>(選填)</span>
+        </label>
+        <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
+          {members.map((m: any) => {
+            const sel = value.includes(m.id);
+            const canToggle = isOwner || myMember?.id === m.id;
+            return (
+              <button key={m.id}
+                onClick={() => { if (canToggle) onChange(sel ? value.filter(id => id !== m.id) : [...value, m.id]); }}
+                title={!canToggle ? '編輯者僅能確認自己的參與狀態' : sel ? '取消參與' : '確認參與'}
+                style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.2, transition: 'opacity 0.15s' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                    : <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                </div>
+                <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center' as const, lineHeight: 1.2, wordBreak: 'break-all' as const }}>{m.name}</span>
+              </button>
+            );
+          })}
+        </div>
+        {!isOwner && !myMember && (
+          <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5 }}>💡 請至「成員」頁綁定帳號，即可確認自己的參與狀態</p>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div style={{ fontFamily: FONT }}>
@@ -378,9 +441,10 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
               </div>
             </div>
             <div style={{ height: 1, background: 'repeating-linear-gradient(90deg,#E0D9C8 0,#E0D9C8 8px,transparent 8px,transparent 16px)', margin: '0 16px' }} />
-            {f.notes && (
+            {(f.notes || f.participants?.length > 0) && (
               <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
-                <ExpandableNotes notes={f.notes} color={C.barkLight} margin="0" />
+                {f.notes && <ExpandableNotes notes={f.notes} color={C.barkLight} margin="0" />}
+                <ParticipantAvatars ids={f.participants} />
               </div>
             )}
           </div>
@@ -445,6 +509,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 🗺 查看地圖
               </a>
             )}
+            <ParticipantAvatars ids={h.participants} />
           </div>
         ))}
 
@@ -612,6 +677,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 )
               )}
               {b.notes && <ExpandableNotes notes={b.notes} color={C.barkLight} margin="0 0 8px" />}
+              <ParticipantAvatars ids={b.participants} />
               {!isVisitor && b.qrUrl && (
                 <>
                   <button onClick={() => setShowQrFor(isQrOpen ? null : b.id)}
@@ -791,6 +857,8 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
                 </div>
               </>)}
 
+              <ParticipantSelector value={editParticipants} onChange={setEditParticipants} />
+
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 <button onClick={() => setEditType(null)}
@@ -841,6 +909,7 @@ export default function BookingsPage({ bookings, firestore, project }: { booking
               </div>
               <Field label="費用（選填）"><input style={inSt} type="number" placeholder="0" value={customForm.cost} onChange={e => setC('cost', e.target.value)} /></Field>
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={customForm.notes} onChange={e => setC('notes', e.target.value)} /></Field>
+              <ParticipantSelector value={customParticipants} onChange={setCustomParticipants} />
               <div>
                 <label style={lblSt}>QR Code（選填）</label>
                 <input ref={qrFileRef} type="file" accept="image/*" style={{ display: 'none' }}
