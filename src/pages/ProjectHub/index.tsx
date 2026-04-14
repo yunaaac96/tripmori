@@ -24,6 +24,7 @@ export interface StoredProject {
   endDate?: string;
   description?: string;
   currency?: string;
+  archived?: boolean;
 }
 
 const LS_PROJECTS  = 'tripmori_projects';
@@ -233,6 +234,31 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
   const [isEditMode, setIsEditMode]         = useState(false);
   const [deleteTarget, setDeleteTarget]     = useState<StoredProject | null>(null);
   const [deleteConfirmInput, setDeleteConfirmInput] = useState('');
+  const [archivedOpen, setArchivedOpen]     = useState(false);
+
+  const today = new Date().toISOString().slice(0, 10);
+  const isTripEnded = (p: StoredProject) => !!(p.endDate && p.endDate < today);
+
+  const archiveProject = (id: string) => {
+    const updated = loadProjects().map(p => p.id === id ? { ...p, archived: true } : p);
+    localStorage.setItem('tripmori_projects', JSON.stringify(updated));
+    setProjects(updated);
+  };
+  const unarchiveProject = (id: string) => {
+    const updated = loadProjects().map(p => p.id === id ? { ...p, archived: false } : p);
+    localStorage.setItem('tripmori_projects', JSON.stringify(updated));
+    setProjects(updated);
+  };
+
+  const sortByDate = (list: StoredProject[]) =>
+    [...list].sort((a, b) => {
+      const da = a.startDate || '9999';
+      const db2 = b.startDate || '9999';
+      return da.localeCompare(db2);
+    });
+
+  const activeProjects   = sortByDate(projects.filter(p => !p.archived));
+  const archivedProjects = sortByDate(projects.filter(p => p.archived));
   const [deletingProject, setDeletingProject] = useState(false);
 
   // Track auth state
@@ -868,32 +894,87 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
                   </div>
                 </div>
               )}
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 24 }}>
-                {projects.map(p => {
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 16 }}>
+                {activeProjects.map(p => {
                   const rl = ROLE_LABEL[p.role];
+                  const ended = isTripEnded(p);
                   return (
-                    <div key={p.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                      {isEditMode && p.role === 'owner' && (
+                    <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                        {isEditMode && p.role === 'owner' && (
+                          <button
+                            onClick={() => { setDeleteTarget(p); setDeleteConfirmInput(''); }}
+                            style={{ width: 32, height: 32, borderRadius: '50%', background: '#E76F51', border: 'none', color: 'white', fontSize: 16, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                            −
+                          </button>
+                        )}
                         <button
-                          onClick={() => { setDeleteTarget(p); setDeleteConfirmInput(''); }}
-                          style={{ width: 32, height: 32, borderRadius: '50%', background: '#E76F51', border: 'none', color: 'white', fontSize: 16, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                          −
+                          onClick={() => { if (!isEditMode) onEnterProject(p); }}
+                          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: ended ? '20px 20px 0 0' : 20, background: 'var(--tm-card-bg)', border: `2px solid ${isEditMode && p.role === 'owner' ? '#E76F51' : ended ? '#D0C4B0' : C.creamDark}`, borderBottom: ended ? 'none' : undefined, cursor: isEditMode ? 'default' : 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: ended ? 'none' : C.shadowSm, opacity: ended ? 0.85 : 1 }}>
+                          <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px' }}>{rl.label}</span>
+                              {ended && <span style={{ fontSize: 10, fontWeight: 700, color: '#8A7060', background: '#EDE8DF', borderRadius: 6, padding: '2px 6px' }}>🏁 已結束</span>}
+                              {p.startDate && <span style={{ fontSize: 10, color: C.barkLight }}>{p.startDate}{p.endDate ? ` – ${p.endDate}` : ''}</span>}
+                            </div>
+                          </div>
+                          {!isEditMode && <span style={{ fontSize: 20, color: C.barkLight }}>›</span>}
                         </button>
-                      )}
-                      <button
-                        onClick={() => { if (!isEditMode) onEnterProject(p); }}
-                        style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 20, background: 'var(--tm-card-bg)', border: `2px solid ${isEditMode && p.role === 'owner' ? '#E76F51' : C.creamDark}`, cursor: isEditMode ? 'default' : 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm }}>
-                        <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
-                        <div style={{ flex: 1, minWidth: 0 }}>
-                          <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
-                          <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px', display: 'inline-block', marginTop: 4 }}>{rl.label}</span>
+                      </div>
+                      {/* Ended trip: archive prompt bar */}
+                      {ended && !isEditMode && (
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F5F0E8', border: `2px solid #D0C4B0`, borderTop: 'none', borderRadius: '0 0 20px 20px', padding: '8px 16px', boxShadow: C.shadowSm }}>
+                          <span style={{ fontSize: 11, color: C.barkLight }}>移至「已結束」區塊？</span>
+                          <button onClick={() => archiveProject(p.id)}
+                            style={{ fontSize: 11, fontWeight: 700, color: '#8A7060', background: '#EDE8DF', border: 'none', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
+                            移過去
+                          </button>
                         </div>
-                        {!isEditMode && <span style={{ fontSize: 20, color: C.barkLight }}>›</span>}
-                      </button>
+                      )}
                     </div>
                   );
                 })}
               </div>
+
+              {/* 已結束 section */}
+              {archivedProjects.length > 0 && (
+                <div style={{ marginBottom: 24 }}>
+                  <button onClick={() => setArchivedOpen(v => !v)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px', fontFamily: FONT, marginBottom: archivedOpen ? 8 : 0 }}>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: 0.5 }}>🏁 已結束 ({archivedProjects.length})</p>
+                    <span style={{ fontSize: 12, color: C.barkLight }}>{archivedOpen ? '▲' : '▼'}</span>
+                  </button>
+                  {archivedOpen && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {archivedProjects.map(p => {
+                        const rl = ROLE_LABEL[p.role];
+                        return (
+                          <div key={p.id} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                            <button
+                              onClick={() => { if (!isEditMode) onEnterProject(p); }}
+                              style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 12, padding: '12px 16px', borderRadius: 16, background: 'var(--tm-card-bg)', border: `2px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', opacity: 0.7 }}>
+                              <span style={{ fontSize: 24, flexShrink: 0 }}>{p.emoji}</span>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
+                                <div style={{ display: 'flex', gap: 6, marginTop: 3 }}>
+                                  <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px' }}>{rl.label}</span>
+                                  {p.startDate && <span style={{ fontSize: 10, color: C.barkLight }}>{p.startDate}{p.endDate ? ` – ${p.endDate}` : ''}</span>}
+                                </div>
+                              </div>
+                              <button onClick={e => { e.stopPropagation(); unarchiveProject(p.id); }}
+                                style={{ fontSize: 10, fontWeight: 700, color: C.sageDark, background: '#E8F5E2', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+                                恢復
+                              </button>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
             </>
           )}
 
