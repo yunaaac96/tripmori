@@ -634,12 +634,18 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
 
   // Infer ISO country code from coordinates (for Nominatim countrycodes= filter)
   const inferCountryCode = (lon: number, lat: number): string => {
-    if (lon >= 122 && lon <= 154 && lat >= 24 && lat <= 46) return 'jp';
-    if (lon >= 119 && lon <= 122.5 && lat >= 21 && lat <= 26) return 'tw';
-    if (lon >= 125 && lon <= 131 && lat >= 33 && lat <= 43) return 'kr';
-    if (lon >= 97  && lon <= 106  && lat >= 5  && lat <= 21) return 'th';
-    if (lon >= 100 && lon <= 104  && lat >= 1  && lat <= 2)  return 'sg';
-    if (lon >= 113 && lon <= 115  && lat >= 22 && lat <= 23) return 'hk';
+    if (lon >= 122 && lon <= 154 && lat >= 24   && lat <= 46)  return 'jp';
+    if (lon >= 119 && lon <= 122.5 && lat >= 21 && lat <= 26)  return 'tw';
+    if (lon >= 125 && lon <= 131 && lat >= 33   && lat <= 43)  return 'kr';
+    if (lon >= 97  && lon <= 106  && lat >= 5   && lat <= 21)  return 'th';
+    if (lon >= 100 && lon <= 104  && lat >= 1   && lat <= 2)   return 'sg';
+    if (lon >= 113 && lon <= 115  && lat >= 22  && lat <= 23)  return 'hk';
+    if (lon >= 95  && lon <= 141  && lat >= -11 && lat <= 6)   return 'id'; // Indonesia
+    if (lon >= 100 && lon <= 110  && lat >= 8   && lat <= 24)  return 'vn'; // Vietnam
+    if (lon >= 99  && lon <= 120  && lat >= 0   && lat <= 8)   return 'my'; // Malaysia
+    if (lon >= 116 && lon <= 127  && lat >= 4   && lat <= 22)  return 'ph'; // Philippines
+    if (lon >= 73  && lon <= 98   && lat >= 6   && lat <= 36)  return 'in'; // India
+    if (lon >= 113 && lon <= 135  && lat >= 18  && lat <= 53)  return 'cn'; // China
     return '';
   };
 
@@ -734,6 +740,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
     // Step 3: distance sanity check
     const distKm = haversineKm(fromC[0], fromC[1], toC[0], toC[1]);
     if (distKm > 500) return err(`定位距離異常（${Math.round(distKm)}km），請確認兩站地點是否正確`);
+    // Step 3b: walking-specific distance cap — over 15km is not walkable
+    if (travelMode === 'walk' && distKm > 15) return err(`直線距離 ${Math.round(distKm)}km，步行不切實際，建議改選開車或大眾運輸`);
     // Step 4: OSRM routing
     const profile = travelMode === 'walk' ? 'foot' : 'driving';
     try {
@@ -743,6 +751,8 @@ export default function SchedulePage({ events, project, firestore, onProjectUpda
       if (data.code === 'Ok' && data.routes?.[0]) {
         let secs = data.routes[0].duration;
         if (travelMode === 'transit') secs = secs * 1.35;
+        // Sanity check: walking >3 hrs likely means geocoding error or bad routing
+        if (travelMode === 'walk' && secs > 10800) return err(`步行時間異常（${fmtDuration(secs)}），請確認兩站地點名稱是否正確`);
         const icon = travelMode === 'car' ? '🚗' : travelMode === 'transit' ? '🚌' : '🚶';
         set('travelTime', `${icon} ${fmtDuration(secs)}`);
         setTravelCalcStatus('done');
