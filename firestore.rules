@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ── Helper functions ───────────────────────────────────────────────────
+
+    // Any signed-in user (Google or anonymous)
+    function isAuthed() {
+      return request.auth != null;
+    }
+
+    // Signed in with a real Google account (not anonymous)
+    function isGoogleAuthed() {
+      return request.auth != null && request.auth.token.firebase.sign_in_provider != 'anonymous';
+    }
+
+    // Owner of the trip
+    function isOwner(tripId) {
+      return isGoogleAuthed() &&
+        get(/databases/$(database)/documents/trips/$(tripId)).data.ownerUid == request.auth.uid;
+    }
+
+    // Editor of the trip (uid in allowedEditorUids array)
+    function isEditor(tripId) {
+      return isGoogleAuthed() &&
+        request.auth.uid in get(/databases/$(database)/documents/trips/$(tripId)).data.get('allowedEditorUids', []);
+    }
+
+    // Can write (owner or editor)
+    function canWrite(tripId) {
+      return isOwner(tripId) || isEditor(tripId);
+    }
+
+    // ── /trips collection ──────────────────────────────────────────────────
+    match /trips/{tripId} {
+
+      // Any authenticated user can read a specific trip (visitor access via secret link = knowing the tripId)
+      allow get: if isAuthed();
+
+      // Allow collection-level queries (needed for: search by ownerUid, allowedEditorUids, collaboratorKey)
+      allow list: if isAuthed();
+
+      // Creating a new trip: must be Google-authenticated and set own UID as owner
+      allow create: if isGoogleAuthed() && request.resource.data.ownerUid == request.auth.uid;
+
+      // Updating: owner only (e.g. changing title, adding editors, uploading static data)
+      allow update: if isOwner(tripId);
+
+      // Deleting: owner only
+      allow delete: if isOwner(tripId);
+
+      // ── /events ───────────────────────────────────────────────────────────
+      match /events/{eventId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
+      // ── /bookings ─────────────────────────────────────────────────────────
+      match /bookings/{bookingId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
+      // ── /members ──────────────────────────────────────────────────────────
+      match /members/{memberId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
+      // ── /lists (packing / todos) ───────────────────────────────────────────
+      match /lists/{listId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
+      // ── /journals ─────────────────────────────────────────────────────────
+      match /journals/{journalId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
+      // ── /journalComments ──────────────────────────────────────────────────
+      match /journalComments/{commentId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
+      // ── /memberNotes ──────────────────────────────────────────────────────
+      match /memberNotes/{noteId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
+      // ── /expenses ─────────────────────────────────────────────────────────
+      // Private expense protection:
+      //   list  → allow all authenticated users (needed for onSnapshot collection query)
+      //           client-side filter hides others' private expenses in the UI
+      //   get   → block reading another user's private expense directly by document ID
+      //   write → can only create/edit private expenses with own UID as privateOwnerUid
+      //           cannot forge another user's private expense
+      match /expenses/{expenseId} {
+
+        // Collection query (onSnapshot): allow all, client-side filter handles display
+        allow list: if isAuthed();
+
+        // Single document read: block others' private expenses
+        allow get: if isAuthed() && (
+          !resource.data.get('isPrivate', false) ||
+          resource.data.privateOwnerUid == request.auth.uid
+        );
+
+        // Create: editor/owner, and if private must be own UID
+        allow create: if canWrite(tripId) && (
+          !request.resource.data.get('isPrivate', false) ||
+          request.resource.data.privateOwnerUid == request.auth.uid
+        );
+
+        // Update: editor/owner, and cannot change privateOwnerUid to someone else
+        allow update: if canWrite(tripId) && (
+          !request.resource.data.get('isPrivate', false) ||
+          request.resource.data.privateOwnerUid == request.auth.uid
+        );
+
+        // Delete: only if shared expense OR it's your own private expense
+        allow delete: if canWrite(tripId) && (
+          !resource.data.get('isPrivate', false) ||
+          resource.data.privateOwnerUid == request.auth.uid
+        );
+      }
+    }
+  }
+}
