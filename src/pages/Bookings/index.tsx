@@ -140,7 +140,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const [editParticipants,   setEditParticipants]   = useState<string[]>([]);
   const [customParticipants, setCustomParticipants] = useState<string[]>([]);
   const [expandedHotelIds, setExpandedHotelIds] = useState<Set<string>>(new Set());
-  const [expensePrompt, setExpensePrompt] = useState<{ type: 'hotel'|'car'; name: string; amount: number; currency: string; date: string } | null>(null);
+  const [expensePrompt, setExpensePrompt] = useState<{ type: string; name: string; amount: number; currency: string; date: string } | null>(null);
   const [expenseSaving, setExpenseSaving] = useState(false);
 
   // All-flights form (manage structure: add / remove flights)
@@ -341,6 +341,10 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setUploadingCarQr(false);
   };
 
+  const BOOKING_TYPE_TO_EXPENSE: Record<string, string> = {
+    activity: 'attraction', transport: 'transport', show: 'attraction', ferry: 'transport', other: 'other',
+  };
+
   const handleCustomSave = async () => {
     if (!customForm.title.trim() || !TRIP_ID) return;
     setSaving(true);
@@ -359,7 +363,17 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           ...payload, createdAt: Timestamp.now(), sortOrder: Date.now(),
         });
       }
+      const costNum = customForm.cost ? parseFloat(customForm.cost) : 0;
       closeCustomForm();
+      if (costNum > 0) {
+        setExpensePrompt({
+          type: BOOKING_TYPE_TO_EXPENSE[customForm.type] as any || 'other',
+          name: customForm.title.trim(),
+          amount: costNum,
+          currency: customForm.currency || projCurrency,
+          date: customForm.date || '',
+        });
+      }
     } catch (e) { console.error(e); alert('儲存失敗，請重試'); }
     setSaving(false);
   };
@@ -439,11 +453,20 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setExpenseSaving(true);
     try {
       const { type, name, amount, currency, date } = expensePrompt;
-      const amountTWD = currency === 'TWD' ? amount : currency === 'JPY' ? Math.round(amount * 0.22) : amount;
+      const amountTWD = currency === 'TWD' ? amount : currency === 'JPY' ? Math.round(amount * 0.22) : Math.round(amount * 0.0022); // IDR approx
+      // Map type to expense category and description prefix
+      const catMap: Record<string, { cat: string; prefix: string }> = {
+        hotel:      { cat: 'hotel',      prefix: '住宿' },
+        car:        { cat: 'transport',  prefix: '租車/包車' },
+        transport:  { cat: 'transport',  prefix: '交通' },
+        attraction: { cat: 'attraction', prefix: '景點' },
+        other:      { cat: 'other',      prefix: '其他' },
+      };
+      const mapped = catMap[type] || catMap.other;
       await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
-        description: type === 'hotel' ? `住宿 - ${name}` : `租車/包車 - ${name}`,
+        description: `${mapped.prefix} - ${name}`,
         amount, currency, amountTWD,
-        category: type === 'hotel' ? 'hotel' : 'transport',
+        category: mapped.cat,
         payer: '', splitMode: 'equal', splitWith: [],
         percentages: {}, customAmounts: {}, subItems: [],
         date, notes: '', receiptUrl: '',
