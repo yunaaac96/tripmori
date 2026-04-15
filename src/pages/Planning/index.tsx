@@ -4,9 +4,6 @@ import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 
-const MEMBER_COLORS: Record<string, string> = {
-  uu: '#ebcef5', brian: '#aaa9ab', all: '#E0F0D8',
-};
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
 const getDueStatus = (dueDate: string, checked: boolean): 'normal' | 'soon' | 'overdue' => {
@@ -413,7 +410,9 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                         const isPrivateItem = isPacking && !!item.privateOwnerUid;
                         const checked = isPacking ? isPackingChecked(item) : isTodoChecked(item);
                         const canCheck = isPacking ? canCheckPacking(item) : canCheckTodo(item);
-                        const color = isPrivateItem ? '#E8D5F5' : (MEMBER_COLORS[item.assignedTo] || C.creamDark);
+                        // Badge color: use member's Firestore color, fall back to neutral; always use dark text
+                        const assignedMember = members.find((m: any) => m.name === item.assignedTo);
+                        const badgeBg = isPrivateItem ? '#D8C0F0' : item.assignedTo === 'all' ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
                         const badgeLabel = isPrivateItem ? '🔒 僅自己' : item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—');
                         const status = getDueStatus(item.dueDate, checked);
                         const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
@@ -431,7 +430,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                               <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
                               {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0' }}>{status === 'overdue' ? '⚠️ 已逾期：' : status === 'soon' ? '⏰ 即將到期：' : '截止：'}{item.dueDate}</p>}
                             </div>
-                            <div style={{ background: color, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: C.bark, flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
+                            <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
                               {badgeLabel}
                             </div>
                             {showEdit && (

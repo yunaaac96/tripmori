@@ -833,7 +833,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   </button>
                   {isQrOpen && (
                     <div style={{ marginTop: 10, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
-                      <img src={b.qrUrl} alt="QR Code" style={{ maxWidth: 220, width: 'auto', height: 'auto', maxHeight: 220, borderRadius: 8, display: 'block', margin: '0 auto' }} />
+                      <img src={b.qrUrl} alt="QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', borderRadius: 8, display: 'block', margin: '0 auto' }} />
                     </div>
                   )}
                 </>
