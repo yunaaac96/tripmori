@@ -139,6 +139,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   // participants state (member IDs)
   const [editParticipants,   setEditParticipants]   = useState<string[]>([]);
   const [customParticipants, setCustomParticipants] = useState<string[]>([]);
+  const [expandedHotelIds, setExpandedHotelIds] = useState<Set<string>>(new Set());
+  const [expensePrompt, setExpensePrompt] = useState<{ type: 'hotel'|'car'; name: string; amount: number; currency: string; date: string } | null>(null);
+  const [expenseSaving, setExpenseSaving] = useState(false);
 
   // All-flights form (manage structure: add / remove flights)
   const [allFlightsForm, setAllFlightsForm] = useState<any[]>([]);
@@ -194,7 +197,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const openEdit = (type: EditType, idx = 0) => {
     setEditType(type);
     setEditIndex(idx);
-    if (type === 'hotel' && hotels[idx])  { setEditForm({ currency: projCurrency, ...hotels[idx] }); setEditParticipants(hotels[idx].participants || []); }
+    if (type === 'hotel' && hotels[idx])  { setEditForm({ currency: projCurrency, ...hotels[idx], nameLocal: hotels[idx].nameLocal || hotels[idx].nameJa || '' }); setEditParticipants(hotels[idx].participants || []); }
     if (type === 'car')    { setEditForm({ currency: projCurrency, ...car }); setEditParticipants(car?.participants || []); }
   };
 
@@ -239,10 +242,16 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         const updated = hotels.map((h: any, i: number) => i === editIndex ? { ...editForm, participants: editParticipants } : h);
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticHotels: updated });
         setHotels(updated);
+        if (editForm.totalCost && Number(editForm.totalCost) > 0) {
+          setExpensePrompt({ type: 'hotel', name: editForm.name || '住宿', amount: Number(editForm.totalCost), currency: editForm.currency || 'TWD', date: (editForm.checkIn || '').split(/\s+/)[0] });
+        }
       } else if (editType === 'car') {
         const updated = { ...editForm, participants: editParticipants };
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticCar: updated });
         setCar(updated);
+        if (editForm.totalCost && Number(editForm.totalCost) > 0) {
+          setExpensePrompt({ type: 'car', name: editForm.company || '租車/包車', amount: Number(editForm.totalCost), currency: editForm.currency || 'JPY', date: (editForm.pickupTime || '').split(/\s+/)[0] });
+        }
       }
       setEditType(null);
     } catch (e) { console.error(e); alert('儲存失敗，請重試'); }
@@ -421,6 +430,30 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     );
   };
 
+  const toggleHotelExpanded = (key: string) => setExpandedHotelIds(prev => {
+    const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next;
+  });
+
+  const handleExpenseImport = async () => {
+    if (!expensePrompt || !addDoc || !db || !TRIP_ID) return;
+    setExpenseSaving(true);
+    try {
+      const { type, name, amount, currency, date } = expensePrompt;
+      const amountTWD = currency === 'TWD' ? amount : currency === 'JPY' ? Math.round(amount * 0.22) : amount;
+      await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
+        description: type === 'hotel' ? `住宿 - ${name}` : `租車/包車 - ${name}`,
+        amount, currency, amountTWD,
+        category: type === 'hotel' ? 'hotel' : 'transport',
+        payer: '', splitMode: 'equal', splitWith: [],
+        percentages: {}, customAmounts: {}, subItems: [],
+        date, notes: '', receiptUrl: '',
+        createdAt: Timestamp.now(),
+      });
+      setExpensePrompt(null);
+    } catch (e) { console.error(e); alert('新增記帳失敗，請重試'); }
+    setExpenseSaving(false);
+  };
+
   return (
     <div style={{ fontFamily: FONT }}>
       <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji="✈️" color={C.sky} />
@@ -509,24 +542,29 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>住宿安排待更新</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 ✏️ 填入訂房資訊</p>
             {!isReadOnly && (
-              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameJa: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
+              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                 ＋ 新增住宿
               </button>
             )}
           </div>
-        ) : (hotels || []).map((h, idx) => (
-          <div key={h.id || idx} style={{ ...cardStyle, textAlign: 'left' }}>
-            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start', marginBottom: 12 }}>
+        ) : (hotels || []).map((h, idx) => {
+          const hotelKey = h.id || String(idx);
+          const isExpanded = expandedHotelIds.has(hotelKey);
+          return (
+          <div key={hotelKey} style={{ ...cardStyle, textAlign: 'left' }}>
+            {/* ── Always visible: header ── */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{h.name}</p>
-                <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameJa}</p>
-                <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>
+                {(h.nameLocal || h.nameJa) && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameLocal || h.nameJa}</p>}
+                {h.address && <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>}
               </div>
               {!isReadOnly && <EditBtn onClick={() => openEdit('hotel', idx)} />}
             </div>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 8 }}>
+            {/* ── Always visible: check-in/out ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '12px 0 8px' }}>
               <div className="tm-booking-checkin" style={{ background: '#EAF8E6', borderRadius: 12, padding: '8px 10px' }}>
                 <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📥 Check-in</p>
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkIn}</p>
@@ -536,45 +574,79 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkOut}</p>
               </div>
             </div>
-            {isVisitor ? (
-              <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <span style={{ fontSize: 14 }}>🔒</span>
-                <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訂單詳細資訊僅旅伴可查看</span>
-              </div>
-            ) : (
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6, marginBottom: 8 }}>
-                <div className="tm-booking-order" style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
-                  <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
-                  <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
-                </div>
-                <div className="tm-booking-pin" style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
-                  <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
-                  <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
-                </div>
+            {/* ── Expand toggle ── */}
+            <button onClick={() => toggleHotelExpanded(hotelKey)}
+              style={{ width: '100%', padding: '7px 12px', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+              {isExpanded ? '▲ 收起詳細' : '▼ 查看詳細'}
+            </button>
+            {/* ── Expanded details ── */}
+            {isExpanded && (
+              <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                {isVisitor ? (
+                  <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 14 }}>🔒</span>
+                    <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訂單詳細資訊僅旅伴可查看</span>
+                  </div>
+                ) : (
+                  <>
+                    {(h.confirmCode || h.pin) && (
+                      <div style={{ display: 'grid', gridTemplateColumns: h.confirmCode && h.pin ? '1fr 1fr' : '1fr', gap: 6 }}>
+                        {h.confirmCode && (
+                          <div className="tm-booking-order" style={{ background: '#FFF8E1', borderRadius: 12, padding: '7px 10px' }}>
+                            <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>訂單編號</p>
+                            <p style={{ fontSize: 10, fontWeight: 700, color: C.bark, margin: '2px 0 0', wordBreak: 'break-all' }}>{h.confirmCode}</p>
+                          </div>
+                        )}
+                        {h.pin && (
+                          <div className="tm-booking-pin" style={{ background: '#FFEBEB', borderRadius: 12, padding: '7px 10px' }}>
+                            <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>PIN 碼</p>
+                            <p style={{ fontSize: 16, fontWeight: 900, color: '#C0392B', margin: '2px 0 0', letterSpacing: 2 }}>{h.pin}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                    {h.roomType && (
+                      <div style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
+                        <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>房型</p>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{h.roomType}</p>
+                      </div>
+                    )}
+                    {(h.totalCost || h.costPerPerson) && (
+                      <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
+                        <div style={{ textAlign: 'right' }}>
+                          {h.totalCost && <p style={{ fontSize: 16, fontWeight: 700, color: C.earth, margin: 0 }}>{h.currency === 'TWD' ? 'NT$' : h.currency === 'IDR' ? 'Rp' : '¥'} {Number(h.totalCost).toLocaleString()}</p>}
+                          {h.costPerPerson && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>每人 {h.currency === 'TWD' ? 'NT$' : h.currency === 'IDR' ? 'Rp' : '¥'} {Number(h.costPerPerson).toLocaleString()}</p>}
+                        </div>
+                      </div>
+                    )}
+                  </>
+                )}
+                {h.notes && <ExpandableNotes notes={h.notes} color={C.barkLight} margin="0" />}
+                {h.mapUrl && (
+                  <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
+                    style={{ fontSize: 12, color: C.sky, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
+                    🗺 查看地圖
+                  </a>
+                )}
+                <ParticipantAvatars ids={h.participants} />
               </div>
             )}
-            {h.notes && <ExpandableNotes notes={h.notes} color={C.barkLight} margin="4px 0 6px" />}
-            {h.mapUrl && (
-              <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
-                style={{ fontSize: 12, color: C.sky, fontWeight: 600, textDecoration: 'none' }}>
-                🗺 查看地圖
-              </a>
-            )}
-            <ParticipantAvatars ids={h.participants} />
           </div>
-        ))}
+          );
+        })}
 
         {/* ── 租車 ── */}
-        <SectionTitle>🚗 租車資訊</SectionTitle>
+        <SectionTitle>🚗 租車/包車資訊</SectionTitle>
         {!staticLoaded ? null : car === null ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px' }}>🚗</p>
-            <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>此行程未安排租車</p>
-            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>如有租車需求，擁有者可點擊下方按鈕新增</p>
+            <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>此行程未安排租車/包車</p>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>如有租車/包車需求，擁有者可點擊下方按鈕新增</p>
             {!isReadOnly && (
               <button onClick={() => { setEditType('car'); setEditForm({ company: '', carType: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: 'JPY', confirmCode: '', notes: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: '#FFC107', color: '#333', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                ＋ 新增租車
+                ＋ 新增租車/包車
               </button>
             )}
           </div>
@@ -758,7 +830,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
-                {editType === 'flight' ? '✈️ 編輯航班' : editType === 'hotel' ? '🏨 編輯住宿' : '🚗 編輯租車'}
+                {editType === 'flight' ? '✈️ 編輯航班' : editType === 'hotel' ? '🏨 編輯住宿' : '🚗 編輯租車/包車'}
               </p>
               <button onClick={() => setEditType(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
@@ -813,7 +885,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               {/* ── Hotel form ── */}
               {editType === 'hotel' && (<>
                 <Field label="飯店名稱 *"><input style={inSt} value={editForm.name || ''} onChange={e => setF('name', e.target.value)} /></Field>
-                <Field label="當地名稱（選填）"><input style={inSt} value={editForm.nameJa || ''} onChange={e => setF('nameJa', e.target.value)} /></Field>
+                <Field label="原文名稱（選填）"><input style={inSt} value={editForm.nameLocal || ''} onChange={e => setF('nameLocal', e.target.value)} /></Field>
                 <Row>
                   <Field label="Check-in 日期"><input style={inSt} type="date" value={splitDT(editForm.checkIn).date} onChange={e => setF('checkIn', joinDT(e.target.value, splitDT(editForm.checkIn).time || '14:00'))} /></Field>
                   <Field label="時間">
@@ -840,8 +912,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   />
                 </div>
                 <Row>
-                  <Field label="總費用（選填）"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
-                  <Field label="每人分攤（選填）"><input style={inSt} type="number" value={editForm.costPerPerson || ''} onChange={e => setF('costPerPerson', e.target.value)} /></Field>
+                  <Field label="總費用（選填）"><AmountInput value={editForm.totalCost || ''} onChange={v => setF('totalCost', v)} /></Field>
+                  <Field label="每人分攤（選填）"><AmountInput value={editForm.costPerPerson || ''} onChange={v => setF('costPerPerson', v)} /></Field>
                 </Row>
                 <Field label="地址（選填）"><input style={inSt} value={editForm.address || ''} onChange={e => setF('address', e.target.value)} /></Field>
                 <Row>
@@ -884,7 +956,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                     projCurrency={projCurrency}
                   />
                 </div>
-                <Field label="總費用"><input style={inSt} type="number" value={editForm.totalCost || ''} onChange={e => setF('totalCost', e.target.value)} /></Field>
+                <Field label="總費用（選填）"><AmountInput value={editForm.totalCost || ''} onChange={v => setF('totalCost', v)} /></Field>
                 <Field label="預約編號"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
                 <Field label="備註"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} value={editForm.notes || ''} onChange={e => setF('notes', e.target.value)} /></Field>
                 <div>
@@ -1046,6 +1118,29 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           </div>
         </div>
       )}
+
+      {/* ── 費用匯入確認 modal ── */}
+      {expensePrompt && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '0 20px' }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 360, fontFamily: FONT, boxSizing: 'border-box' }}>
+            <p style={{ fontSize: 20, textAlign: 'center', margin: '0 0 8px' }}>💰</p>
+            <p style={{ fontSize: 16, fontWeight: 700, color: '#5C4A38', margin: '0 0 8px', textAlign: 'center' }}>是否新增至記帳？</p>
+            <p style={{ fontSize: 13, color: '#8C7B6E', margin: '0 0 20px', textAlign: 'center', lineHeight: 1.6 }}>
+              偵測到費用 <strong>{expensePrompt.currency === 'TWD' ? 'NT$' : expensePrompt.currency === 'IDR' ? 'Rp' : '¥'} {expensePrompt.amount.toLocaleString()}</strong>，是否同步新增至記帳？
+            </p>
+            <div style={{ display: 'flex', gap: 10 }}>
+              <button onClick={() => setExpensePrompt(null)}
+                style={{ flex: 1, padding: '12px', borderRadius: 14, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-card-bg)', color: '#8C7B6E', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT }}>
+                略過
+              </button>
+              <button onClick={handleExpenseImport} disabled={expenseSaving}
+                style={{ flex: 2, padding: '12px', borderRadius: 14, border: 'none', background: '#6A9A5A', color: 'white', fontWeight: 700, fontSize: 14, cursor: expenseSaving ? 'default' : 'pointer', fontFamily: FONT, opacity: expenseSaving ? 0.6 : 1 }}>
+                {expenseSaving ? '新增中...' : '✓ 新增至記帳'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1066,3 +1161,16 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 const lblSt: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#8C7B6E', display: 'block', marginBottom: 6 };
 const inSt: React.CSSProperties  = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-input-bg)', fontSize: 14, color: 'var(--tm-bark)', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
 const selSt: React.CSSProperties = { ...inSt, padding: '11px 8px' };
+
+function AmountInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
+  const [focused, setFocused] = useState(false);
+  const raw = String(value || '');
+  const display = focused || !raw ? raw : Number(raw).toLocaleString();
+  return (
+    <input style={inSt} inputMode="numeric" value={display} placeholder={placeholder || '0'}
+      onFocus={() => setFocused(true)}
+      onBlur={() => setFocused(false)}
+      onChange={e => onChange(e.target.value.replace(/[^0-9.]/g, ''))}
+    />
+  );
+}
