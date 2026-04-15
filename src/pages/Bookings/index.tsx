@@ -1234,8 +1234,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               偵測到費用 <strong>{expensePrompt.currency === 'TWD' ? 'NT$' : expensePrompt.currency === 'IDR' ? 'Rp' : '¥'} {expensePrompt.amount.toLocaleString()}</strong>，是否同步新增至記帳？
             </p>
             {expensePrompt.participantNames && expensePrompt.participantNames.length > 0 ? (
-              <div style={{ background: '#EAF3DE', borderRadius: 10, padding: '8px 12px', marginBottom: 16, textAlign: 'center' }}>
-                <p style={{ fontSize: 11, color: '#4A7A35', margin: 0 }}>✅ 將自動分帳給：<strong>{expensePrompt.participantNames.join('、')}</strong></p>
+              <div style={{ background: '#EAF3DE', borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
+                <p style={{ fontSize: 11, color: '#4A7A35', margin: '0 0 4px' }}>✅ 將自動分帳給：<strong>{expensePrompt.participantNames.join('、')}</strong></p>
+                <p style={{ fontSize: 11, color: '#9A6800', margin: 0 }}>💡 請記得至記帳填寫付款人</p>
               </div>
             ) : (
               <div style={{ background: '#FFF2CC', borderRadius: 10, padding: '8px 12px', marginBottom: 16, textAlign: 'center' }}>

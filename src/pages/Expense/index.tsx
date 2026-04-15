@@ -1,6 +1,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, dynFont } from '../../App';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
+import { auth } from '../../config/firebase';
+import { onAuthStateChanged } from 'firebase/auth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 
@@ -18,6 +20,7 @@ const EMPTY_FORM = {
   customAmounts: {} as Record<string, string>,
   subItems: [] as { name: string; amount: string }[],
   date: '', notes: '', receiptUrl: '',
+  isPrivate: false,
 };
 
 // Currency display helpers
@@ -157,6 +160,15 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   const projCurrency = (project?.currency || 'JPY') as Currency;
   const defaultForm = { ...EMPTY_FORM, currency: projCurrency };
+
+  // Google UID for private expense ownership
+  const [googleUid, setGoogleUid] = useState<string | null>(null);
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, u => {
+      setGoogleUid(u && !u.isAnonymous ? u.uid : null);
+    });
+    return unsub;
+  }, []);
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -345,6 +357,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       date: e.date || '',
       notes: e.notes || '',
       receiptUrl: e.receiptUrl || '',
+      isPrivate: e.isPrivate || false,
     });
     setEditingId(e.id);
     setShowForm(true);
@@ -366,29 +379,34 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // ── Save / Update ────────────────────────────────────────────────────────
   const handleSave = async () => {
     if (isReadOnly) return;
-    if (!form.description || !form.amount || !form.payer) return;
+    if (!form.description || !form.amount) return;
+    // Private expense doesn't require payer
+    if (!form.isPrivate && !form.payer) return;
     setSaving(true);
     const amt = Number(form.amount);
     const amtTWD = toTWD(amt, form.currency);
 
-    let splitWith = memberNames;
-    if (form.splitMode === 'equal' && form.splitWith.length > 0) splitWith = form.splitWith;
+    let splitWith = form.isPrivate ? [] : memberNames;
+    if (!form.isPrivate && form.splitMode === 'equal' && form.splitWith.length > 0) splitWith = form.splitWith;
 
     const pcts = form.splitMode === 'weighted' ? getActivePcts() : {};
 
     const payload: any = {
       description: form.description,
       amount: amt, currency: form.currency, amountTWD: amtTWD,
-      category: form.category, payer: form.payer,
+      category: form.category,
+      payer: form.isPrivate ? (form.payer || currentUserName) : form.payer,
       paymentMethod: form.paymentMethod,
-      splitMode: form.splitMode,
+      splitMode: form.isPrivate ? 'equal' : form.splitMode,
       splitWith,
-      percentages: form.splitMode === 'weighted' ? pcts : {},
-      customAmounts: form.splitMode === 'amount' ? form.customAmounts : {},
+      percentages: form.splitMode === 'weighted' && !form.isPrivate ? pcts : {},
+      customAmounts: form.splitMode === 'amount' && !form.isPrivate ? form.customAmounts : {},
       subItems: form.subItems.filter(si => si.name.trim()),
       date: form.date || new Date().toISOString().slice(0, 10),
       notes: form.notes,
       receiptUrl: form.receiptUrl || '',
+      isPrivate: form.isPrivate || false,
+      privateOwnerUid: form.isPrivate ? (googleUid || null) : null,
     };
 
     try {
@@ -444,11 +462,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     Math.round(amount * (CURRENCY_TO_TWD[currency] ?? 1));
 
   const memberStats = memberNames.map(name => {
+    // paid: include private expenses paid by this user (only visible to them)
     const paid = expenses
-      .filter((e: any) => e.payer === name)
+      .filter((e: any) => {
+        if (e.isPrivate) return false; // exclude private from shared stats
+        return e.payer === name;
+      })
       .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
 
     const owed = expenses.reduce((s: number, e: any) => {
+      if (e.isPrivate) return s; // exclude private from shared owed
       const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
       if (!sw.includes(name)) return s;
       const eAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
@@ -527,8 +550,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   });
 
   // ── Category breakdown ───────────────────────────────────────────────────
-  const nonSettlementExpenses = expenses.filter((e: any) => e.category !== 'settlement');
-  const totalTWD = expenses.reduce(
+  // Visible expenses: filter out private that belong to others
+  const visibleExpenses = expenses.filter((e: any) =>
+    !e.isPrivate || (e.privateOwnerUid && e.privateOwnerUid === googleUid)
+  );
+  const nonSettlementExpenses = visibleExpenses.filter((e: any) => e.category !== 'settlement');
+  const sharedExpenses = visibleExpenses.filter((e: any) => !e.isPrivate);
+  const totalTWD = sharedExpenses.reduce(
     (s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')),
     0
   );
@@ -552,7 +580,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     { key: 'settlement', label: '結清' },
   ];
 
-  const filteredExpenses = expenses
+  const filteredExpenses = visibleExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
     .sort((a: any, b: any) => {
       if (sortMode === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
@@ -678,6 +706,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               </div>
 
               {/* Payer */}
+              {!form.isPrivate && (
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>誰付款 *</label>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -689,9 +718,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Split Mode */}
-              <div>
+              {!form.isPrivate && <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>分帳方式</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
                   {([['equal', '⚖️', '均分'], ['weighted', '%', '比例'], ['amount', '✍️', '自訂金額']] as [SplitMode, string, string][]).map(([mode, icon, label]) => (
@@ -769,7 +799,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     </div>
                   </div>
                 )}
-              </div>
+              </div>}
 
               {/* Sub-items */}
               {!isReadOnly && <div>
@@ -809,6 +839,24 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   </div>
                 )}
               </div>}
+
+              {/* Private expense toggle */}
+              {googleUid && (
+                <div>
+                  <button
+                    type="button"
+                    onClick={() => set('isPrivate', !form.isPrivate)}
+                    style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${form.isPrivate ? '#9A5AC8' : C.creamDark}`, background: form.isPrivate ? '#F0E8FF' : 'var(--tm-card-bg)', color: form.isPrivate ? '#6A2A9A' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <span>🔒 私人支出（僅自己可見）</span>
+                    <span style={{ width: 36, height: 20, borderRadius: 10, background: form.isPrivate ? '#9A5AC8' : C.creamDark, position: 'relative', display: 'inline-block', flexShrink: 0, transition: 'background 0.2s' }}>
+                      <span style={{ position: 'absolute', top: 2, left: form.isPrivate ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                    </span>
+                  </button>
+                  {form.isPrivate && (
+                    <p style={{ fontSize: 11, color: '#6A2A9A', margin: '4px 0 0', paddingLeft: 2 }}>此筆支出不計入分帳結算，僅記錄個人花費</p>
+                  )}
+                </div>
+              )}
 
               {/* Notes */}
               <div>
@@ -853,9 +901,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
                   取消
                 </button>
-                <button onClick={handleSave} disabled={saving || !form.description || !form.amount || !form.payer}
-                  style={{ ...btnPrimary(), flex: 2, opacity: saving || !form.description || !form.amount || !form.payer ? 0.6 : 1 }}>
-                  {saving ? '儲存中...' : editingId ? '✓ 儲存修改' : '✓ 新增'}
+                <button onClick={handleSave} disabled={saving || !form.description || !form.amount || (!form.isPrivate && !form.payer)}
+                  style={{ ...btnPrimary(form.isPrivate ? '#7A4AAA' : undefined), flex: 2, opacity: saving || !form.description || !form.amount || (!form.isPrivate && !form.payer) ? 0.6 : 1 }}>
+                  {saving ? '儲存中...' : editingId ? '✓ 儲存修改' : (form.isPrivate ? '🔒 新增私人支出' : '✓ 新增')}
                 </button>
               </div>
             </div>
@@ -1035,8 +1083,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               const amtTWD = e.amountTWD || toTWD(e.amount || 0, e.currency || 'JPY');
               const hasSubItems = e.subItems && e.subItems.length > 0;
               const isExpanded = expandedExpense === e.id;
+              const isPrivateExpense = !!e.isPrivate;
               return (
-                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isSettlement ? `3px solid ${C.sageDark}` : undefined }}>
+                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
                     <div style={{ width: 40, height: 40, borderRadius: 12, background: isSettlement ? '#EAF3DE' : cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
@@ -1045,10 +1094,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                        <p style={{ fontSize: dynFont(e.description || ''), fontWeight: 700, color: C.bark, margin: 0 }}>{e.description}</p>
+                        <p style={{ fontSize: dynFont(e.description || ''), fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0 }}>{e.description}</p>
+                        {isPrivateExpense && (
+                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A' }}>🔒 私人</span>
+                        )}
                         {isSettlement ? (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
-                        ) : (
+                        ) : !isPrivateExpense && (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: e.paymentMethod === 'card' ? '#D8EDF8' : '#EAF3DE', color: e.paymentMethod === 'card' ? '#2A6A9A' : '#4A7A35' }}>
                             {e.paymentMethod === 'card' ? '刷卡' : '現金'}
                           </span>
@@ -1057,7 +1109,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
                         {e.payer} 付款 · {e.date || ''}
                       </p>
-                      {!isSettlement && (
+                      {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
                           {splitModeLabel(e)}
                           {e.notes ? ` · ${e.notes}` : ''}
