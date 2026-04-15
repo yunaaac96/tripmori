@@ -53,8 +53,9 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   // Visibility filter for packing: private items only visible to their owner
   const visiblePacking = lists.filter((l: any) => {
     if (l.listType !== 'packing') return false;
-    if (!l.privateOwnerUid) return true; // assigned/global item — visible to all
-    return l.privateOwnerUid === googleUid; // private — only visible to creator
+    if (isOwner) return true; // Owner sees all packing items
+    if (!l.privateOwnerUid) return true; // global item — visible to all
+    return l.privateOwnerUid === googleUid; // private — only assignee sees it
   });
 
   const packing  = visiblePacking;
@@ -71,9 +72,9 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   // Can the current user toggle this packing item's checkbox?
   function canCheckPacking(item: any): boolean {
     if (!googleUid) return false;
-    if (item.privateOwnerUid) return item.privateOwnerUid === googleUid;
+    if (isOwner) return true; // Owner can check any packing item
+    if (item.privateOwnerUid) return item.privateOwnerUid === googleUid; // assignee
     if (item.assignedTo === 'all') return true;
-    // Assigned to a specific member — check if that member's googleUid is mine
     const assignedMember = members.find((m: any) => m.name === item.assignedTo);
     return assignedMember?.googleUid === googleUid;
   }
@@ -141,12 +142,22 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     setSaving(true);
     try {
       const isPacking = form.listType === 'packing';
-      // Private packing: non-owner assigning to themselves (opt-in)
-      const isPrivate = isPacking && !isOwner && !!googleUid && form.assignedTo !== 'all';
+      // Compute privateOwnerUid: who this packing item belongs to (only they + owner can see)
+      let privateUid: string | null = null;
+      if (isPacking && form.assignedTo !== 'all') {
+        if (isOwner) {
+          // Owner assigning to a named member → set that member's uid as private owner
+          const assignedMember = members.find((m: any) => m.name === form.assignedTo);
+          privateUid = assignedMember?.googleUid || null;
+        } else if (googleUid) {
+          // Non-owner assigning to themselves → self-private
+          privateUid = googleUid;
+        }
+      }
       await addDoc(collection(db, 'trips', TRIP_ID, 'lists'), {
         text: form.text.trim(), listType: form.listType,
         assignedTo: form.assignedTo,
-        privateOwnerUid: isPrivate ? googleUid : null,
+        privateOwnerUid: privateUid,
         createdBy: googleUid || null,
         dueDate: form.dueDate || '',
         checked: false, createdAt: new Date().toISOString(),
@@ -199,8 +210,13 @@ export default function PlanningPage({ lists, members, firestore }: any) {
 
   const applyFilter = (items: any[]) => {
     const filtered = filterBy === 'all' ? items : items.filter((i: any) => {
-      // Private items: show when filtering by self
       if (i.privateOwnerUid) {
+        if (isOwner) {
+          // Owner filtering by name: show items whose privateOwnerUid matches that member
+          const filterMember = members.find((m: any) => m.name === filterBy);
+          return filterMember?.googleUid === i.privateOwnerUid;
+        }
+        // Non-owner: show only their own private items
         const myMemberName = members.find((m: any) => m.googleUid === googleUid)?.name;
         return myMemberName === filterBy;
       }
@@ -413,7 +429,15 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                         // Badge color: use member's Firestore color, fall back to neutral; always use dark text
                         const assignedMember = members.find((m: any) => m.name === item.assignedTo);
                         const badgeBg = isPrivateItem ? '#D8C0F0' : item.assignedTo === 'all' ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
-                        const badgeLabel = isPrivateItem ? '🔒 僅自己' : item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—');
+                        // Badge label: if private, show who it belongs to
+                        const badgeLabel = isPrivateItem
+                          ? (() => {
+                              if (item.privateOwnerUid === googleUid) return '🔒 僅本人可見';
+                              // Owner viewing someone else's private item
+                              const privateMember = members.find((m: any) => m.googleUid === item.privateOwnerUid);
+                              return `🔒 僅${privateMember?.name || '指定人'}可見`;
+                            })()
+                          : item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—');
                         const status = getDueStatus(item.dueDate, checked);
                         const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
                         const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : '1.5px solid transparent';
