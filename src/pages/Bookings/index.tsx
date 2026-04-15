@@ -49,6 +49,7 @@ const DEFAULT_HOTELS = [
 ];
 
 const DEFAULT_CAR = {
+  carMode: 'rental', // 'rental' | 'charter'
   company: 'OTS', carType: 'S級別 1台',
   pickupLocation: '臨空豐崎營業所（那霸機場）', pickupTime: '2026-04-23  11:00',
   returnLocation: '臨空豐崎營業所（那霸機場）', returnTime: '2026-04-26  13:30',
@@ -198,7 +199,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setEditType(type);
     setEditIndex(idx);
     if (type === 'hotel' && hotels[idx])  { setEditForm({ currency: projCurrency, ...hotels[idx], nameLocal: hotels[idx].nameLocal || hotels[idx].nameJa || '' }); setEditParticipants(hotels[idx].participants || []); }
-    if (type === 'car')    { setEditForm({ currency: projCurrency, ...car }); setEditParticipants(car?.participants || []); }
+    if (type === 'car')    { setEditForm({ carMode: 'rental', currency: projCurrency, ...car }); setEditParticipants(car?.participants || []); }
   };
 
   // Helpers for hotel/car forms (single editForm)
@@ -667,7 +668,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>此行程未安排租車/包車</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>如有租車/包車需求，擁有者可點擊下方按鈕新增</p>
             {!isReadOnly && (
-              <button onClick={() => { setEditType('car'); setEditForm({ company: '', carType: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: 'JPY', confirmCode: '', notes: '' }); }}
+              <button onClick={() => { setEditType('car'); setEditForm({ carMode: 'rental', company: '', carType: '', seats: '', contactInfo: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: projCurrency, confirmCode: '', notes: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: '#FFC107', color: '#333', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                 ＋ 新增租車/包車
               </button>
@@ -675,52 +676,69 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           </div>
         ) : (
         <div style={cardStyle}>
+          {/* ── Header ── */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>🚗</div>
+            <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
+              {car.carMode === 'charter' ? '🚐' : '🚗'}
+            </div>
             <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{car.company}　{car.carType}</p>
-              {!isVisitor && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>
+                  {car.company}{car.carMode === 'rental' && car.carType ? `　${car.carType}` : ''}{car.carMode === 'charter' && car.seats ? `　${car.seats}` : ''}
+                </p>
+                <span style={{ fontSize: 10, fontWeight: 700, background: car.carMode === 'charter' ? '#D8EDF8' : '#FFF2CC', color: car.carMode === 'charter' ? '#2A6A9A' : '#7A5A00', borderRadius: 6, padding: '2px 7px' }}>
+                  {car.carMode === 'charter' ? '🚐 包車' : '🚗 租車'}
+                </span>
+              </div>
+              {!isVisitor && car.confirmCode && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
+              {!isVisitor && car.carMode === 'charter' && car.contactInfo && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>📞 {car.contactInfo}</p>}
             </div>
             {!isReadOnly && <EditBtn onClick={() => openEdit('car')} />}
           </div>
+          {/* ── Pickup / Return ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
             <div className="tm-booking-pickup" style={{ background: '#EAF8E6', borderRadius: 12, padding: '10px 12px' }}>
-              <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: '0 0 4px' }}>🟢 取車</p>
+              <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: '0 0 4px' }}>{car.carMode === 'charter' ? '🟢 出發' : '🟢 取車'}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.pickupLocation}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.pickupTime}</p>
             </div>
             <div className="tm-booking-return" style={{ background: '#FFEBEB', borderRadius: 12, padding: '10px 12px' }}>
-              <p style={{ fontSize: 10, color: '#9A3A3A', fontWeight: 700, margin: '0 0 4px' }}>🔴 還車</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.returnLocation}</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.returnTime}</p>
+              <p style={{ fontSize: 10, color: '#9A3A3A', fontWeight: 700, margin: '0 0 4px' }}>{car.carMode === 'charter' ? '🔴 結束' : '🔴 還車'}</p>
+              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.returnLocation || '—'}</p>
+              <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.returnTime || '—'}</p>
             </div>
           </div>
+          {/* ── Cost / Lock ── */}
           {isVisitor ? (
             <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 14 }}>🔒</span>
               <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用與訂單詳情僅旅伴可查看</span>
             </div>
-          ) : (
+          ) : car.totalCost ? (
             <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
               <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
               <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
-                {car.currency === 'JPY' ? '¥' : 'NT$'} {Number(car.totalCost).toLocaleString()}
+                {car.currency === 'TWD' ? 'NT$' : car.currency === 'IDR' ? 'Rp' : '¥'} {Number(car.totalCost).toLocaleString()}
               </span>
             </div>
-          )}
-          <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: '0 0 10px' }}>⚠️ {car.notes}</p>
+          ) : null}
+          {/* ── Notes ── */}
+          {car.notes && <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: '0 0 10px' }}>⚠️ {car.notes}</p>}
+          {/* ── Participants ── */}
+          <ParticipantAvatars ids={car.participants} />
+          {/* ── QR Code ── */}
           {!isVisitor && car.qrUrl && (
             <>
               <button onClick={() => setShowCarQR(v => !v)}
-                style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: car.participants?.length ? 8 : 0 }}>
                 <span>{showCarQR ? '▲' : '▼'}</span>
-                {showCarQR ? '收起 QR Code' : '📱 展開取車 QR Code'}
+                {showCarQR ? '收起 QR Code' : `📱 展開${car.carMode === 'charter' ? '包車' : '取車'} QR Code`}
               </button>
               {showCarQR && (
                 <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>取車報到 QR Code</p>
-                  <img src={car.qrUrl} alt="取車 QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block', borderRadius: 8 }} />
-                  <p style={{ fontSize: 10, color: C.barkLight, margin: '10px 0 0' }}>{car.confirmCode}　{car.pickupLocation}</p>
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>{car.carMode === 'charter' ? '包車' : '取車報到'} QR Code</p>
+                  <img src={car.qrUrl} alt="QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block', borderRadius: 8 }} />
+                  {car.confirmCode && <p style={{ fontSize: 10, color: C.barkLight, margin: '10px 0 0' }}>{car.confirmCode}　{car.pickupLocation}</p>}
                 </div>
               )}
             </>
@@ -949,41 +967,79 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 
               {/* ── Car form ── */}
               {editType === 'car' && (<>
+                {/* Mode toggle */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>類型</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {([{ v: 'rental', e: '🚗', l: '租車' }, { v: 'charter', e: '🚐', l: '包車/司機' }] as const).map(({ v, e, l }) => (
+                      <button key={v} onClick={() => setF('carMode', v)}
+                        style={{ flex: 1, padding: '10px 4px', borderRadius: 12, border: `1.5px solid ${(editForm.carMode || 'rental') === v ? C.earth : C.creamDark}`, background: (editForm.carMode || 'rental') === v ? C.earth : 'var(--tm-card-bg)', color: (editForm.carMode || 'rental') === v ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                        {e} {l}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Company / driver name */}
+                <Field label={(editForm.carMode || 'rental') === 'charter' ? '司機/包車公司名稱' : '租車公司'}>
+                  <input style={inSt} value={editForm.company || ''} onChange={e => setF('company', e.target.value)} />
+                </Field>
+
+                {/* Rental-only: car type */}
+                {(editForm.carMode || 'rental') === 'rental' && (
+                  <Field label="車型"><input style={inSt} placeholder="S級別 1台" value={editForm.carType || ''} onChange={e => setF('carType', e.target.value)} /></Field>
+                )}
+
+                {/* Charter-only: seats + contact */}
+                {(editForm.carMode || 'rental') === 'charter' && (
+                  <Row>
+                    <Field label="座位數（選填）"><input style={inSt} placeholder="8人座" value={editForm.seats || ''} onChange={e => setF('seats', e.target.value)} /></Field>
+                    <Field label="司機電話/LINE（選填）"><input style={inSt} placeholder="+62 812..." value={editForm.contactInfo || ''} onChange={e => setF('contactInfo', e.target.value)} /></Field>
+                  </Row>
+                )}
+
+                {/* Pickup */}
+                <Field label={(editForm.carMode || 'rental') === 'charter' ? '出發地點' : '取車地點'}>
+                  <input style={inSt} value={editForm.pickupLocation || ''} onChange={e => setF('pickupLocation', e.target.value)} />
+                </Field>
                 <Row>
-                  <Field label="租車公司"><input style={inSt} value={editForm.company || ''} onChange={e => setF('company', e.target.value)} /></Field>
-                  <Field label="車型"><input style={inSt} value={editForm.carType || ''} onChange={e => setF('carType', e.target.value)} /></Field>
-                </Row>
-                <Field label="取車地點"><input style={inSt} value={editForm.pickupLocation || ''} onChange={e => setF('pickupLocation', e.target.value)} /></Field>
-                <Row>
-                  <Field label="取車日期"><input style={inSt} type="date" value={splitDT(editForm.pickupTime).date} onChange={e => setF('pickupTime', joinDT(e.target.value, splitDT(editForm.pickupTime).time || '11:00'))} /></Field>
+                  <Field label={(editForm.carMode || 'rental') === 'charter' ? '出發日期' : '取車日期'}>
+                    <input style={inSt} type="date" value={splitDT(editForm.pickupTime).date} onChange={e => setF('pickupTime', joinDT(e.target.value, splitDT(editForm.pickupTime).time || '09:00'))} />
+                  </Field>
                   <Field label="時間">
-                    <select style={selSt} value={splitDT(editForm.pickupTime).time || '11:00'} onChange={e => setF('pickupTime', joinDT(splitDT(editForm.pickupTime).date, e.target.value))}>
+                    <select style={selSt} value={splitDT(editForm.pickupTime).time || '09:00'} onChange={e => setF('pickupTime', joinDT(splitDT(editForm.pickupTime).date, e.target.value))}>
                       {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </Field>
                 </Row>
-                <Field label="還車地點"><input style={inSt} value={editForm.returnLocation || ''} onChange={e => setF('returnLocation', e.target.value)} /></Field>
+
+                {/* Return */}
+                <Field label={(editForm.carMode || 'rental') === 'charter' ? '結束地點（選填）' : '還車地點'}>
+                  <input style={inSt} value={editForm.returnLocation || ''} onChange={e => setF('returnLocation', e.target.value)} />
+                </Field>
                 <Row>
-                  <Field label="還車日期"><input style={inSt} type="date" value={splitDT(editForm.returnTime).date} onChange={e => setF('returnTime', joinDT(e.target.value, splitDT(editForm.returnTime).time || '13:30'))} /></Field>
+                  <Field label={(editForm.carMode || 'rental') === 'charter' ? '結束日期（選填）' : '還車日期'}>
+                    <input style={inSt} type="date" value={splitDT(editForm.returnTime).date} onChange={e => setF('returnTime', joinDT(e.target.value, splitDT(editForm.returnTime).time || '18:00'))} />
+                  </Field>
                   <Field label="時間">
-                    <select style={selSt} value={splitDT(editForm.returnTime).time || '13:30'} onChange={e => setF('returnTime', joinDT(splitDT(editForm.returnTime).date, e.target.value))}>
+                    <select style={selSt} value={splitDT(editForm.returnTime).time || '18:00'} onChange={e => setF('returnTime', joinDT(splitDT(editForm.returnTime).date, e.target.value))}>
                       {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
                     </select>
                   </Field>
                 </Row>
+
+                {/* Currency + cost */}
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
-                  <CurrencyPicker
-                    value={editForm.currency || projCurrency}
-                    onChange={v => setF('currency', v)}
-                    projCurrency={projCurrency}
-                  />
+                  <CurrencyPicker value={editForm.currency || projCurrency} onChange={v => setF('currency', v)} projCurrency={projCurrency} />
                 </div>
                 <Field label="總費用（選填）"><AmountInput value={editForm.totalCost || ''} onChange={v => setF('totalCost', v)} /></Field>
-                <Field label="預約編號"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
+                <Field label="預約編號（選填）"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
                 <Field label="備註"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} value={editForm.notes || ''} onChange={e => setF('notes', e.target.value)} /></Field>
+
+                {/* QR Code */}
                 <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>取車 QR Code（選填）</label>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>QR Code（選填）</label>
                   <input ref={carQrFileRef} type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={async e => { const f = e.target.files?.[0]; if (f) await handleUploadCarQR(f); e.target.value = ''; }} />
                   {editForm.qrUrl ? (
