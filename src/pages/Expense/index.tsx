@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
+import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, dynFont } from '../../App';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
@@ -176,10 +176,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
 
+  // Member card scroll ref (for arrow nav)
+  const memberScrollRef = useRef<HTMLDivElement>(null);
+
   // Receipt photo attachment
   const descRef = useRef<HTMLInputElement>(null);
   const receiptRef = useRef<HTMLInputElement>(null);
   const [receiptUploading, setReceiptUploading] = useState(false);
+
+  // Lightbox for receipt preview
+  const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
   useEffect(() => {
     if (showForm) {
@@ -453,7 +459,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       if (e.splitMode === 'amount' && e.customAmounts && e.customAmounts[name] != null) {
         return s + toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency || 'JPY');
       }
-      return s + Math.ceil(eAmt / sw.length);
+      // Distribute remainder so sum of shares == total exactly (no rounding error)
+      const sortedSw = [...sw].sort();
+      const myIdx = sortedSw.indexOf(name);
+      const perPerson = Math.floor(eAmt / sortedSw.length);
+      const remainder = eAmt - perPerson * sortedSw.length;
+      return s + perPerson + (myIdx < remainder ? 1 : 0);
     }, 0);
 
     const net = paid - owed; // positive = should receive, negative = should pay
@@ -478,6 +489,34 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     if (cAmts[ci] < 1) ci++;
     if (dAmts[di] < 1) di++;
   }
+
+  // ── Member card order ────────────────────────────────────────────────────
+  // Owner can reorder; editors see own card first then rest
+  const memberOrder: string[] = project?.memberOrder || memberNames;
+  // Build display order: start from memberOrder, fill in any missing names
+  const orderedMemberNames = [
+    ...memberOrder.filter((n: string) => memberNames.includes(n)),
+    ...memberNames.filter((n: string) => !memberOrder.includes(n)),
+  ];
+  // If not owner, put current user's card first
+  const displayMemberNames = isOwner
+    ? orderedMemberNames
+    : [
+        ...orderedMemberNames.filter(n => n === currentUserName),
+        ...orderedMemberNames.filter(n => n !== currentUserName),
+      ];
+
+  const handleMemberReorder = async (name: string, dir: 'left' | 'right') => {
+    if (!isOwner || !firestore.updateDoc || !firestore.doc || !db || !TRIP_ID) return;
+    const idx = orderedMemberNames.indexOf(name);
+    const newOrder = [...orderedMemberNames];
+    const swapIdx = dir === 'left' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= newOrder.length) return;
+    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+    try {
+      await firestore.updateDoc(firestore.doc(db, 'trips', TRIP_ID), { memberOrder: newOrder });
+    } catch (e) { console.error(e); }
+  };
 
   // Build per-member settlement totals for card display (consistent with suggestion row)
   const settlementReceive: Record<string, number> = {};
@@ -545,6 +584,22 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // ── Render ───────────────────────────────────────────────────────────────
   return (
     <div style={{ fontFamily: FONT }}>
+
+      {/* ── Lightbox Modal ── */}
+      {lightboxUrl && (
+        <div
+          onClick={() => setLightboxUrl(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.85)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 600, padding: 16 }}>
+          <div style={{ position: 'relative', maxWidth: '100%', maxHeight: '100%' }}>
+            <img src={lightboxUrl} alt="附件" style={{ maxWidth: '100%', maxHeight: '80vh', objectFit: 'contain', borderRadius: 12 }} />
+            <button
+              onClick={() => setLightboxUrl(null)}
+              style={{ position: 'absolute', top: -12, right: -12, width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'white', color: '#333', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ── Settlement Form Modal ── */}
       {showSettleForm && (
@@ -775,7 +830,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 {form.receiptUrl ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <img src={form.receiptUrl} alt="附件預覽" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }}
-                      onClick={() => window.open(form.receiptUrl, '_blank')} />
+                      onClick={() => setLightboxUrl(form.receiptUrl)} />
                     <div style={{ flex: 1 }}>
                       <p style={{ fontSize: 11, color: C.sageDark, fontWeight: 600, margin: '0 0 4px' }}>✅ 附件已上傳</p>
                       <button onClick={() => set('receiptUrl', '')}
@@ -821,33 +876,65 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       <div style={{ padding: '12px 16px 80px' }}>
 
         {/* ── Member stats (hidden for visitors) ── */}
-        {!isVisitor && <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
-          {memberStats.map(ms => {
-            const toReceive = settlementReceive[ms.name] || 0;
-            const toPay     = settlementPay[ms.name]     || 0;
-            const isCreditor = ms.net >= 0;
-            // Use settlement amounts so the card matches the "建議結算" row exactly
-            const displayAmt = isCreditor ? toReceive : toPay;
-            return (
-              <div key={ms.name} style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm }}>
-                <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>{ms.name}</p>
-                <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>已付出</p>
-                <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 6px' }}>NT$ {ms.paid.toLocaleString()}</p>
-                <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>應付金額</p>
-                <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 6px' }}>NT$ {ms.owed.toLocaleString()}</p>
-                <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '4px 8px' }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
-                    {displayAmt > 0
-                      ? (isCreditor
-                          ? `應收 NT$ ${displayAmt.toLocaleString()}`
-                          : `應補 NT$ ${displayAmt.toLocaleString()}`)
-                      : '已結清 ✓'}
-                  </p>
-                </div>
-              </div>
-            );
-          })}
-        </div>}
+        {!isVisitor && (
+          <div style={{ marginBottom: 12, position: 'relative' }}>
+            {/* Desktop arrow navigation */}
+            <button
+              onClick={() => memberScrollRef.current?.scrollBy({ left: -180, behavior: 'smooth' })}
+              style={{ display: 'none', position: 'absolute', left: -14, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', zIndex: 2, alignItems: 'center', justifyContent: 'center', fontSize: 14, color: C.bark, boxShadow: C.shadowSm }}
+              className="tm-member-arrow tm-member-arrow-left"
+            >‹</button>
+            <div
+              ref={memberScrollRef}
+              style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4, scrollSnapType: 'x mandatory', WebkitOverflowScrolling: 'touch' }}
+              className="tm-member-scroll"
+            >
+              {displayMemberNames.map(name => {
+                const ms = memberStats.find(m => m.name === name);
+                if (!ms) return null;
+                const toReceive = settlementReceive[ms.name] || 0;
+                const toPay     = settlementPay[ms.name]     || 0;
+                const isCreditor = ms.net >= 0;
+                const displayAmt = isCreditor ? toReceive : toPay;
+                const isMe = name === currentUserName;
+                const cardIdx = orderedMemberNames.indexOf(name);
+                return (
+                  <div key={ms.name} style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, flexShrink: 0, width: 160, scrollSnapAlign: 'start', border: isMe ? `2px solid ${C.sageDark}` : undefined }}>
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{ms.name}{isMe ? ' 👤' : ''}</p>
+                      {isOwner && (
+                        <div style={{ display: 'flex', gap: 2 }}>
+                          <button onClick={() => handleMemberReorder(name, 'left')} disabled={cardIdx === 0}
+                            style={{ width: 20, height: 20, borderRadius: 5, border: 'none', background: cardIdx === 0 ? 'transparent' : C.cream, color: C.barkLight, cursor: cardIdx === 0 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: cardIdx === 0 ? 0.3 : 1 }}>‹</button>
+                          <button onClick={() => handleMemberReorder(name, 'right')} disabled={cardIdx === orderedMemberNames.length - 1}
+                            style={{ width: 20, height: 20, borderRadius: 5, border: 'none', background: cardIdx === orderedMemberNames.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: cardIdx === orderedMemberNames.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: cardIdx === orderedMemberNames.length - 1 ? 0.3 : 1 }}>›</button>
+                        </div>
+                      )}
+                    </div>
+                    <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>已付出</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 6px' }}>NT$ {ms.paid.toLocaleString()}</p>
+                    <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>應付金額</p>
+                    <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 6px' }}>NT$ {ms.owed.toLocaleString()}</p>
+                    <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '4px 8px' }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
+                        {displayAmt > 0
+                          ? (isCreditor
+                              ? `應收 NT$ ${displayAmt.toLocaleString()}`
+                              : `應補 NT$ ${displayAmt.toLocaleString()}`)
+                          : '已結清 ✓'}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            <button
+              onClick={() => memberScrollRef.current?.scrollBy({ left: 180, behavior: 'smooth' })}
+              style={{ display: 'none', position: 'absolute', right: -14, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', zIndex: 2, alignItems: 'center', justifyContent: 'center', fontSize: 14, color: C.bark, boxShadow: C.shadowSm }}
+              className="tm-member-arrow tm-member-arrow-right"
+            >›</button>
+          </div>
+        )}
 
         {/* ── Settlement suggestions (hidden for visitors) ── */}
         {!isVisitor && settlements.length > 0 && (
@@ -958,7 +1045,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{e.description}</p>
+                        <p style={{ fontSize: dynFont(e.description || ''), fontWeight: 700, color: C.bark, margin: 0 }}>{e.description}</p>
                         {isSettlement ? (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
                         ) : (
@@ -1006,7 +1093,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   {/* Receipt thumbnail */}
                   {e.receiptUrl && !isVisitor && (
                     <div style={{ marginTop: 6 }}>
-                      <img src={e.receiptUrl} alt="附件" onClick={() => window.open(e.receiptUrl, '_blank')}
+                      <img src={e.receiptUrl} alt="附件" onClick={() => setLightboxUrl(e.receiptUrl)}
                         style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 8, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }} />
                     </div>
                   )}

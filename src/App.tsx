@@ -78,6 +78,14 @@ export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; bg: string; l
 export const JPY_TO_TWD = 0.22;
 export const EMPTY_EVENT_FORM = { title: '', startTime: '', endTime: '', travelTime: '', category: 'attraction', location: '', notes: '', mapUrl: '', cost: '', currency: 'JPY' };
 
+/** Dynamic font size for long names: scales down to prevent overflow */
+export const dynFont = (text: string, base = 14): number => {
+  if (!text) return base;
+  if (text.length > 22) return base - 2;
+  if (text.length > 14) return base - 1;
+  return base;
+};
+
 // ── Notification helpers ──────────────────────────────────────
 const LS_SEEN_MEMBERS = 'tripmori_seen_members';
 const LS_SEEN_JOURNAL = 'tripmori_seen_journal';
@@ -563,7 +571,7 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
-      <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', minHeight: '100vh', position: 'relative', paddingBottom: 80 }}>
+      <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', minHeight: '100vh', position: 'relative', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
 
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (

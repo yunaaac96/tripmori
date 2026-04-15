@@ -22,12 +22,15 @@ export default function BottomNav({
     <div style={{
       position: 'fixed', bottom: 0, left: '50%', transform: 'translateX(-50%)',
       width: '100%', maxWidth: 430,
-      height: 72, background: 'var(--tm-nav-bg)',
+      height: 'calc(56px + env(safe-area-inset-bottom))',
+      background: 'var(--tm-nav-bg)',
       borderTop: `2px solid var(--tm-nav-border)`,
       display: 'flex',
+      flexDirection: 'column',
       zIndex: 100,
       boxShadow: '0 -2px 16px rgba(0,0,0,0.12)',
     }}>
+      <div style={{ display: 'flex', flex: 1 }}>
       {TABS.map(tab => {
         const active = activeTab === tab.id;
         const hasNotif = !!notifications[tab.id];
@@ -62,6 +65,9 @@ export default function BottomNav({
           </button>
         );
       })}
+      </div>
+      {/* Safe area spacer for iOS home indicator */}
+      <div style={{ height: 'env(safe-area-inset-bottom)', flexShrink: 0 }} />
     </div>
   );
 }

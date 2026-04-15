@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { auth } from '../../config/firebase';
-import { C, FONT, cardStyle, ExpandableNotes } from '../../App';
+import { C, FONT, cardStyle, ExpandableNotes, dynFont } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -141,7 +141,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const [editParticipants,   setEditParticipants]   = useState<string[]>([]);
   const [customParticipants, setCustomParticipants] = useState<string[]>([]);
   const [expandedHotelIds, setExpandedHotelIds] = useState<Set<string>>(new Set());
-  const [expensePrompt, setExpensePrompt] = useState<{ type: string; name: string; amount: number; currency: string; date: string } | null>(null);
+  const [expensePrompt, setExpensePrompt] = useState<{ type: string; name: string; amount: number; currency: string; date: string; participantNames?: string[] } | null>(null);
   const [expenseSaving, setExpenseSaving] = useState(false);
 
   // All-flights form (manage structure: add / remove flights)
@@ -244,14 +244,16 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticHotels: updated });
         setHotels(updated);
         if (editForm.totalCost && Number(editForm.totalCost) > 0) {
-          setExpensePrompt({ type: 'hotel', name: editForm.name || '住宿', amount: Number(editForm.totalCost), currency: editForm.currency || 'TWD', date: (editForm.checkIn || '').split(/\s+/)[0] });
+          const ptcNames = editParticipants.map(id => members.find((m: any) => m.id === id)?.name).filter(Boolean) as string[];
+          setExpensePrompt({ type: 'hotel', name: editForm.name || '住宿', amount: Number(editForm.totalCost), currency: editForm.currency || 'TWD', date: (editForm.checkIn || '').split(/\s+/)[0], participantNames: ptcNames.length ? ptcNames : undefined });
         }
       } else if (editType === 'car') {
         const updated = { ...editForm, participants: editParticipants };
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticCar: updated });
         setCar(updated);
         if (editForm.totalCost && Number(editForm.totalCost) > 0) {
-          setExpensePrompt({ type: 'car', name: editForm.company || '租車/包車', amount: Number(editForm.totalCost), currency: editForm.currency || 'JPY', date: (editForm.pickupTime || '').split(/\s+/)[0] });
+          const ptcNames = editParticipants.map(id => members.find((m: any) => m.id === id)?.name).filter(Boolean) as string[];
+          setExpensePrompt({ type: 'car', name: editForm.company || '租車/包車', amount: Number(editForm.totalCost), currency: editForm.currency || 'JPY', date: (editForm.pickupTime || '').split(/\s+/)[0], participantNames: ptcNames.length ? ptcNames : undefined });
         }
       }
       setEditType(null);
@@ -367,12 +369,14 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       const costNum = customForm.cost ? parseFloat(customForm.cost) : 0;
       closeCustomForm();
       if (costNum > 0) {
+        const ptcNames = customParticipants.map(id => members.find((m: any) => m.id === id)?.name).filter(Boolean) as string[];
         setExpensePrompt({
           type: BOOKING_TYPE_TO_EXPENSE[customForm.type] as any || 'other',
           name: customForm.title.trim(),
           amount: costNum,
           currency: customForm.currency || projCurrency,
           date: customForm.date || '',
+          participantNames: ptcNames.length ? ptcNames : undefined,
         });
       }
     } catch (e) { console.error(e); alert('儲存失敗，請重試'); }
@@ -397,12 +401,16 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const myUid    = auth.currentUser?.uid;
   const myMember = myUid ? members.find((m: any) => m.googleUid === myUid) : null;
 
+  const [participantPopover, setParticipantPopover] = useState<string[] | null>(null);
+
   const ParticipantAvatars = ({ ids }: { ids: string[] }) => {
     if (!ids?.length) return null;
     const ptc = ids.map((id: string) => members.find((m: any) => m.id === id)).filter(Boolean);
     if (!ptc.length) return null;
+    const names = ptc.map((m: any) => m.name);
     return (
-      <div style={{ display: 'flex', marginTop: 8 }}>
+      <div style={{ position: 'relative', display: 'inline-flex', marginTop: 8, cursor: 'pointer' }}
+        onClick={e => { e.stopPropagation(); setParticipantPopover(participantPopover ? null : names); }}>
         {ptc.map((m: any, i: number) => (
           <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
             {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -453,7 +461,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     if (!expensePrompt || !addDoc || !db || !TRIP_ID) return;
     setExpenseSaving(true);
     try {
-      const { type, name, amount, currency, date } = expensePrompt;
+      const { type, name, amount, currency, date, participantNames } = expensePrompt;
       const amountTWD = currency === 'TWD' ? amount : currency === 'JPY' ? Math.round(amount * 0.22) : Math.round(amount * 0.0022); // IDR approx
       // Map type to expense category and description prefix
       const catMap: Record<string, { cat: string; prefix: string }> = {
@@ -464,13 +472,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         other:      { cat: 'other',      prefix: '其他' },
       };
       const mapped = catMap[type] || catMap.other;
+      const splitWith = participantNames && participantNames.length > 0 ? participantNames : [];
+      const notes = !participantNames?.length ? '⚠️ 尚未設定參與人，請至記帳確認分帳對象' : '';
       await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
         description: `${mapped.prefix} - ${name}`,
         amount, currency, amountTWD,
         category: mapped.cat,
-        payer: '', splitMode: 'equal', splitWith: [],
+        payer: '', splitMode: 'equal', splitWith,
         percentages: {}, customAmounts: {}, subItems: [],
-        date, notes: '', receiptUrl: '',
+        date, notes, receiptUrl: '',
         createdAt: Timestamp.now(),
       });
       setExpensePrompt(null);
@@ -479,7 +489,23 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   };
 
   return (
-    <div style={{ fontFamily: FONT }}>
+    <div style={{ fontFamily: FONT }} onClick={() => participantPopover && setParticipantPopover(null)}>
+
+      {/* ── Participant popover ── */}
+      {participantPopover && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500 }} onClick={() => setParticipantPopover(null)}>
+          <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: 'var(--tm-sheet-bg)', borderRadius: 16, padding: '14px 20px', boxShadow: '0 4px 24px rgba(0,0,0,0.18)', maxWidth: 320, width: 'calc(100% - 48px)', zIndex: 501 }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: '0 0 8px' }}>👥 參與人員</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {participantPopover.map(name => (
+                <span key={name} style={{ fontSize: 13, fontWeight: 600, color: C.bark, background: C.cream, borderRadius: 10, padding: '4px 12px' }}>{name}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
       <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji="✈️" color={C.sky} />
 
       <div style={{ padding: '8px 16px 80px' }}>
@@ -581,7 +607,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{h.name}</p>
+                <p style={{ fontSize: dynFont(h.name || ''), fontWeight: 700, color: C.bark, margin: 0 }}>{h.name}</p>
                 {(h.nameLocal || h.nameJa) && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameLocal || h.nameJa}</p>}
                 {h.address && <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>}
               </div>
@@ -776,7 +802,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   {b.used && <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: 10, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 4px', fontWeight: 700 }}>✓</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none' }}>{b.title}</p>
+                  <p style={{ fontSize: dynFont(b.title || ''), fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none' }}>{b.title}</p>
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: typeInfo.color, background: typeInfo.bg, borderRadius: 6, padding: '1px 6px' }}>{typeInfo.label}</span>
                     {b.used && <span style={{ fontSize: 10, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', borderRadius: 6, padding: '1px 6px' }}>✅ 已使用</span>}
@@ -1204,9 +1230,18 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 360, fontFamily: FONT, boxSizing: 'border-box' }}>
             <p style={{ fontSize: 20, textAlign: 'center', margin: '0 0 8px' }}>💰</p>
             <p style={{ fontSize: 16, fontWeight: 700, color: '#5C4A38', margin: '0 0 8px', textAlign: 'center' }}>是否新增至記帳？</p>
-            <p style={{ fontSize: 13, color: '#8C7B6E', margin: '0 0 20px', textAlign: 'center', lineHeight: 1.6 }}>
+            <p style={{ fontSize: 13, color: '#8C7B6E', margin: '0 0 10px', textAlign: 'center', lineHeight: 1.6 }}>
               偵測到費用 <strong>{expensePrompt.currency === 'TWD' ? 'NT$' : expensePrompt.currency === 'IDR' ? 'Rp' : '¥'} {expensePrompt.amount.toLocaleString()}</strong>，是否同步新增至記帳？
             </p>
+            {expensePrompt.participantNames && expensePrompt.participantNames.length > 0 ? (
+              <div style={{ background: '#EAF3DE', borderRadius: 10, padding: '8px 12px', marginBottom: 16, textAlign: 'center' }}>
+                <p style={{ fontSize: 11, color: '#4A7A35', margin: 0 }}>✅ 將自動分帳給：<strong>{expensePrompt.participantNames.join('、')}</strong></p>
+              </div>
+            ) : (
+              <div style={{ background: '#FFF2CC', borderRadius: 10, padding: '8px 12px', marginBottom: 16, textAlign: 'center' }}>
+                <p style={{ fontSize: 11, color: '#9A6800', margin: 0 }}>⚠️ 尚未設定參與人，新增後請至記帳確認分帳對象</p>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 10 }}>
               <button onClick={() => setExpensePrompt(null)}
                 style={{ flex: 1, padding: '12px', borderRadius: 14, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-card-bg)', color: '#8C7B6E', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT }}>
