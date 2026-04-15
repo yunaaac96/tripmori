@@ -31,6 +31,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   }, []);
 
   const [filterBy, setFilterBy]           = useState<string>('all');
+  const [packingTab, setPackingTab]        = useState<string>('');
   const [activeSection, setActiveSection] = useState<string>('todo');
   const [showSheet, setShowSheet]         = useState(false);
   const [editTarget, setEditTarget]       = useState<any | null>(null);
@@ -46,43 +47,66 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     return () => clearTimeout(t);
   }, [showSheet]);
 
+  // Initialize packingTab to current user's member or first member
+  useEffect(() => {
+    if (!members.length || packingTab) return;
+    const myMember = members.find((m: any) => m.googleUid === googleUid);
+    setPackingTab(myMember?.name || members[0]?.name || '');
+  }, [members, googleUid]);
+
   const memberNames: string[] = members.length > 0
     ? members.map((m: any) => m.name)
     : ['uu', 'brian'];
 
-  // Visibility filter for packing: private items only visible to their owner
-  const visiblePacking = lists.filter((l: any) => {
+  // Tab member info (for packing tab)
+  const tabMember    = members.find((m: any) => m.name === packingTab);
+  const tabMemberUid = tabMember?.googleUid as string | undefined;
+
+  // Per-member packing view: global items + items assigned/private to this member
+  const packingForTab = !packingTab ? [] : [...lists.filter((l: any) => {
     if (l.listType !== 'packing') return false;
-    if (isOwner) return true; // Owner sees all packing items
-    if (!l.privateOwnerUid) return true; // global item — visible to all
-    return l.privateOwnerUid === googleUid; // private — only assignee sees it
+    if (l.assignedTo === 'all' && !l.privateOwnerUid) return true; // global preset
+    if (tabMemberUid && l.privateOwnerUid === tabMemberUid) return true; // assigned/private to this member
+    return false;
+  })].sort((a: any, b: any) => {
+    const aChecked = isPackingCheckedFor(a, tabMemberUid);
+    const bChecked = isPackingCheckedFor(b, tabMemberUid);
+    if (aChecked !== bChecked) return aChecked ? 1 : -1;
+    // Priority: assigned by others (0) > global preset (1) > own private (2)
+    const pri = (i: any) => i.privateOwnerUid && i.createdBy !== tabMemberUid ? 0 : !i.privateOwnerUid ? 1 : 2;
+    if (pri(a) !== pri(b)) return pri(a) - pri(b);
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return ta - tb;
   });
 
-  const packing  = visiblePacking;
+  const packing  = packingForTab; // alias
   const todos    = lists.filter((l: any) => l.listType === 'todo');
-  const allDone  = lists.filter((l: any) => isPackingChecked(l) || (l.listType === 'todo' && isTodoChecked(l))).length;
+  const allDone  = lists.filter((l: any) => isPackingCheckedFor(l, googleUid || '') || (l.listType === 'todo' && isTodoChecked(l))).length;
   const allTotal = lists.length;
 
+  function isPackingCheckedFor(item: any, uid: string | undefined): boolean {
+    if (item.listType !== 'packing' || !uid) return false;
+    if (item.checkedBy && uid in item.checkedBy) return item.checkedBy[uid];
+    return item.checked ?? false;
+  }
+
   function isPackingChecked(item: any): boolean {
-    if (item.listType !== 'packing') return false;
-    if (item.checkedBy && googleUid && googleUid in item.checkedBy) return item.checkedBy[googleUid];
-    return item.checked ?? false; // backward compat
+    return isPackingCheckedFor(item, googleUid || undefined);
   }
 
   // Can the current user toggle this packing item's checkbox?
+  // Packing checks are per-person (checkedBy[uid]), only the tab member can check their own tab
   function canCheckPacking(item: any): boolean {
     if (!googleUid) return false;
-    if (isOwner) return true; // Owner can check any packing item
-    if (item.privateOwnerUid) return item.privateOwnerUid === googleUid; // assignee
-    if (item.assignedTo === 'all') return true;
-    const assignedMember = members.find((m: any) => m.name === item.assignedTo);
-    return assignedMember?.googleUid === googleUid;
+    return googleUid === tabMemberUid; // can only check in your own tab
   }
 
   // Can the current user delete this item?
   function canDeleteItem(item: any): boolean {
     if (isOwner) return true;
-    if (googleUid && item.createdBy === googleUid) return true; // creator can always delete
+    if (item.listType === 'packing' && !item.privateOwnerUid && item.assignedTo === 'all') return false; // global preset: only owner deletes
+    if (googleUid && item.createdBy === googleUid) return true;
     if (item.listType === 'packing' && item.privateOwnerUid && item.privateOwnerUid === googleUid) return true;
     return false;
   }
@@ -112,7 +136,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     if (isReadOnly) return;
     if (item.listType === 'packing') {
       if (!canCheckPacking(item)) return;
-      const currentChecked = isPackingChecked(item);
+      const currentChecked = isPackingCheckedFor(item, googleUid || undefined);
       try {
         await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), {
           [`checkedBy.${googleUid}`]: !currentChecked,
@@ -172,15 +196,22 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     if (!editTarget || !form.text.trim()) return;
     setSaving(true);
     try {
-      const isPacking = form.listType === 'packing';
-      const isPrivate = isPacking && !!editTarget.privateOwnerUid;
-      const payload: any = {
-        text: form.text.trim(), listType: form.listType,
-        assignedTo: isPrivate ? editTarget.privateOwnerUid : form.assignedTo,
-        dueDate: form.dueDate || '',
-      };
-      if (!editTarget.createdBy && googleUid) payload.createdBy = googleUid;
-      await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', editTarget.id), payload);
+      if (isGlobalPackingItem(editTarget) && !isOwner && googleUid) {
+        // Non-owner editing global packing item → save as personal text override only
+        await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', editTarget.id), {
+          [`textOverrides.${googleUid}`]: form.text.trim(),
+        });
+      } else {
+        const isPacking = form.listType === 'packing';
+        const isPrivate = isPacking && !!editTarget.privateOwnerUid;
+        const payload: any = {
+          text: form.text.trim(), listType: form.listType,
+          assignedTo: isPrivate ? editTarget.privateOwnerUid : form.assignedTo,
+          dueDate: form.dueDate || '',
+        };
+        if (!editTarget.createdBy && googleUid) payload.createdBy = googleUid;
+        await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', editTarget.id), payload);
+      }
       setEditTarget(null); setShowSheet(false);
     } catch (e) { console.error(e); }
     setSaving(false);
@@ -202,11 +233,19 @@ export default function PlanningPage({ lists, members, firestore }: any) {
 
   const openEdit = (item: any) => {
     if (isReadOnly) return;
-    if (!canDeleteItem(item)) return;
+    if (!canDeleteItem(item) && !isGlobalPackingItem(item)) return; // members can edit global packing text (override)
     setEditTarget(item);
-    setForm({ text: item.text, listType: item.listType, assignedTo: item.assignedTo || 'all', dueDate: item.dueDate || '' });
+    // For global packing items, show personal override text
+    const displayText = isGlobalPackingItem(item) && googleUid
+      ? (item.textOverrides?.[googleUid] || item.text)
+      : item.text;
+    setForm({ text: displayText, listType: item.listType, assignedTo: item.assignedTo || 'all', dueDate: item.dueDate || '' });
     setShowSheet(true);
   };
+
+  function isGlobalPackingItem(item: any): boolean {
+    return item.listType === 'packing' && item.assignedTo === 'all' && !item.privateOwnerUid;
+  }
 
   const applyFilter = (items: any[]) => {
     const filtered = filterBy === 'all' ? items : items.filter((i: any) => {
@@ -385,15 +424,32 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       </PageHeader>
 
       <div style={{ padding: '12px 16px 80px' }}>
-        {/* 篩選 */}
-        <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-          {[{ id: 'all', label: '🌿 全部' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
-            <button key={opt.id} onClick={() => setFilterBy(opt.id)}
-              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${filterBy === opt.id ? C.sageDark : C.creamDark}`, background: filterBy === opt.id ? C.sage : 'var(--tm-card-bg)', color: filterBy === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
-              {opt.label}
-            </button>
-          ))}
-        </div>
+        {/* 篩選 — 代辦專用 */}
+        {activeSection === 'todo' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
+            {[{ id: 'all', label: '🌿 全部' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
+              <button key={opt.id} onClick={() => setFilterBy(opt.id)}
+                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${filterBy === opt.id ? C.sageDark : C.creamDark}`, background: filterBy === opt.id ? C.sage : 'var(--tm-card-bg)', color: filterBy === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
+                {opt.label}
+              </button>
+            ))}
+          </div>
+        )}
+        {/* 行李 成員 Tab */}
+        {activeSection === 'packing' && (
+          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
+            {(isOwner ? members : members.filter((m: any) => m.googleUid === googleUid)).map((m: any) => (
+              <button key={m.name} onClick={() => isOwner && setPackingTab(m.name)}
+                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${packingTab === m.name ? (m.color || C.sageDark) : C.creamDark}`, background: packingTab === m.name ? (m.color || C.sage) : 'var(--tm-card-bg)', color: packingTab === m.name ? '#3A2E24' : C.bark, fontWeight: 700, fontSize: 12, cursor: isOwner ? 'pointer' : 'default', fontFamily: FONT, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 5 }}>
+                {m.avatarUrl
+                  ? <img src={m.avatarUrl} alt={m.name} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
+                  : <div style={{ width: 18, height: 18, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 9, fontWeight: 700, color: 'white' }}>{(m.name||'?')[0]}</span></div>
+                }
+                {m.name}
+              </button>
+            ))}
+          </div>
+        )}
 
         {/* 分區 Tab */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
@@ -402,7 +458,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
               style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${activeSection === s.id ? C.earth : C.creamDark}`, background: activeSection === s.id ? C.earth : 'var(--tm-card-bg)', color: activeSection === s.id ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
               {s.label}
               <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.75 }}>
-                ({(s.id === 'todo' ? todos : packing).filter((i: any) => s.id === 'packing' ? !isPackingChecked(i) : !isTodoChecked(i)).length})
+                ({(s.id === 'todo' ? todos : packing).filter((i: any) => s.id === 'packing' ? !isPackingCheckedFor(i, tabMemberUid) : !isTodoChecked(i)).length})
             </span>
             </button>
           ))}
@@ -424,24 +480,44 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                       {filtered.map((item: any) => {
                         const isPacking = item.listType === 'packing';
                         const isPrivateItem = isPacking && !!item.privateOwnerUid;
-                        const checked = isPacking ? isPackingChecked(item) : isTodoChecked(item);
+                        // For packing, show completion status from tab member's perspective
+                        const checked = isPacking ? isPackingCheckedFor(item, tabMemberUid) : isTodoChecked(item);
                         const canCheck = isPacking ? canCheckPacking(item) : canCheckTodo(item);
-                        // Badge color: use member's Firestore color, fall back to neutral; always use dark text
-                        const assignedMember = members.find((m: any) => m.name === item.assignedTo);
-                        const badgeBg = isPrivateItem ? '#D8C0F0' : item.assignedTo === 'all' ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
-                        // Badge label: if private, show who it belongs to
-                        const badgeLabel = isPrivateItem
-                          ? (() => {
-                              if (item.privateOwnerUid === googleUid) return '🔒 僅本人可見';
-                              // Owner viewing someone else's private item
-                              const privateMember = members.find((m: any) => m.googleUid === item.privateOwnerUid);
-                              return `🔒 僅${privateMember?.name || '指定人'}可見`;
-                            })()
-                          : item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—');
+                        // Packing badge logic (tab-aware)
+                        let badgeBg = '#D0C8BE';
+                        let badgeLabel = item.assignedTo || '—';
+                        if (isPacking) {
+                          const isAssignedByOther = isPrivateItem && item.createdBy !== tabMemberUid;
+                          const isGlobal = !isPrivateItem && item.assignedTo === 'all';
+                          const isSelfPrivate = isPrivateItem && item.createdBy === tabMemberUid;
+                          if (isAssignedByOther) {
+                            badgeBg = '#FFE0C8'; badgeLabel = '🎯 指派';
+                          } else if (isGlobal) {
+                            // Show tab member's name (not "全體"); "預設" only for owner's own management view
+                            badgeBg = tabMember?.color || '#C8E6C0';
+                            badgeLabel = packingTab || '預設';
+                          } else if (isSelfPrivate) {
+                            badgeBg = '#D8C0F0'; badgeLabel = '🔒 私人';
+                          } else {
+                            badgeBg = tabMember?.color || '#D0C8BE'; badgeLabel = packingTab || item.assignedTo;
+                          }
+                        } else {
+                          // Todo badge
+                          const assignedMember = members.find((m: any) => m.name === item.assignedTo);
+                          badgeBg = isPrivateItem ? '#D8C0F0' : item.assignedTo === 'all' ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
+                          badgeLabel = isPrivateItem
+                            ? (item.privateOwnerUid === googleUid ? '🔒 僅本人可見' : (() => { const pm = members.find((m: any) => m.googleUid === item.privateOwnerUid); return `🔒 僅${pm?.name || '指定人'}可見`; })())
+                            : item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—');
+                        }
+                        // For global packing items, show personal text override
+                        const displayText = (isPacking && isGlobalPackingItem(item) && googleUid)
+                          ? (item.textOverrides?.[googleUid] || item.text)
+                          : item.text;
                         const status = getDueStatus(item.dueDate, checked);
                         const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
                         const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : '1.5px solid transparent';
-                        const showEdit = canDeleteItem(item);
+                        // showEdit: can delete item OR can override text (global packing items editable by all)
+                        const showEdit = canDeleteItem(item) || isGlobalPackingItem(item);
                         return (
                           <div key={item.id}
                             style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
@@ -451,7 +527,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                               {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                             </div>
                             <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
-                              <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{displayText}</p>
                               {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0' }}>{status === 'overdue' ? '⚠️ 已逾期：' : status === 'soon' ? '⏰ 即將到期：' : '截止：'}{item.dueDate}</p>}
                             </div>
                             <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
@@ -470,9 +546,18 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                     </div>
                   )}
                   {/* 新增按鈕：待辦 → 不限；行李 → 擁有者 或 已綁定Google的成員 */}
-                  {!isReadOnly && (s.id === 'todo' || isOwner || (s.id === 'packing' && googleUid)) && (
+                  {!isReadOnly && (s.id === 'todo' || isOwner || (s.id === 'packing' && googleUid === tabMemberUid)) && (
                     <button
-                      onClick={() => openAdd(s.id)}
+                      onClick={() => {
+                        if (s.id === 'packing' && packingTab) {
+                          // Pre-fill assignedTo with current tab member
+                          setEditTarget(null);
+                          setForm({ ...EMPTY_FORM, listType: 'packing', assignedTo: packingTab });
+                          setShowSheet(true);
+                        } else {
+                          openAdd(s.id);
+                        }
+                      }}
                       style={{ marginTop: 12, width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxSizing: 'border-box' }}>
                       <span style={{ fontSize: 16 }}>＋</span>
                       新增{s.id === 'packing' ? '行李' : '待辦'}項目
