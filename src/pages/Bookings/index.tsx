@@ -5,6 +5,17 @@ import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faMapPin, faBus, faStar, faShip, faEllipsis } from '@fortawesome/free-solid-svg-icons';
+import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
+
+const BOOKING_TYPE_ICONS: Record<string, IconDefinition> = {
+  activity:  faMapPin,
+  transport: faBus,
+  show:      faStar,
+  ferry:     faShip,
+  other:     faEllipsis,
+};
 
 // ── QR Code for OTS car rental ──────────────────────────
 const QR_SRC = '/ots-qr.png';
@@ -797,8 +808,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           return (
             <div key={b.id} style={{ ...cardStyle, textAlign: 'left', opacity: b.used ? 0.72 : 1 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ width: 46, height: 46, borderRadius: 14, background: b.used ? '#E0E0E0' : typeInfo.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0, position: 'relative' }}>
-                  {typeInfo.emoji}
+                <div style={{ width: 46, height: 46, borderRadius: 14, background: b.used ? '#E0E0E0' : typeInfo.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, position: 'relative', color: b.used ? '#9A9A9A' : typeInfo.color }}>
+                  <FontAwesomeIcon icon={BOOKING_TYPE_ICONS[b.type] || faEllipsis} />
                   {b.used && <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: 10, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 4px', fontWeight: 700 }}>✓</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1171,7 +1182,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   {Object.entries(BOOKING_TYPES).map(([key, info]) => (
                     <button key={key} onClick={() => setC('type', key)}
                       style={{ padding: '9px 10px', borderRadius: 12, border: `2px solid ${customForm.type === key ? info.color : '#E0D9C8'}`, background: customForm.type === key ? info.bg : 'var(--tm-card-bg)', color: info.color, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>
-                      {info.emoji} {info.label}
+                      <FontAwesomeIcon icon={BOOKING_TYPE_ICONS[key] || faEllipsis} style={{ fontSize: 12 }} /> {info.label}
                     </button>
                   ))}
                 </div>

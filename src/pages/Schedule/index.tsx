@@ -5,6 +5,18 @@ import CurrencySearch from '../../components/CurrencySearch';
 import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary, ExpandableNotes } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTree, faUtensils, faPalette, faBus, faBed, faEllipsis } from '@fortawesome/free-solid-svg-icons';
+import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
+
+const SCHEDULE_CAT_ICONS: Record<string, IconDefinition> = {
+  attraction: faTree,
+  food:       faUtensils,
+  experience: faPalette,
+  transport:  faBus,
+  hotel:      faBed,
+  misc:       faEllipsis,
+};
 
 const WEEK_LABELS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -1135,7 +1147,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
                   {Object.entries(CATEGORY_MAP).map(([key, info]) => (
-                    <button key={key} onClick={() => set('category', key)} style={{ padding: '9px 10px', borderRadius: 12, border: `2px solid ${form.category === key ? info.text : '#E0D9C8'}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: info.text, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>{info.emoji} {info.label}</button>
+                    <button key={key} onClick={() => set('category', key)} style={{ padding: '9px 10px', borderRadius: 12, border: `2px solid ${form.category === key ? info.text : '#E0D9C8'}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: info.text, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={SCHEDULE_CAT_ICONS[key] || faEllipsis} style={{ fontSize: 12 }} /> {info.label}</button>
                   ))}
                 </div>
               </div>
@@ -1391,7 +1403,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 <div style={{ flex: 1, marginLeft: 8, background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px 12px 24px', boxShadow: C.shadowSm }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <span style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-block', marginBottom: 4 }}>{cat.emoji} {cat.label}</span>
+                      <span style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 4 }}><FontAwesomeIcon icon={SCHEDULE_CAT_ICONS[event.category] || faEllipsis} style={{ fontSize: 9 }} /> {cat.label}</span>
                       <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px', wordBreak: 'break-word' }}>{event.title}</p>
                       {event.location && <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>📍 {event.location}</p>}
                       {event.notes && <ExpandableNotes notes={event.notes} color={C.barkLight} />}
