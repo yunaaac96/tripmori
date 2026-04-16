@@ -3,6 +3,8 @@ import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { runImport } from './scripts/importData';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faLightbulb } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
 import SchedulePage from './pages/Schedule/index';
@@ -37,7 +39,7 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
   return (
     <div style={{ margin: margin ?? '4px 0 0' }}>
       <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-        <span style={{ flexShrink: 0, fontSize: 11 }}>💡</span>
+        <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7 }}><FontAwesomeIcon icon={faLightbulb} /></span>
         <span style={{
           fontSize: 11, color, fontStyle: 'italic', lineHeight: 1.5,
           whiteSpace: 'pre-wrap',

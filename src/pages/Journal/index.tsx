@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { C, FONT, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage } from '@fortawesome/free-solid-svg-icons';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -231,7 +233,7 @@ export default function JournalPage({ journals, members, journalComments, firest
           onClick={e => { if (e.target === e.currentTarget) closeForm(); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>📖 新增日誌</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faBook} style={{ fontSize: 14 }} /> 新增日誌</p>
               <button onClick={closeForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--tm-bark-light)' }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -250,7 +252,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                   </div>
                 ) : (
                   <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
-                    🔐 請先至成員頁綁定 Google 帳號後即可發佈日誌
+                    <FontAwesomeIcon icon={faLock} style={{ fontSize: 11, marginRight: 5 }} />請先至成員頁綁定 Google 帳號後即可發佈日誌
                   </div>
                 )}
               </div>
@@ -279,7 +281,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                 {form.photos.length < MAX_PHOTOS && (
                   <button onClick={() => fileRef.current?.click()} disabled={uploading}
                     style={{ padding: '10px 16px', borderRadius: 12, border: `2px dashed var(--tm-cream-dark)`, background: 'var(--tm-input-bg)', color: 'var(--tm-bark-light)', fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6, opacity: uploading ? 0.6 : 1 }}>
-                    📷 {uploading ? '上傳中...' : `一次選取最多 ${MAX_PHOTOS - form.photos.length} 張照片`}
+                    <FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />{uploading ? '上傳中...' : `一次選取最多 ${MAX_PHOTOS - form.photos.length} 張照片`}
                   </button>
                 )}
                 {form.photos.length > 0 && (
@@ -313,7 +315,7 @@ export default function JournalPage({ journals, members, journalComments, firest
         {/* 編輯者尚未綁定成員卡 */}
         {isEditorUnbound && (
           <div style={{ background: 'var(--tm-note-2)', borderRadius: 14, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 20 }}>🔗</span>
+            <span style={{ fontSize: 18, color: '#2A6A9A' }}><FontAwesomeIcon icon={faLink} /></span>
             <p style={{ fontSize: 12, color: 'var(--tm-bark)', fontWeight: 600, margin: 0 }}>
               請先至「成員」頁面將 Google 帳號綁定至你的成員卡，才能使用日誌及留言功能
             </p>
@@ -328,7 +330,7 @@ export default function JournalPage({ journals, members, journalComments, firest
         )}
         {!isReadOnly && !isEditorUnbound && !googleUid && (
           <div style={{ background: 'var(--tm-note-1)', borderRadius: 14, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
-            <span style={{ fontSize: 18 }}>🔒</span>
+            <span style={{ fontSize: 18 }}><FontAwesomeIcon icon={faLock} /></span>
             <p style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>
               請先至「成員」頁面綁定 Google 帳號，即可新增日誌
             </p>
@@ -338,7 +340,7 @@ export default function JournalPage({ journals, members, journalComments, firest
         {/* Journal entries */}
         {journals.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--tm-bark-light)' }}>
-            <div style={{ fontSize: 40, marginBottom: 8 }}>📖</div>
+            <div style={{ fontSize: 40, marginBottom: 8 }}><FontAwesomeIcon icon={faBook} /></div>
             <p style={{ fontSize: 13 }}>還沒有日誌，快來記錄旅行吧！</p>
           </div>
         ) : (
@@ -366,7 +368,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                       </div>
                       {!isReadOnly && (role === 'owner' || j.authorName === currentUser) && (
                         <button onClick={() => handleDelete(j.id, j.authorName)}
-                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>🗑</button>
+                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faTrashCan} /></button>
                       )}
                     </div>
                     <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{j.content}</p>
@@ -412,7 +414,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                       onClick={() => setExpandedJournal(isExpanded ? null : j.id)}
                       style={{ width: '100%', padding: '10px 16px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 13, color: 'var(--tm-bark-light)', fontWeight: 600 }}
                     >
-                      <span>💬</span>
+                      <FontAwesomeIcon icon={faMessage} />
                       <span>{comments.length} 則回應</span>
                       {totalReactions > 0 && (
                         <span style={{ fontSize: 11, color: C.sageDark, fontWeight: 700, marginLeft: 4 }}>· {totalReactions} 個表情</span>

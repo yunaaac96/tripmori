@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -742,7 +742,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
             onClick={ev => { if (ev.target === ev.currentTarget) setMemberDetailName(null); }}>
             <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '88vh', overflowY: 'auto' }}>
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>📊 {detailName} 的記帳明細</p>
+                <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faChartPie} style={{ fontSize: 14 }} /> {detailName} 的記帳明細</p>
                 <button onClick={() => setMemberDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
               </div>
               {ms && (
@@ -812,7 +812,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
-                {editingId ? '✏️ 修改支出' : '💰 新增支出'}
+                {editingId ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 12, marginRight: 6 }} />修改支出</> : <><FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 12, marginRight: 6 }} />新增支出</>}
               </p>
               <button onClick={closeForm}
                 style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
@@ -1036,7 +1036,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     type="button"
                     onClick={() => set('isPrivate', !form.isPrivate)}
                     style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${form.isPrivate ? '#9A5AC8' : C.creamDark}`, background: form.isPrivate ? '#F0E8FF' : 'var(--tm-card-bg)', color: form.isPrivate ? '#6A2A9A' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span>🔒 私人支出（僅自己可見）</span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 私人支出（僅自己可見）</span>
                     <span style={{ width: 36, height: 20, borderRadius: 10, background: form.isPrivate ? '#9A5AC8' : C.creamDark, position: 'relative', display: 'inline-block', flexShrink: 0, transition: 'background 0.2s' }}>
                       <span style={{ position: 'absolute', top: 2, left: form.isPrivate ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                     </span>
@@ -1079,7 +1079,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 ) : (
                   <button onClick={() => receiptRef.current?.click()} disabled={receiptUploading}
                     style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-input-bg)', color: receiptUploading ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: receiptUploading ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    {receiptUploading ? '⏳ 上傳中...' : '📷 拍照 / 上傳附件'}
+                    {receiptUploading ? '⏳ 上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />拍照 / 上傳附件</>}
                   </button>
                 )}
               </div>
@@ -1275,7 +1275,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         {!isVisitor && currentUserName && (
           <div style={{ display: 'flex', background: 'var(--tm-cream)', borderRadius: 14, padding: 3, marginBottom: 12 }}>
             <button onClick={() => setExpenseView('all')} style={{ flex: 1, padding: '9px 8px', borderRadius: 11, border: 'none', background: expenseView === 'all' ? 'var(--tm-card-bg)' : 'transparent', color: expenseView === 'all' ? C.bark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, boxShadow: expenseView === 'all' ? C.shadowSm : 'none', transition: 'all 0.18s' }}>
-              👥 全團支出
+              <FontAwesomeIcon icon={faUsers} style={{ fontSize: 11, marginRight: 5 }} />全團支出
             </button>
             <button onClick={() => setExpenseView('mine')} style={{ flex: 1, padding: '9px 8px', borderRadius: 11, border: 'none', background: expenseView === 'mine' ? 'var(--tm-card-bg)' : 'transparent', color: expenseView === 'mine' ? C.bark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, boxShadow: expenseView === 'mine' ? C.shadowSm : 'none', transition: 'all 0.18s' }}>
               👤 與我有關
@@ -1295,7 +1295,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         {/* ── Visitor note: only category breakdown visible ── */}
         {isVisitor && (
           <div style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14 }}>🔒</span>
+            <span style={{ fontSize: 13, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
             <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訪客模式：僅顯示分類佔比，明細資料僅旅伴可查看</span>
           </div>
         )}
@@ -1319,7 +1319,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         {/* ── Expense list (hidden for visitors) ── */}
         {!isVisitor && (filteredExpenses.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '30px 0', color: C.barkLight }}>
-            <div style={{ fontSize: 32, marginBottom: 8 }}>💰</div>
+            <div style={{ fontSize: 32, marginBottom: 8, color: C.barkLight }}><FontAwesomeIcon icon={faMoneyBill1} /></div>
             <p style={{ fontSize: 13 }}>沒有符合的支出記錄</p>
           </div>
         ) : (
@@ -1346,7 +1346,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                           <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>↻</span>
                         )}
                         {isPrivateExpense && (
-                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A' }}>🔒 私人</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} /> 私人</span>
                         )}
                         {isSettlement ? (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
@@ -1393,14 +1393,14 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         <div style={{ display: 'flex', gap: 4 }}>
                           {!isSettlement && (
                             <button onClick={() => openEdit(e)}
-                              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FFF2CC', color: '#9A7200', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              ✏️
+                              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FFF2CC', color: '#9A7200', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <FontAwesomeIcon icon={faPen} />
                             </button>
                           )}
                           {canDeleteExpense(e) && (
                             <button onClick={() => handleDelete(e.id, e)}
-                              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              🗑
+                              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <FontAwesomeIcon icon={faTrashCan} />
                             </button>
                           )}
                         </div>
