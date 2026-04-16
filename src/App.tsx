@@ -388,13 +388,17 @@ function App() {
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
           ['events', setEvents], ['members', setMembers], ['bookings', setBookings],
-          ['expenses', setExpenses], ['journals', setJournals], ['lists', setLists],
+          ['journals', setJournals], ['lists', setLists],
         ];
         unsubs = cols.map(([col, setter]) =>
           onSnapshot(collection(tripRef, col), snap => {
             setter(snap.docs.map(d => ({ id: d.id, ...d.data() })));
           })
         );
+        // Expenses: include metadata changes to track pending writes (offline indicator)
+        unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
+          setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
+        }));
         unsubs.push(onSnapshot(collection(tripRef, 'memberNotes'), snap => {
           const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setMemberNotes(items);
@@ -418,13 +422,18 @@ function App() {
           }
           const data = tripSnap.data();
 
-          // Sync title + emoji back into activeProject for all roles
+          // Sync title, emoji, memberOrder back into activeProject for all roles
           setActiveProjectState(prev => {
             if (!prev) return prev;
-            const newTitle = data.title || prev.title;
-            const newEmoji = data.emoji || prev.emoji;
-            if (newTitle === prev.title && newEmoji === prev.emoji) return prev;
-            const updated = { ...prev, title: newTitle, emoji: newEmoji };
+            const newTitle       = data.title || prev.title;
+            const newEmoji       = data.emoji || prev.emoji;
+            const newMemberOrder = data.memberOrder as string[] | undefined;
+            const unchanged =
+              newTitle === prev.title &&
+              newEmoji === prev.emoji &&
+              JSON.stringify(newMemberOrder) === JSON.stringify(prev.memberOrder);
+            if (unchanged) return prev;
+            const updated = { ...prev, title: newTitle, emoji: newEmoji, memberOrder: newMemberOrder };
             saveProject(updated);
             return updated;
           });

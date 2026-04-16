@@ -25,6 +25,7 @@ export interface StoredProject {
   description?: string;
   currency?: string;
   archived?: boolean;
+  memberOrder?: string[];
 }
 
 const LS_PROJECTS  = 'tripmori_projects';

@@ -292,33 +292,39 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   };
 
   // ── Member order ─────────────────────────────────────────────────────────
+  const [localMemberOrder, setLocalMemberOrder] = useState<string[] | null>(null);
+
   const memberNames = members.map((m: any) => m.name);
-  const memberOrder: string[] = project?.memberOrder || memberNames;
+  const memberOrder: string[] = localMemberOrder ?? project?.memberOrder ?? memberNames;
   const orderedMembers: any[] = [
     ...memberOrder
       .map((name: string) => members.find((m: any) => m.name === name))
       .filter(Boolean),
     ...members.filter((m: any) => !memberOrder.includes(m.name)),
   ];
-  // Non-owners see own card first
-  const displayMembers = firestore.role === 'owner'
-    ? orderedMembers
-    : [
-        ...orderedMembers.filter((m: any) => googleUid && m.googleUid === googleUid),
-        ...orderedMembers.filter((m: any) => !(googleUid && m.googleUid === googleUid)),
-      ];
+  // Always pin own card to top regardless of role
+  const ownMember = googleUid ? orderedMembers.find((m: any) => m.googleUid === googleUid) : null;
+  const otherMembers = orderedMembers.filter((m: any) => !(googleUid && m.googleUid === googleUid));
+  const displayMembers = ownMember ? [ownMember, ...otherMembers] : orderedMembers;
 
   const handleMemberReorder = async (memberId: string, dir: 'up' | 'down') => {
     if (firestore.role !== 'owner') return;
-    const idx = orderedMembers.findIndex((m: any) => m.id === memberId);
+    // Reorder within otherMembers only (own card is pinned to top)
+    const idx = otherMembers.findIndex((m: any) => m.id === memberId);
     if (idx < 0) return;
-    const newOrder = orderedMembers.map((m: any) => m.name);
+    const newOtherOrder = otherMembers.map((m: any) => m.name);
     const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= newOrder.length) return;
-    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+    if (swapIdx < 0 || swapIdx >= newOtherOrder.length) return;
+    [newOtherOrder[idx], newOtherOrder[swapIdx]] = [newOtherOrder[swapIdx], newOtherOrder[idx]];
+    // Optimistic update: own card stays first in Firestore order too
+    const fullOrder = ownMember ? [ownMember.name, ...newOtherOrder] : newOtherOrder;
+    setLocalMemberOrder(fullOrder);
     try {
-      await _updateDoc(_doc(db, 'trips', TRIP_ID), { memberOrder: newOrder });
-    } catch (e) { console.error(e); }
+      await _updateDoc(_doc(db, 'trips', TRIP_ID), { memberOrder: fullOrder });
+    } catch (e) {
+      console.error(e);
+      setLocalMemberOrder(null); // revert on failure
+    }
   };
 
   const startDate       = project?.startDate || '';
@@ -632,18 +638,18 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           const alreadyBound = members.some((mem: any) => mem.googleUid === googleUid);
           const canBind = googleUid && !m.googleUid && !firestore.isReadOnly && !alreadyBound;
 
-          const memberIdx = orderedMembers.findIndex((om: any) => om.id === m.id);
+          const memberIdx = otherMembers.findIndex((om: any) => om.id === m.id);
           return (
             <div key={m.id} style={{ marginBottom: 16 }}>
               {/* Member info card */}
               <div style={{ background: 'var(--tm-card-bg)', borderRadius: '20px 20px 0 0', padding: '16px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
-                {/* Reorder arrows (owner only) */}
-                {firestore.role === 'owner' && (
+                {/* Reorder arrows (owner only, hidden for own pinned card) */}
+                {firestore.role === 'owner' && !isMyCard && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
                     <button onClick={() => handleMemberReorder(m.id, 'up')} disabled={memberIdx === 0}
                       style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === 0 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === 0 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === 0 ? 0.25 : 1 }}>▲</button>
-                    <button onClick={() => handleMemberReorder(m.id, 'down')} disabled={memberIdx === orderedMembers.length - 1}
-                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === orderedMembers.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === orderedMembers.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === orderedMembers.length - 1 ? 0.25 : 1 }}>▼</button>
+                    <button onClick={() => handleMemberReorder(m.id, 'down')} disabled={memberIdx === otherMembers.length - 1}
+                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === otherMembers.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === otherMembers.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === otherMembers.length - 1 ? 0.25 : 1 }}>▼</button>
                   </div>
                 )}
                 {canEdit && (

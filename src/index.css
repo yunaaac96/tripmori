@@ -284,3 +284,14 @@ code {
   padding: 4px 8px;
   background: var(--code-bg);
 }
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.tm-member-scroll::-webkit-scrollbar { display: none; }
+.tm-member-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
+@media (min-width: 600px) {
+  .tm-member-arrow { display: flex !important; }
+}
