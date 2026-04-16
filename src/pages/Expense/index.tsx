@@ -616,15 +616,38 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     : visibleExpenses;
 
   const nonSettlementExpenses = baseExpenses.filter((e: any) => e.category !== 'settlement');
-  const sharedExpenses = baseExpenses.filter((e: any) => !e.isPrivate);
-  const totalTWD = sharedExpenses.reduce(
-    (s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')),
-    0
-  );
+
+  // 團隊總支出: always = non-private, non-settlement (never includes anyone's private expenses)
+  const teamTotalTWD = visibleExpenses
+    .filter((e: any) => !e.isPrivate && e.category !== 'settlement')
+    .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
+
+  // 個人負擔總額 (與我有關 mode): my share of shared expenses + my own private expenses
+  const myBurdenTWD = currentUserName
+    ? visibleExpenses
+        .filter((e: any) => e.category !== 'settlement' && isMyExpense(e))
+        .reduce((s: number, e: any) => {
+          if (e.isPrivate) return s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY'));
+          return s + getPersonalShare(e, currentUserName);
+        }, 0)
+    : 0;
+
+  // Header amount: team total in all mode, personal burden in mine mode
+  const headerTWD = expenseView === 'mine' && currentUserName ? myBurdenTWD : teamTotalTWD;
+
   const categoryBreakdown = Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => {
-    const total = nonSettlementExpenses
-      .filter((e: any) => e.category === key)
-      .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
+    const cats = nonSettlementExpenses.filter((e: any) => e.category === key);
+    const total = cats.reduce((s: number, e: any) => {
+      const rawAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
+      if (expenseView === 'mine' && currentUserName) {
+        // personal burden: full amount for my private, my share for shared
+        if (e.isPrivate) return s + rawAmt;
+        return s + getPersonalShare(e, currentUserName);
+      }
+      // 全團 mode: exclude private expenses from pie
+      if (e.isPrivate) return s;
+      return s + rawAmt;
+    }, 0);
     return { key, label: info.label, emoji: info.emoji, value: total };
   }).filter(d => d.value > 0);
   const catTotal = categoryBreakdown.reduce((s, d) => s + d.value, 0);
@@ -1068,8 +1091,15 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       <PageHeader title="旅行記帳" subtitle="支出記錄・分帳結算" emoji="💰" color={C.sage}>
         {!isVisitor && (
           <div style={{ marginTop: 12, background: 'rgba(255,255,255,0.2)', borderRadius: 14, padding: '12px 14px' }}>
-            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '0 0 2px' }}>總支出（換算台幣）</p>
-            <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>NT$ {totalTWD.toLocaleString()}</p>
+            <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '0 0 2px' }}>
+              {expenseView === 'mine' && currentUserName ? '個人負擔總額（換算台幣）' : '團隊總支出（換算台幣）'}
+            </p>
+            <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>NT$ {headerTWD.toLocaleString()}</p>
+            {expenseView === 'mine' && currentUserName && (
+              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>
+                含個人分攤＋私人消費 · 團隊共 NT$ {teamTotalTWD.toLocaleString()}
+              </p>
+            )}
           </div>
         )}
       </PageHeader>
