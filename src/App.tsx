@@ -418,13 +418,18 @@ function App() {
           }
           const data = tripSnap.data();
 
-          // Sync title + emoji back into activeProject for all roles
+          // Sync title, emoji, memberOrder back into activeProject for all roles
           setActiveProjectState(prev => {
             if (!prev) return prev;
-            const newTitle = data.title || prev.title;
-            const newEmoji = data.emoji || prev.emoji;
-            if (newTitle === prev.title && newEmoji === prev.emoji) return prev;
-            const updated = { ...prev, title: newTitle, emoji: newEmoji };
+            const newTitle       = data.title || prev.title;
+            const newEmoji       = data.emoji || prev.emoji;
+            const newMemberOrder = data.memberOrder as string[] | undefined;
+            const unchanged =
+              newTitle === prev.title &&
+              newEmoji === prev.emoji &&
+              JSON.stringify(newMemberOrder) === JSON.stringify(prev.memberOrder);
+            if (unchanged) return prev;
+            const updated = { ...prev, title: newTitle, emoji: newEmoji, memberOrder: newMemberOrder };
             saveProject(updated);
             return updated;
           });
