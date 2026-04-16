@@ -797,7 +797,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       {/* ── Settlement Form Modal ── */}
       {showSettleForm && (
         <SettlementForm
-          memberNames={memberNames}
+          memberNames={displayMemberNames}
           onAdd={handleAddSettlement}
           onClose={() => setShowSettleForm(false)}
           firestore={firestore}
@@ -896,7 +896,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>誰付款 *</label>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {memberNames.map((name: string) => (
+                  {displayMemberNames.map((name: string) => (
                     <button key={name} onClick={() => set('payer', name)}
                       style={{ flex: 1, minWidth: 60, padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${form.payer === name ? C.sageDark : C.creamDark}`, background: form.payer === name ? C.sage : 'var(--tm-card-bg)', color: form.payer === name ? 'white' : C.bark, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
                       {name}
@@ -923,7 +923,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   <div>
                     <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>點擊成員以剔除（預設全員分攤）</p>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {memberNames.map((name: string) => {
+                      {displayMemberNames.map((name: string) => {
                         const selected = isMemberSelected(name);
                         return (
                           <button key={name} onClick={() => toggleSplitMember(name)}
@@ -945,7 +945,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 {form.splitMode === 'weighted' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>以百分比分帳（總和須為 100%）</p>
-                    {memberNames.map((name: string) => {
+                    {displayMemberNames.map((name: string) => {
                       const pct = activePcts[name] ?? Math.floor(100 / memberNames.length / 5) * 5;
                       const share = Math.round(mainAmtTWD * pct / 100);
                       return (
@@ -969,7 +969,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 {/* Custom amount split */}
                 {form.splitMode === 'amount' && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {memberNames.map((name: string) => (
+                    {displayMemberNames.map((name: string) => (
                       <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <span style={{ width: 60, fontSize: 13, fontWeight: 600, color: C.bark, flexShrink: 0 }}>{name}</span>
                         <input

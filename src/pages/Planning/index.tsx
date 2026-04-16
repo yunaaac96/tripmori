@@ -60,6 +60,11 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     ? members.map((m: any) => m.name)
     : ['uu', 'brian'];
 
+  const myMemberName = googleUid ? (members.find((m: any) => m.googleUid === googleUid)?.name || '') : '';
+  const orderedMemberNames = myMemberName
+    ? [myMemberName, ...memberNames.filter(n => n !== myMemberName)]
+    : memberNames;
+
   // Tab member info (for packing tab)
   const tabMember    = members.find((m: any) => m.name === packingTab);
   const tabMemberUid = tabMember?.googleUid as string | undefined;
@@ -362,7 +367,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                     {form.listType === 'packing' ? '可見範圍' : '負責人'}
                   </label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 4 }} />全體</> }, ...memberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
+                    {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 4 }} />全體</> }, ...orderedMemberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
                       <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
                         style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                         {opt.label}
@@ -440,7 +445,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         {/* 行李 成員 Tab */}
         {activeSection === 'packing' && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-            {(isOwner ? members : members.filter((m: any) => m.googleUid === googleUid)).map((m: any) => (
+            {(isOwner ? [...members].sort((a: any, b: any) => { if (a.googleUid === googleUid) return -1; if (b.googleUid === googleUid) return 1; return 0; }) : members.filter((m: any) => m.googleUid === googleUid)).map((m: any) => (
               <button key={m.name} onClick={() => isOwner && setPackingTab(m.name)}
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${packingTab === m.name ? (m.color || C.sageDark) : C.creamDark}`, background: packingTab === m.name ? (m.color || C.sage) : 'var(--tm-card-bg)', color: packingTab === m.name ? '#3A2E24' : C.bark, fontWeight: 700, fontSize: 12, cursor: isOwner ? 'pointer' : 'default', fontFamily: FONT, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 5 }}>
                 {m.avatarUrl
