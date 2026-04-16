@@ -6,7 +6,7 @@ import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMapPin, faBus, faStar, faShip, faEllipsis } from '@fortawesome/free-solid-svg-icons';
+import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
 const BOOKING_TYPE_ICONS: Record<string, IconDefinition> = {
@@ -458,7 +458,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           })}
         </div>
         {!isOwner && !myMember && (
-          <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5 }}>💡 請至「成員」頁綁定帳號，即可確認自己的參與狀態</p>
+          <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 9 }} /> 請至「成員」頁綁定帳號，即可確認自己的參與狀態</p>
         )}
       </div>
     );
@@ -507,7 +507,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         <div style={{ position: 'fixed', inset: 0, zIndex: 500 }} onClick={() => setParticipantPopover(null)}>
           <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: 'var(--tm-sheet-bg)', borderRadius: 16, padding: '14px 20px', boxShadow: '0 4px 24px rgba(0,0,0,0.18)', maxWidth: 320, width: 'calc(100% - 48px)', zIndex: 501 }}
             onClick={e => e.stopPropagation()}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: '0 0 8px' }}>👥 參與人員</p>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 11 }} /> 參與人員</p>
             <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
               {participantPopover.map(name => (
                 <span key={name} style={{ fontSize: 13, fontWeight: 600, color: C.bark, background: C.cream, borderRadius: 10, padding: '4px 12px' }}>{name}</span>
@@ -546,8 +546,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               {!isReadOnly && (
                 <div style={{ position: 'absolute', top: 12, right: 12 }}>
                   <button onClick={() => openSingleFlightEdit(idx)}
-                    style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    ✏️
+                    style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FontAwesomeIcon icon={faPen} />
                   </button>
                 </div>
               )}
@@ -620,7 +620,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, wordBreak: 'break-word' }}>{h.name}</p>
                 {(h.nameLocal || h.nameJa) && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameLocal || h.nameJa}</p>}
-                {h.address && <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>}
+                {h.address && <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 9 }} /> {h.address}</p>}
               </div>
               {!isReadOnly && <EditBtn onClick={() => openEdit('hotel', idx)} />}
             </div>
@@ -645,7 +645,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <div style={{ marginTop: 10, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {isVisitor ? (
                   <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
-                    <span style={{ fontSize: 14 }}>🔒</span>
+                    <span style={{ fontSize: 13, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
                     <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訂單詳細資訊僅旅伴可查看</span>
                   </div>
                 ) : (
@@ -715,8 +715,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         <div style={cardStyle}>
           {/* ── Header ── */}
           <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22 }}>
-              {car.carMode === 'charter' ? '🚐' : '🚗'}
+            <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#7A5A00' }}>
+              <FontAwesomeIcon icon={faBus} />
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -724,7 +724,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   {car.company}{car.carMode === 'rental' && car.carType ? `　${car.carType}` : ''}{car.carMode === 'charter' && car.seats ? `　${car.seats}` : ''}
                 </p>
                 <span style={{ fontSize: 10, fontWeight: 700, background: car.carMode === 'charter' ? '#D8EDF8' : '#FFF2CC', color: car.carMode === 'charter' ? '#2A6A9A' : '#7A5A00', borderRadius: 6, padding: '2px 7px' }}>
-                  {car.carMode === 'charter' ? '🚐 包車' : '🚗 租車'}
+                  {car.carMode === 'charter' ? '包車' : '租車'}
                 </span>
               </div>
               {!isVisitor && car.confirmCode && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
@@ -760,7 +760,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             </div>
           ) : null}
           {/* ── Notes ── */}
-          {car.notes && <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: '0 0 10px' }}>⚠️ {car.notes}</p>}
+          {car.notes && <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 10 }} /> {car.notes}</p>}
           {/* ── Participants ── */}
           <ParticipantAvatars ids={car.participants} />
           {/* ── QR Code ── */}
@@ -792,7 +792,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             </button>
           )
         }>
-          📋 其他預訂
+          <FontAwesomeIcon icon={faClipboardList} style={{ fontSize: 12, marginRight: 5 }} />其他預訂
         </SectionTitle>
 
         {sortedBookings.length === 0 && (
@@ -816,7 +816,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none', wordBreak: 'break-word' }}>{b.title}</p>
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: typeInfo.color, background: typeInfo.bg, borderRadius: 6, padding: '1px 6px' }}>{typeInfo.label}</span>
-                    {b.used && <span style={{ fontSize: 10, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', borderRadius: 6, padding: '1px 6px' }}>✅ 已使用</span>}
+                    {b.used && <span style={{ fontSize: 10, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', borderRadius: 6, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 9 }} /> 已使用</span>}
                   </div>
                 </div>
                 {!isReadOnly && (
@@ -829,9 +829,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                     </div>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button onClick={() => openEditBooking(b)}
-                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✏️</button>
+                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}><FontAwesomeIcon icon={faPen} /></button>
                       <button onClick={() => handleDelete(b.id)} disabled={deleting === b.id}
-                        style={{ width: 26, height: 26, borderRadius: 6, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: deleting === b.id ? 0.5 : 1 }}>🗑</button>
+                        style={{ width: 26, height: 26, borderRadius: 6, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: deleting === b.id ? 0.5 : 1 }}><FontAwesomeIcon icon={faTrashCan} /></button>
                     </div>
                   </div>
                 )}
@@ -840,7 +840,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               {!isReadOnly && (
                 <button onClick={() => handleToggleUsed(b)} disabled={toggling === b.id}
                   style={{ marginBottom: 8, padding: '5px 12px', borderRadius: 10, border: `1.5px solid ${b.used ? '#4A7A35' : C.creamDark}`, background: b.used ? '#E0F0D8' : 'var(--tm-card-bg)', color: b.used ? '#4A7A35' : C.barkLight, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
-                  {b.used ? '↩ 標記為未使用' : '✅ 標記為已使用'}
+                  {b.used ? '↩ 標記為未使用' : <><FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 10, marginRight: 4 }} />標記為已使用</>}
                 </button>
               )}
               {isVisitor ? (
@@ -908,7 +908,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
-                {editType === 'flight' ? '✈️ 編輯航班' : editType === 'hotel' ? '🏨 編輯住宿' : '🚗 編輯租車/包車'}
+                {editType === 'flight' ? '編輯航班' : editType === 'hotel' ? '編輯住宿' : '編輯租車/包車'}
               </p>
               <button onClick={() => setEditType(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
@@ -1239,19 +1239,19 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       {expensePrompt && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '0 20px' }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 360, fontFamily: FONT, boxSizing: 'border-box' }}>
-            <p style={{ fontSize: 20, textAlign: 'center', margin: '0 0 8px' }}>💰</p>
+            <p style={{ fontSize: 20, textAlign: 'center', margin: '0 0 8px', color: C.earth }}>💰</p>
             <p style={{ fontSize: 16, fontWeight: 700, color: '#5C4A38', margin: '0 0 8px', textAlign: 'center' }}>是否新增至記帳？</p>
             <p style={{ fontSize: 13, color: '#8C7B6E', margin: '0 0 10px', textAlign: 'center', lineHeight: 1.6 }}>
               偵測到費用 <strong>{expensePrompt.currency === 'TWD' ? 'NT$' : expensePrompt.currency === 'IDR' ? 'Rp' : '¥'} {expensePrompt.amount.toLocaleString()}</strong>，是否同步新增至記帳？
             </p>
             {expensePrompt.participantNames && expensePrompt.participantNames.length > 0 ? (
               <div style={{ background: '#EAF3DE', borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
-                <p style={{ fontSize: 11, color: '#4A7A35', margin: '0 0 4px' }}>✅ 將自動分帳給：<strong>{expensePrompt.participantNames.join('、')}</strong></p>
-                <p style={{ fontSize: 11, color: '#9A6800', margin: 0 }}>💡 請記得至記帳填寫付款人</p>
+                <p style={{ fontSize: 11, color: '#4A7A35', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 10 }} /> 將自動分帳給：<strong>{expensePrompt.participantNames.join('、')}</strong></p>
+                <p style={{ fontSize: 11, color: '#9A6800', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10 }} /> 請記得至記帳填寫付款人</p>
               </div>
             ) : (
               <div style={{ background: '#FFF2CC', borderRadius: 10, padding: '8px 12px', marginBottom: 16, textAlign: 'center' }}>
-                <p style={{ fontSize: 11, color: '#9A6800', margin: 0 }}>⚠️ 尚未設定參與人，新增後請至記帳確認分帳對象</p>
+                <p style={{ fontSize: 11, color: '#9A6800', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 10 }} /> 尚未設定參與人，新增後請至記帳確認分帳對象</p>
               </div>
             )}
             <div style={{ display: 'flex', gap: 10 }}>

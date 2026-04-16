@@ -6,7 +6,7 @@ import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary, ExpandableNotes } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTree, faUtensils, faPalette, faBus, faBed, faEllipsis } from '@fortawesome/free-solid-svg-icons';
+import { faTree, faUtensils, faPalette, faBus, faBed, faEllipsis, faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faClipboardList, faLocationDot, faPlane, faCar, faTicket, faCalendarDays, faThumbtack, faPersonWalking } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
 const SCHEDULE_CAT_ICONS: Record<string, IconDefinition> = {
@@ -883,7 +883,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
 
             {/* Header */}
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>📋 一鍵匯入</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faClipboardList} style={{ fontSize: 14 }} /> 一鍵匯入</p>
               <button onClick={() => { setShowBulkImport(false); setBulkError(''); setBulkText(''); }} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
 
@@ -894,21 +894,21 @@ export default function SchedulePage({ events, members = [], project, firestore,
               {/* Section tabs */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
                 {([
-                  { key: 'flight',  label: '✈️ 機票'  },
-                  { key: 'hotel',   label: '🏨 住宿'  },
-                  { key: 'car',     label: '🚗 租車'  },
-                  { key: 'booking', label: '🎡 預訂'  },
-                  { key: 'event',   label: '📅 行程'  },
+                  { key: 'flight',  icon: faPlane,        label: '機票'  },
+                  { key: 'hotel',   icon: faBed,          label: '住宿'  },
+                  { key: 'car',     icon: faCar,          label: '租車'  },
+                  { key: 'booking', icon: faTicket,       label: '預訂'  },
+                  { key: 'event',   icon: faCalendarDays, label: '行程'  },
                 ] as const).map(t => (
                   <button key={t.key} onClick={() => setBulkTab(t.key)}
-                    style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${bulkTab === t.key ? C.sageDark : C.creamDark}`, background: bulkTab === t.key ? C.sage : 'var(--tm-card-bg)', color: bulkTab === t.key ? 'white' : C.bark, fontWeight: 600, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
-                    {t.label}
+                    style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${bulkTab === t.key ? C.sageDark : C.creamDark}`, background: bulkTab === t.key ? C.sage : 'var(--tm-card-bg)', color: bulkTab === t.key ? 'white' : C.bark, fontWeight: 600, fontSize: 11, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>
+                    <FontAwesomeIcon icon={t.icon} style={{ fontSize: 10 }} />{t.label}
                   </button>
                 ))}
               </div>
 
               {/* Template preview — shows filled example */}
-              <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 5px', lineHeight: 1.4 }}>📌 填寫範例（僅供參考，複製後欄位為空白）</p>
+              <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 5px', lineHeight: 1.4 }}><FontAwesomeIcon icon={faThumbtack} style={{ marginRight: 4 }} />填寫範例（僅供參考，複製後欄位為空白）</p>
               <pre style={{ margin: '0 0 10px', padding: '8px 10px', background: 'var(--tm-input-bg)', borderRadius: 8, fontSize: 11, color: C.bark, lineHeight: 1.7, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
                 {BULK_SAMPLES[bulkTab]}
               </pre>
@@ -960,7 +960,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>✏️ 編輯旅行設定</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faPen} style={{ fontSize: 13 }} /> 編輯旅行設定</p>
               <button onClick={() => setEditingMeta(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1009,14 +1009,14 @@ export default function SchedulePage({ events, members = [], project, firestore,
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>{mode === 'add' ? '➕ 新增行程' : '✏️ 編輯行程'}</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>{mode === 'add' ? <><FontAwesomeIcon icon={faPlus} style={{ fontSize: 13 }} /> 新增行程</> : <><FontAwesomeIcon icon={faPen} style={{ fontSize: 13 }} /> 編輯行程</>}</p>
               <button onClick={() => setMode('view')} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
               <div><label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>行程名稱 *</label><input style={inputStyle} placeholder="享用早午餐 / 前往台北101 / Check-in…" value={form.title} onChange={e => set('title', e.target.value)} /></div>
               {/* 日期選擇 */}
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>📅 日期</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}><FontAwesomeIcon icon={faCalendarDays} style={{ marginRight: 4 }} />日期</label>
                 <div style={{ display: 'flex', gap: 6, overflowX: 'auto', paddingBottom: 2 }}>
                   {DAY_OPTIONS.map(opt => {
                     const selected = form.date === opt.date;
@@ -1071,18 +1071,18 @@ export default function SchedulePage({ events, members = [], project, firestore,
                   setTravelCalcStatus('done');
                 };
 
-                const MODES: { key: 'car' | 'transit' | 'walk' | 'flight'; icon: string; label: string }[] = [
-                  { key: 'flight',  icon: '✈️', label: '飛機' },
-                  { key: 'car',     icon: '🚗', label: '開車' },
-                  { key: 'transit', icon: '🚌', label: '大眾運輸' },
-                  { key: 'walk',    icon: '🚶', label: '步行' },
+                const MODES: { key: 'car' | 'transit' | 'walk' | 'flight'; icon: IconDefinition; label: string }[] = [
+                  { key: 'flight',  icon: faPlane,         label: '飛機' },
+                  { key: 'car',     icon: faCar,           label: '開車' },
+                  { key: 'transit', icon: faBus,           label: '大眾運輸' },
+                  { key: 'walk',    icon: faPersonWalking, label: '步行' },
                 ];
 
                 return (
                   <div>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 6 }}>
                       <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight }}>前往下一站交通時間（選填）</label>
-                      {flightDetected && <span style={{ fontSize: 10, background: '#E0F0FF', color: '#2A6A9A', borderRadius: 6, padding: '2px 6px', fontWeight: 700 }}>✈️ 偵測到航班</span>}
+                      {flightDetected && <span style={{ fontSize: 10, background: '#E0F0FF', color: '#2A6A9A', borderRadius: 6, padding: '2px 6px', fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faPlane} />偵測到航班</span>}
                     </div>
                     {/* Mode selector */}
                     <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
@@ -1097,7 +1097,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                             else if (form.travelTime === '__transit__') set('travelTime', '');
                           }}
                             style={{ flex: 1, padding: '7px 4px', borderRadius: 10, border: `2px solid ${active ? C.sageDark : highlight ? '#4285F4' : C.creamDark}`, background: active ? C.sageDark : 'var(--tm-card-bg)', color: active ? 'white' : highlight ? '#2A6A9A' : C.bark, fontWeight: active || highlight ? 700 : 400, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
-                            {m.icon}<br /><span style={{ fontSize: 10 }}>{m.label}</span>
+                            <FontAwesomeIcon icon={m.icon} style={{ fontSize: 14 }} /><br /><span style={{ fontSize: 10 }}>{m.label}</span>
                           </button>
                         );
                       })}
@@ -1183,8 +1183,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
                       })}
                     </div>
                     {!isOwner && !myMember && (
-                      <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5 }}>
-                        💡 請至「成員」頁綁定帳號，即可確認自己的參與狀態
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 9 }} /> 請至「成員」頁綁定帳號，即可確認自己的參與狀態
                       </p>
                     )}
                   </div>
@@ -1196,7 +1196,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 <p style={{ fontSize: 10, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>輸入地址會自動轉為 Google Maps 搜尋連結；未填時依「地點」欄位導入地圖</p>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                {mode === 'edit' && isOwner && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>🗑</button>}
+                {mode === 'edit' && isOwner && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}><FontAwesomeIcon icon={faTrashCan} /></button>}
                 <button onClick={() => setMode('view')} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.title || !form.startTime} style={{ ...btnPrimary(), flex: 2, opacity: saving || !form.title || !form.startTime ? 0.6 : 1 }}>{saving ? '儲存中...' : mode === 'add' ? '✓ 新增' : '✓ 儲存'}</button>
               </div>
@@ -1209,7 +1209,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
       {showDeleteConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: 24 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 320, fontFamily: FONT, textAlign: 'center' }}>
-            <div style={{ fontSize: 36, marginBottom: 10 }}>🗑</div>
+            <div style={{ fontSize: 36, marginBottom: 10, color: '#9A3A3A' }}><FontAwesomeIcon icon={faTrashCan} /></div>
             <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>刪除這筆行程？</p>
             <p style={{ fontSize: 13, color: C.barkLight, margin: '0 0 20px' }}>「{selectedEvent?.title}」將永久刪除。</p>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -1226,7 +1226,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
           onClick={e => { if (e.target === e.currentTarget) setShowLocEdit(false); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>📍 設定目的地</p>
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 13 }} /> 設定目的地</p>
               <button onClick={() => setShowLocEdit(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--tm-bark-light)' }}>✕</button>
             </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
@@ -1270,10 +1270,10 @@ export default function SchedulePage({ events, members = [], project, firestore,
         {firestore.role === 'owner' && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
             <button onClick={openMetaEdit} style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
-              ✏️ 編輯旅行設定
+              <FontAwesomeIcon icon={faPen} style={{ fontSize: 10, marginRight: 4 }} />編輯旅行設定
             </button>
             <button onClick={() => { setBulkError(''); setBulkText(''); setShowBulkImport(true); }} style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
-              📋 批次匯入
+              <FontAwesomeIcon icon={faClipboardList} style={{ fontSize: 10, marginRight: 4 }} />批次匯入
             </button>
           </div>
         )}
@@ -1371,7 +1371,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
 
           {dayEvents.length === 0 && (
             <div style={{ textAlign: 'center', padding: '36px 0', color: C.barkLight }}>
-              <div style={{ fontSize: 36, marginBottom: 8 }}>🌿</div>
+              <div style={{ fontSize: 36, marginBottom: 8, color: C.sageLight }}><FontAwesomeIcon icon={faTree} /></div>
               <p style={{ fontSize: 13, margin: 0 }}>這天還沒有行程</p>
               {!isReadOnly && <button onClick={openAdd} style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>＋ 新增第一筆行程</button>}
             </div>
@@ -1432,8 +1432,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
                     </div>
                     {!isReadOnly && (
                       <button onClick={() => openEdit(event)}
-                        style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 10, background: C.cream, border: `1.5px solid ${C.creamDark}`, color: C.barkLight, fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
-                        ✏️
+                        style={{ flexShrink: 0, width: 30, height: 30, borderRadius: 10, background: C.cream, border: `1.5px solid ${C.creamDark}`, color: C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>
+                        <FontAwesomeIcon icon={faPen} />
                       </button>
                     )}
                   </div>

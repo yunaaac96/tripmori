@@ -1,12 +1,15 @@
 import { C, FONT } from '../../App';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faCalendarDays, faPlane, faMoneyBill1, faBook, faClipboardList, faUserGroup } from '@fortawesome/free-solid-svg-icons';
+import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
-const TABS = [
-  { id: "行程", emoji: "🗓" },
-  { id: "預訂", emoji: "✈️" },
-  { id: "記帳", emoji: "💰" },
-  { id: "日誌", emoji: "📖" },
-  { id: "準備", emoji: "📋" },
-  { id: "成員", emoji: "👥" },
+const TABS: { id: string; icon: IconDefinition }[] = [
+  { id: "行程", icon: faCalendarDays },
+  { id: "預訂", icon: faPlane },
+  { id: "記帳", icon: faMoneyBill1 },
+  { id: "日誌", icon: faBook },
+  { id: "準備", icon: faClipboardList },
+  { id: "成員", icon: faUserGroup },
 ];
 
 export default function BottomNav({
@@ -50,7 +53,7 @@ export default function BottomNav({
             onTouchEnd={e => (e.currentTarget.style.transform = 'scale(1)')}
           >
             <div style={{ position: 'relative', display: 'inline-flex' }}>
-              <span style={{ fontSize: 20 }}>{tab.emoji}</span>
+              <span style={{ fontSize: 18, color: active ? C.sageDark : 'var(--tm-bark-light)' }}><FontAwesomeIcon icon={tab.icon} /></span>
               {hasNotif && (
                 <span style={{
                   position: 'absolute', top: -2, right: -4,

@@ -1,6 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { C, FONT } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
@@ -377,8 +379,8 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         >
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
-                {isEdit ? '✏️ 編輯成員' : '➕ 新增旅伴'}
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
+                {isEdit ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 13 }} /> 編輯成員</> : <><FontAwesomeIcon icon={faPlus} style={{ fontSize: 13 }} /> 新增旅伴</>}
               </p>
               <button onClick={() => { setShowAdd(false); setEditTarget(null); }}
                 style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
@@ -395,7 +397,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   </div>
                   <button onClick={() => fileNewRef.current?.click()} disabled={uploadingFor === 'new'}
                     style={{ padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 13, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-                    {uploadingFor === 'new' ? '上傳中...' : '📷 選擇頭像（可裁切）'}
+                    {uploadingFor === 'new' ? '上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 12, marginRight: 5 }} />選擇頭像（可裁切）</>}
                   </button>
                 </div>
               )}
@@ -459,15 +461,15 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       {/* Copy toast */}
       {copied && (
         <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#3A5A3A', color: 'white', borderRadius: 24, padding: '10px 22px', fontSize: 13, fontWeight: 700, zIndex: 500, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', whiteSpace: 'nowrap', fontFamily: FONT }}>
-          ✅ 已複製，快去分享給朋友吧！
+          <FontAwesomeIcon icon={faSquareCheck} style={{ marginRight: 6 }} /> 已複製，快去分享給朋友吧！
         </div>
       )}
 
       {/* Google sign-in / status — shown first, right below header */}
       {!googleUid && !firestore.isReadOnly && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
-          <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600 }}>
-            🔐 登入 Google 後可綁定成員卡，以自己的身份留言
+          <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+            <FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 登入 Google 後可綁定成員卡，以自己的身份留言
           </p>
           <button onClick={handleGoogleSignIn} disabled={signingIn}
             style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: signingIn ? '#F5F5F5' : 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
@@ -481,7 +483,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       )}
       {googleUid && (
         <div style={{ margin: '12px 16px 0', background: '#E0F0D8', borderRadius: 16, padding: '10px 14px', border: '1.5px solid #C2E0B4', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 14 }}>✅</span>
+          <span style={{ fontSize: 14, color: '#4A7A35' }}><FontAwesomeIcon icon={faSquareCheck} /></span>
           <div style={{ flex: 1 }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
             <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0' }}>{googleEmail}</p>
@@ -496,7 +498,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       {/* Share project keys (Owner only) */}
       {project?.role === 'owner' && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>🔑 分享此旅行</p>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faKey} style={{ fontSize: 11 }} /> 分享此旅行</p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* 協作金鑰 — tap to copy */}
             <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
@@ -504,7 +506,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               style={{ background: copied === 'collab' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                 <p className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : undefined, margin: 0 }}>協作金鑰（編輯者）</p>
-                <span className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'collab' ? '✅ 已複製' : '點擊複製 📋'}</span>
+                <span className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'collab' ? <><FontAwesomeIcon icon={faSquareCheck} style={{ marginRight: 3 }} />已複製</> : <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>點擊複製 <FontAwesomeIcon icon={faClipboardList} /></span>}</span>
               </div>
               <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{firestoreCollaboratorKey || project?.collaboratorKey || '—'}</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
@@ -515,7 +517,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               style={{ background: copied === 'visit' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                 <p className={copied === 'visit' ? '' : 'tm-visitor-link-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'visit' ? '#4A7A35' : undefined, margin: 0 }}>訪客連結（唯讀瀏覽）</p>
-                <span className={copied === 'visit' ? '' : 'tm-visitor-link-label'} style={{ fontSize: 10, color: copied === 'visit' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'visit' ? '✅ 已複製' : '點擊複製 📋'}</span>
+                <span className={copied === 'visit' ? '' : 'tm-visitor-link-label'} style={{ fontSize: 10, color: copied === 'visit' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'visit' ? <><FontAwesomeIcon icon={faSquareCheck} style={{ marginRight: 3 }} />已複製</> : <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>點擊複製 <FontAwesomeIcon icon={faClipboardList} /></span>}</span>
               </div>
               <p style={{ fontSize: 12, fontWeight: 600, color: C.bark, margin: 0 }}>訪客專屬分享連結</p>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>對方點擊連結即可直接瀏覽行程（無需登入或輸入代碼）</p>
@@ -529,7 +531,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, boxShadow: C.shadowSm, overflow: 'hidden' }}>
           <button onClick={() => setEditorListOpen(v => !v)}
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
-            <span style={{ fontSize: 12, fontWeight: 700, color: C.bark }}>✏️ 編輯者名單</span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faPen} style={{ fontSize: 11 }} /> 編輯者名單</span>
             <span style={{ fontSize: 12, color: C.barkLight }}>{editorListOpen ? '▲' : '▼'}</span>
           </button>
           {editorListOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 16px 14px' }}>
@@ -571,7 +573,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         {firestore.isReadOnly ? (
           /* Visitor lock screen */
           <div style={{ textAlign: 'center', padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 52 }}>🔒</div>
+            <div style={{ fontSize: 52, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
             <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>成員資訊僅限協作者查看</p>
             <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.7 }}>
               請聯繫行程擁有者取得協作金鑰，<br />即可以編輯者身份加入並查看所有成員資訊
@@ -585,7 +587,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               {/* Collapsible header */}
               <button onClick={() => setBindingSummaryOpen(v => !v)}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35' }}>🔐 帳號綁定總覽</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 帳號綁定總覽</span>
                 <span style={{ fontSize: 12, color: '#4A7A35', opacity: 0.7 }}>{bindingSummaryOpen ? '▲' : '▼'}</span>
               </button>
               {bindingSummaryOpen && (
@@ -656,13 +658,13 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
                     {firestore.role === 'owner' && (
                       <button onClick={() => handleDeleteMember(m.id, m.name)}
-                        style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        🗑
+                        style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                        <FontAwesomeIcon icon={faTrashCan} />
                       </button>
                     )}
                     <button onClick={() => openEdit(m)}
-                      style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                      ✏️
+                      style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
+                      <FontAwesomeIcon icon={faPen} />
                     </button>
                   </div>
                 )}
@@ -675,8 +677,8 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   </div>
                   {canEdit && (
                   <div onClick={() => { existingMemberId.current = m.id; fileExistingRef.current?.click(); }}
-                    style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: C.earth, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 10, boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>
-                    {isUploading ? '…' : '📷'}
+                    style={{ position: 'absolute', bottom: 0, right: 0, width: 20, height: 20, borderRadius: '50%', background: C.earth, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', fontSize: 9, color: 'white', boxShadow: '0 1px 4px rgba(0,0,0,0.2)' }}>
+                    {isUploading ? '…' : <FontAwesomeIcon icon={faCamera} />}
                   </div>
                 )}
                 </div>
@@ -684,20 +686,20 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>
                     {isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 6, padding: '1px 6px' }}>我</span>}
-                    {m.googleUid && !isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px' }}>🔗 已綁定</span>}
+                    {m.googleUid && !isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLink} style={{ fontSize: 8 }} /> 已綁定</span>}
                     {!m.googleUid && <span style={{ fontSize: 10, fontWeight: 600, background: '#F5F5F5', color: '#9A8A7A', borderRadius: 6, padding: '1px 6px' }}>未綁定</span>}
                   </div>
                   {/* 擁有者可看到綁定的 Google 帳號 email */}
                   {firestore.role === 'owner' && m.googleEmail && (
-                    <p style={{ fontSize: 10, color: '#2A6A9A', margin: '2px 0 0', fontWeight: 600 }}>
-                      📧 {m.googleEmail}
+                    <p style={{ fontSize: 10, color: '#2A6A9A', margin: '2px 0 0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <FontAwesomeIcon icon={faEnvelope} style={{ fontSize: 9 }} /> {m.googleEmail}
                     </p>
                   )}
                   <p style={{ fontSize: 12, color: C.barkLight, margin: '3px 0 0' }}>{m.role || '旅伴'}</p>
                   {canBind && (
                     <button onClick={() => handleBindGoogle(m.id)}
                       style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
-                      🔗 綁定為我的成員卡
+                      <FontAwesomeIcon icon={faLink} style={{ fontSize: 10, marginRight: 4 }} />綁定為我的成員卡
                     </button>
                   )}
                   {/* 解除綁定：owner 可解除任何人，本人可解除自己 */}
@@ -711,7 +713,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 {/* Board toggle */}
                 <button onClick={() => setExpandedBoard(isExpanded ? null : m.id)}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 10px', borderRadius: 12, border: `1.5px solid ${isExpanded ? C.sageDark : C.creamDark}`, background: isExpanded ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
-                  <span style={{ fontSize: 14 }}>📝</span>
+                  <span style={{ fontSize: 13, color: isExpanded ? C.sageDark : C.barkLight }}><FontAwesomeIcon icon={faNoteSticky} /></span>
                   <span style={{ fontSize: 9, fontWeight: 700, color: isExpanded ? C.sageDark : C.barkLight }}>
                     留言{notes.length > 0 ? ` (${notes.length})` : ''}
                   </span>
@@ -735,7 +737,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                           <div key={note.id} style={{ background: stickyColor, borderRadius: 12, padding: '10px 12px', minWidth: 130, maxWidth: 180, boxShadow: '2px 2px 6px rgba(107,92,78,0.15)', position: 'relative', flex: '1 1 130px' }}>
                             {/* Visibility badge */}
                             <span style={{ fontSize: 9, fontWeight: 700, color: note.visibility === 'private' ? '#9A3A3A' : '#4A7A35', background: note.visibility === 'private' ? '#FAE0E0' : '#E0F0D8', borderRadius: 6, padding: '2px 6px', display: 'inline-block', marginBottom: 6 }}>
-                              {note.visibility === 'private' ? '🔒 私人' : '👥 旅伴'}
+                              {note.visibility === 'private' ? <><FontAwesomeIcon icon={faLock} style={{ fontSize: 8, marginRight: 3 }} />私人</> : <><FontAwesomeIcon icon={faUsers} style={{ fontSize: 8, marginRight: 3 }} />旅伴</>}
                             </span>
                             <p style={{ fontSize: 13, color: C.bark, margin: '0 0 6px', lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{note.content}</p>
                             <p style={{ fontSize: 10, color: C.barkLight, margin: 0, fontWeight: 600 }}>— {note.authorName} {timeStr}</p>
@@ -764,19 +766,19 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                         {/* Visibility toggle：旅伴（所有人可見） / 私人（僅自己看） */}
                         <button onClick={() => setNoteVis(p => ({ ...p, [m.id]: p[m.id] === 'private' ? 'public' : 'private' }))}
                           style={{ fontSize: 11, fontWeight: 700, color: noteVis[m.id] === 'private' ? '#9A3A3A' : '#4A7A35', background: noteVis[m.id] === 'private' ? '#FAE0E0' : '#E0F0D8', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT }}>
-                          {noteVis[m.id] === 'private' ? '🔒 私人' : '👥 旅伴'}
+                          {noteVis[m.id] === 'private' ? <><FontAwesomeIcon icon={faLock} style={{ fontSize: 9, marginRight: 3 }} />私人</> : <><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9, marginRight: 3 }} />旅伴</>}
                         </button>
                         <button
                           onClick={() => handleAddNote(m.id)}
                           disabled={isSavingNote || !(noteInput[m.id] || '').trim()}
                           style={{ padding: '7px 16px', borderRadius: 10, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, opacity: (noteInput[m.id] || '').trim() ? 1 : 0.5 }}>
-                          {isSavingNote ? '...' : '貼上 📌'}
+                          {isSavingNote ? '...' : '貼上'}
                         </button>
                       </div>
                     </div>
                   ) : (
                     <div style={{ padding: '10px', borderRadius: 12, background: 'var(--tm-note-1)', color: '#9A6800', fontWeight: 600, fontSize: 12, textAlign: 'center' }}>
-                      🔐 請先登入 Google 並綁定成員卡後即可留言
+                      <FontAwesomeIcon icon={faLock} style={{ fontSize: 11, marginRight: 5 }} />請先登入 Google 並綁定成員卡後即可留言
                     </div>
                   )}
                 </div>

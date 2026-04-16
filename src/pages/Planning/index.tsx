@@ -3,6 +3,8 @@ import { C, FONT } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf } from '@fortawesome/free-solid-svg-icons';
 
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
@@ -283,8 +285,8 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   const isEditingPrivatePacking = isEdit && !!editTarget?.privateOwnerUid;
 
   const SECTIONS = [
-    { id: 'todo',    label: '✅ 待辦', items: todos   },
-    { id: 'packing', label: '🧳 行李', items: packing },
+    { id: 'todo',    label: <><FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 12, marginRight: 4 }} />待辦</>, items: todos   },
+    { id: 'packing', label: <><FontAwesomeIcon icon={faSuitcase} style={{ fontSize: 12, marginRight: 4 }} />行李</>, items: packing },
   ];
 
   return (
@@ -294,7 +296,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 20, padding: '24px 20px', width: '100%', maxWidth: 320, fontFamily: FONT, textAlign: 'center' }}>
-            <p style={{ fontSize: 28, margin: '0 0 10px' }}>🗑️</p>
+            <p style={{ fontSize: 28, margin: '0 0 10px', color: '#9A3A3A' }}><FontAwesomeIcon icon={faTrashCan} /></p>
             <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>確定刪除？</p>
             <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 20px' }}>此操作無法復原</p>
             <div style={{ display: 'flex', gap: 8 }}>
@@ -319,8 +321,8 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         >
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '85vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
-                {isEdit ? '✏️ 編輯項目' : '➕ 新增項目'}
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
+                {isEdit ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 13 }} /> 編輯項目</> : <><FontAwesomeIcon icon={faPlus} style={{ fontSize: 13 }} /> 新增項目</>}
               </p>
               <button onClick={() => { setShowSheet(false); setEditTarget(null); }}
                 style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
@@ -344,10 +346,10 @@ export default function PlanningPage({ lists, members, firestore }: any) {
               <div>
                 <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>清單類型</label>
                 <div style={{ display: 'flex', gap: 8 }}>
-                  {[{ v: 'todo', l: '✅ 待辦' }, { v: 'packing', l: '🧳 行李' }].map(({ v, l }) => (
+                  {[{ v: 'todo', icon: faSquareCheck, l: '待辦' }, { v: 'packing', icon: faSuitcase, l: '行李' }].map(({ v, icon, l }) => (
                     <button key={v} onClick={() => set('listType', v)}
-                      style={{ flex: 1, padding: '10px 4px', borderRadius: 12, border: `1.5px solid ${form.listType === v ? C.earth : C.creamDark}`, background: form.listType === v ? C.earth : 'var(--tm-card-bg)', color: form.listType === v ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                      {l}
+                      style={{ flex: 1, padding: '10px 4px', borderRadius: 12, border: `1.5px solid ${form.listType === v ? C.earth : C.creamDark}`, background: form.listType === v ? C.earth : 'var(--tm-card-bg)', color: form.listType === v ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <FontAwesomeIcon icon={icon} style={{ fontSize: 12 }} />{l}
                     </button>
                   ))}
                 </div>
@@ -360,7 +362,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                     {form.listType === 'packing' ? '可見範圍' : '負責人'}
                   </label>
                   <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {[{ id: 'all', label: '🌿 全體' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
+                    {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 4 }} />全體</> }, ...memberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
                       <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
                         style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                         {opt.label}
@@ -368,7 +370,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                     ))}
                   </div>
                   {form.listType === 'packing' && !isOwner && form.assignedTo !== 'all' && (
-                    <p style={{ fontSize: 11, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5 }}>💡 指定個人的行李項目僅自己可見</p>
+                    <p style={{ fontSize: 11, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10 }} /> 指定個人的行李項目僅自己可見</p>
                   )}
                 </div>
               )}
@@ -390,7 +392,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                   <button
                     onClick={() => { setConfirmDelete(editTarget.id); setShowSheet(false); }}
                     style={{ padding: '12px 16px', borderRadius: 12, border: `1.5px solid #FAE0E0`, background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-                    🗑
+                    <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} />
                   </button>
                 )}
                 <button onClick={() => { setShowSheet(false); setEditTarget(null); }}
@@ -427,7 +429,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         {/* 篩選 — 代辦專用 */}
         {activeSection === 'todo' && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-            {[{ id: 'all', label: '🌿 全部' }, ...memberNames.map((n: string) => ({ id: n, label: `👤 ${n}` }))].map(opt => (
+            {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 3 }} />全部</> }, ...memberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
               <button key={opt.id} onClick={() => setFilterBy(opt.id)}
                 style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${filterBy === opt.id ? C.sageDark : C.creamDark}`, background: filterBy === opt.id ? C.sage : 'var(--tm-card-bg)', color: filterBy === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
                 {opt.label}
@@ -472,7 +474,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                 <>
                   {filtered.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '32px 0', color: C.barkLight }}>
-                      <p style={{ fontSize: 28, margin: '0 0 8px' }}>{s.id === 'packing' ? '🧳' : '✅'}</p>
+                      <p style={{ fontSize: 28, margin: '0 0 8px', color: C.barkLight }}><FontAwesomeIcon icon={s.id === 'packing' ? faSuitcase : faSquareCheck} /></p>
                       <p style={{ fontSize: 13, margin: 0 }}>尚無項目，點下方 ＋ 新增</p>
                     </div>
                   ) : (
@@ -528,7 +530,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                             </div>
                             <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
                               <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{displayText}</p>
-                              {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0' }}>{status === 'overdue' ? '⚠️ 已逾期：' : status === 'soon' ? '⏰ 即將到期：' : '截止：'}{item.dueDate}</p>}
+                              {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>{status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? '⏰ 即將到期：' : '截止：'}{item.dueDate}</p>}
                             </div>
                             <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
                               {badgeLabel}
@@ -536,8 +538,8 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                             {showEdit && (
                               <button
                                 onClick={e => { e.stopPropagation(); openEdit(item); }}
-                                style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                ✏️
+                                style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
+                                <FontAwesomeIcon icon={faPen} />
                               </button>
                             )}
                           </div>
