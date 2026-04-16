@@ -291,9 +291,35 @@ export default function MembersPage({ members, memberNotes, project, firestore }
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 
-  const displayMembers = members;
+  // ── Member order ─────────────────────────────────────────────────────────
+  const memberNames = members.map((m: any) => m.name);
+  const memberOrder: string[] = project?.memberOrder || memberNames;
+  const orderedMembers: any[] = [
+    ...memberOrder
+      .map((name: string) => members.find((m: any) => m.name === name))
+      .filter(Boolean),
+    ...members.filter((m: any) => !memberOrder.includes(m.name)),
+  ];
+  // Non-owners see own card first
+  const displayMembers = firestore.role === 'owner'
+    ? orderedMembers
+    : [
+        ...orderedMembers.filter((m: any) => googleUid && m.googleUid === googleUid),
+        ...orderedMembers.filter((m: any) => !(googleUid && m.googleUid === googleUid)),
+      ];
 
-  const memberNames = displayMembers.map((m: any) => m.name);
+  const handleMemberReorder = async (memberId: string, dir: 'up' | 'down') => {
+    if (firestore.role !== 'owner') return;
+    const idx = orderedMembers.findIndex((m: any) => m.id === memberId);
+    if (idx < 0) return;
+    const newOrder = orderedMembers.map((m: any) => m.name);
+    const swapIdx = dir === 'up' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= newOrder.length) return;
+    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
+    try {
+      await _updateDoc(_doc(db, 'trips', TRIP_ID), { memberOrder: newOrder });
+    } catch (e) { console.error(e); }
+  };
 
   const startDate       = project?.startDate || '';
   const displayTeamName = project?.title || '旅行';
@@ -606,10 +632,20 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           const alreadyBound = members.some((mem: any) => mem.googleUid === googleUid);
           const canBind = googleUid && !m.googleUid && !firestore.isReadOnly && !alreadyBound;
 
+          const memberIdx = orderedMembers.findIndex((om: any) => om.id === m.id);
           return (
             <div key={m.id} style={{ marginBottom: 16 }}>
               {/* Member info card */}
               <div style={{ background: 'var(--tm-card-bg)', borderRadius: '20px 20px 0 0', padding: '16px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+                {/* Reorder arrows (owner only) */}
+                {firestore.role === 'owner' && (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
+                    <button onClick={() => handleMemberReorder(m.id, 'up')} disabled={memberIdx === 0}
+                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === 0 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === 0 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === 0 ? 0.25 : 1 }}>▲</button>
+                    <button onClick={() => handleMemberReorder(m.id, 'down')} disabled={memberIdx === orderedMembers.length - 1}
+                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === orderedMembers.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === orderedMembers.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === orderedMembers.length - 1 ? 0.25 : 1 }}>▼</button>
+                  </div>
+                )}
                 {canEdit && (
                   <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
                     {firestore.role === 'owner' && (
