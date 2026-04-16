@@ -861,6 +861,19 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     </button>
                   ))}
                 </div>
+                {form.paymentMethod === 'card' && form.currency !== 'TWD' && (
+                  <div style={{ marginTop: 8, background: '#FFF8E0', borderRadius: 10, padding: '7px 12px', border: '1px solid #E8C96A', display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <span style={{ fontSize: 13 }}>💳</span>
+                    <div>
+                      <p style={{ fontSize: 11, fontWeight: 700, color: '#9A6800', margin: 0 }}>海外刷卡手續費提醒</p>
+                      <p style={{ fontSize: 10, color: '#9A6800', margin: '1px 0 0' }}>
+                        海外刷卡通常收取 1.5% 手續費，實際約 NT$ {form.amount
+                          ? Math.round(toTWD(Number(form.amount), form.currency) * 1.015).toLocaleString()
+                          : '—'}
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* Category */}

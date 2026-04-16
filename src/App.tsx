@@ -390,25 +390,26 @@ function App() {
           ['events', setEvents], ['members', setMembers], ['bookings', setBookings],
           ['journals', setJournals], ['lists', setLists],
         ];
+        const logErr = (col: string) => (e: Error) => console.warn(`[onSnapshot/${col}]`, e.message);
         unsubs = cols.map(([col, setter]) =>
           onSnapshot(collection(tripRef, col), snap => {
             setter(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-          })
+          }, logErr(col))
         );
         // Expenses: include metadata changes to track pending writes (offline indicator)
         unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
           setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
-        }));
+        }, logErr('expenses')));
         unsubs.push(onSnapshot(collection(tripRef, 'memberNotes'), snap => {
           const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setMemberNotes(items);
           checkNotification(items, LS_SEEN_MEMBERS, '成員');
-        }));
+        }, logErr('memberNotes')));
         unsubs.push(onSnapshot(collection(tripRef, 'journalComments'), snap => {
           const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setJournalComments(items);
           checkNotification(items, LS_SEEN_JOURNAL, '日誌');
-        }));
+        }, logErr('journalComments')));
         // ── Watch trip doc: sync title changes + editor revocation + deletion ──
         const currentUid = auth.currentUser?.uid;
         unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
@@ -466,7 +467,7 @@ function App() {
             });
             if (hasUnread) setNotifications(prev => ({ ...prev, '日誌': true }));
           }
-        }));
+        }, logErr('notifications')));
         setLoading(false);
         if (activeTripId === TRIP_ID && !localStorage.getItem('tripmori_imported')) {
           runImport().then(() => localStorage.setItem('tripmori_imported', '1'));

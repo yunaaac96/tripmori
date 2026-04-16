@@ -91,6 +91,12 @@ service cloud.firestore {
         allow write:  if canWrite(tripId);
       }
 
+      // ── /notifications ────────────────────────────────────────────────────
+      match /notifications/{notifId} {
+        allow read:   if isAuthed();
+        allow write:  if canWrite(tripId);
+      }
+
       // ── /expenses ─────────────────────────────────────────────────────────
       // Private expense protection:
       //   list  → allow all authenticated users (needed for onSnapshot collection query)
