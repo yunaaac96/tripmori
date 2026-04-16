@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, dynFont } from '../../App';
+import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -529,18 +529,6 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         ...orderedMemberNames.filter(n => n !== currentUserName),
       ];
 
-  const handleMemberReorder = async (name: string, dir: 'left' | 'right') => {
-    if (!isOwner || !firestore.updateDoc || !firestore.doc || !db || !TRIP_ID) return;
-    const idx = orderedMemberNames.indexOf(name);
-    const newOrder = [...orderedMemberNames];
-    const swapIdx = dir === 'left' ? idx - 1 : idx + 1;
-    if (swapIdx < 0 || swapIdx >= newOrder.length) return;
-    [newOrder[idx], newOrder[swapIdx]] = [newOrder[swapIdx], newOrder[idx]];
-    try {
-      await firestore.updateDoc(firestore.doc(db, 'trips', TRIP_ID), { memberOrder: newOrder });
-    } catch (e) { console.error(e); }
-  };
-
   // Build per-member settlement totals for card display (consistent with suggestion row)
   const settlementReceive: Record<string, number> = {};
   const settlementPay: Record<string, number> = {};
@@ -945,19 +933,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 const isCreditor = ms.net >= 0;
                 const displayAmt = isCreditor ? toReceive : toPay;
                 const isMe = name === currentUserName;
-                const cardIdx = orderedMemberNames.indexOf(name);
                 return (
                   <div key={ms.name} style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, flexShrink: 0, width: 160, scrollSnapAlign: 'start', border: isMe ? `2px solid ${C.sageDark}` : undefined }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', marginBottom: 6 }}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{ms.name}{isMe ? ' 👤' : ''}</p>
-                      {isOwner && (
-                        <div style={{ display: 'flex', gap: 2 }}>
-                          <button onClick={() => handleMemberReorder(name, 'left')} disabled={cardIdx === 0}
-                            style={{ width: 20, height: 20, borderRadius: 5, border: 'none', background: cardIdx === 0 ? 'transparent' : C.cream, color: C.barkLight, cursor: cardIdx === 0 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: cardIdx === 0 ? 0.3 : 1 }}>‹</button>
-                          <button onClick={() => handleMemberReorder(name, 'right')} disabled={cardIdx === orderedMemberNames.length - 1}
-                            style={{ width: 20, height: 20, borderRadius: 5, border: 'none', background: cardIdx === orderedMemberNames.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: cardIdx === orderedMemberNames.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: cardIdx === orderedMemberNames.length - 1 ? 0.3 : 1 }}>›</button>
-                        </div>
-                      )}
                     </div>
                     <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>已付出</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 6px' }}>NT$ {ms.paid.toLocaleString()}</p>
@@ -1094,7 +1073,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                        <p style={{ fontSize: dynFont(e.description || ''), fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0 }}>{e.description}</p>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, wordBreak: 'break-word' }}>{e.description}</p>
                         {isPrivateExpense && (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A' }}>🔒 私人</span>
                         )}
@@ -1144,9 +1123,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
                   {/* Receipt thumbnail */}
                   {e.receiptUrl && !isVisitor && (
-                    <div style={{ marginTop: 6 }}>
-                      <img src={e.receiptUrl} alt="附件" onClick={() => setLightboxUrl(e.receiptUrl)}
-                        style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 8, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }} />
+                    <div onClick={() => setLightboxUrl(e.receiptUrl)} style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${C.creamDark}`, cursor: 'pointer', display: 'flex', alignItems: 'center', background: 'var(--tm-input-bg)' }}>
+                      <img src={e.receiptUrl} alt="附件" style={{ width: 56, height: 56, objectFit: 'cover', flexShrink: 0 }} />
+                      <div style={{ padding: '0 12px', flex: 1 }}>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, margin: '0 0 2px' }}>📎 收據附件</p>
+                        <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>點擊查看完整圖片</p>
+                      </div>
+                      <span style={{ fontSize: 18, marginRight: 12, color: C.barkLight }}>›</span>
                     </div>
                   )}
 

@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { auth } from '../../config/firebase';
-import { C, FONT, cardStyle, ExpandableNotes, dynFont } from '../../App';
+import { C, FONT, cardStyle, ExpandableNotes } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -607,7 +607,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
               <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <p style={{ fontSize: dynFont(h.name || ''), fontWeight: 700, color: C.bark, margin: 0 }}>{h.name}</p>
+                <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, wordBreak: 'break-word' }}>{h.name}</p>
                 {(h.nameLocal || h.nameJa) && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameLocal || h.nameJa}</p>}
                 {h.address && <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>📍 {h.address}</p>}
               </div>
@@ -802,7 +802,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   {b.used && <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: 10, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 4px', fontWeight: 700 }}>✓</span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: dynFont(b.title || ''), fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none' }}>{b.title}</p>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none', wordBreak: 'break-word' }}>{b.title}</p>
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
                     <span style={{ fontSize: 10, fontWeight: 700, color: typeInfo.color, background: typeInfo.bg, borderRadius: 6, padding: '1px 6px' }}>{typeInfo.label}</span>
                     {b.used && <span style={{ fontSize: 10, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', borderRadius: 6, padding: '1px 6px' }}>✅ 已使用</span>}
