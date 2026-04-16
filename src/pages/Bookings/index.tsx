@@ -440,7 +440,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           參與人 <span style={{ fontWeight: 400, opacity: 0.7 }}>(選填)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
-          {members.map((m: any) => {
+          {[...members].sort((a: any, b: any) => { if (a.id === myMember?.id) return -1; if (b.id === myMember?.id) return 1; return 0; }).map((m: any) => {
             const sel = value.includes(m.id);
             const canToggle = isOwner || myMember?.id === m.id;
             return (
