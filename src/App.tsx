@@ -388,13 +388,17 @@ function App() {
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
           ['events', setEvents], ['members', setMembers], ['bookings', setBookings],
-          ['expenses', setExpenses], ['journals', setJournals], ['lists', setLists],
+          ['journals', setJournals], ['lists', setLists],
         ];
         unsubs = cols.map(([col, setter]) =>
           onSnapshot(collection(tripRef, col), snap => {
             setter(snap.docs.map(d => ({ id: d.id, ...d.data() })));
           })
         );
+        // Expenses: include metadata changes to track pending writes (offline indicator)
+        unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
+          setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
+        }));
         unsubs.push(onSnapshot(collection(tripRef, 'memberNotes'), snap => {
           const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
           setMemberNotes(items);

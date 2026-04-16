@@ -5,6 +5,18 @@ import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
+import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft } from '@fortawesome/free-solid-svg-icons';
+
+const CATEGORY_ICONS: Record<string, any> = {
+  transport: faBus,
+  food: faUtensils,
+  attraction: faTicket,
+  shopping: faBagShopping,
+  hotel: faBed,
+  other: faEllipsis,
+  settlement: faArrowRightArrowLeft,
+};
 
 type SplitMode = 'equal' | 'weighted' | 'amount';
 type SortMode = 'newest' | 'oldest' | 'largest';
@@ -177,9 +189,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [expandedExpense, setExpandedExpense] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
 
-  // Filter / Sort
+  // Filter / Sort / View
   const [filterCat, setFilterCat] = useState<string>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
+  const [expenseView, setExpenseView] = useState<'all' | 'mine'>('all');
 
   // Pie chart — auto-expand for visitors
   const [showPie, setShowPie] = useState(false);
@@ -187,24 +200,39 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
+  const [settlingId, setSettlingId] = useState<string | null>(null);
 
   // Member card scroll ref (for arrow nav)
   const memberScrollRef = useRef<HTMLDivElement>(null);
 
   // Receipt photo attachment
   const descRef = useRef<HTMLInputElement>(null);
+  const amtRef  = useRef<HTMLInputElement>(null);
   const receiptRef = useRef<HTMLInputElement>(null);
   const [receiptUploading, setReceiptUploading] = useState(false);
 
   // Lightbox for receipt preview
   const [lightboxUrl, setLightboxUrl] = useState<string | null>(null);
 
+  // Live IDR exchange rate
+  const [liveIdrRate, setLiveIdrRate] = useState<number | null>(null);
+
+  // Auto-focus amount when form opens
   useEffect(() => {
     if (showForm) {
-      const t = setTimeout(() => { descRef.current?.focus(); }, 350);
+      const t = setTimeout(() => { amtRef.current?.focus(); }, 350);
       return () => clearTimeout(t);
     }
   }, [showForm]);
+
+  // Fetch live IDR → TWD rate when IDR is selected
+  useEffect(() => {
+    if (!showForm || form.currency !== 'IDR') return;
+    fetch('https://open.er-api.com/v6/latest/IDR')
+      .then(r => r.json())
+      .then(data => { if (data.rates?.TWD) setLiveIdrRate(data.rates.TWD); })
+      .catch(() => {});
+  }, [showForm, form.currency]);
 
   const memberNames: string[] = members.map((m: any) => m.name);
 
@@ -304,14 +332,17 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // ── Form helpers ─────────────────────────────────────────────────────────
   const set = (key: string, val: any) => setForm(p => ({ ...p, [key]: val }));
 
+  // splitWith=[] means all members; clicking deselects (excludes) a member
+  const isMemberSelected = (name: string) =>
+    form.splitWith.length === 0 || form.splitWith.includes(name);
+
   const toggleSplitMember = (name: string) => {
-    setForm(p => ({
-      ...p,
-      splitWith: p.splitWith.includes(name)
-        ? p.splitWith.filter(n => n !== name)
-        : [...p.splitWith, name],
-      percentages: {},
-    }));
+    setForm(p => {
+      const current = p.splitWith.length === 0 ? [...memberNames] : [...p.splitWith];
+      const next = current.includes(name) ? current.filter(n => n !== name) : [...current, name];
+      // If all selected again, collapse to empty (semantically identical)
+      return { ...p, splitWith: next.length === memberNames.length ? [] : next, percentages: {} };
+    });
   };
 
   const setCustomAmount = (name: string, val: string) => {
@@ -435,6 +466,15 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
   };
 
+  // ── "與我有關" filter ─────────────────────────────────────────────────────
+  const isMyExpense = (e: any): boolean => {
+    if (e.isPrivate) return !!(e.privateOwnerUid && e.privateOwnerUid === googleUid);
+    if (!currentUserName) return false;
+    if (e.payer === currentUserName) return true;
+    const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+    return sw.includes(currentUserName);
+  };
+
   // ── Settlement add ───────────────────────────────────────────────────────
   const handleAddSettlement = async (from: string, to: string, amount: string, currency: string) => {
     const amt = Number(amount);
@@ -455,6 +495,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       createdAt: Timestamp.now(),
     };
     await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
+  };
+
+  const handleQuickSettle = async (from: string, to: string, amount: number) => {
+    const key = `${from}-${to}`;
+    setSettlingId(key);
+    await handleAddSettlement(from, to, String(amount), 'TWD');
+    setSettlingId(null);
   };
 
   // ── Stats ────────────────────────────────────────────────────────────────
@@ -542,8 +589,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const visibleExpenses = expenses.filter((e: any) =>
     !e.isPrivate || (e.privateOwnerUid && e.privateOwnerUid === googleUid)
   );
-  const nonSettlementExpenses = visibleExpenses.filter((e: any) => e.category !== 'settlement');
-  const sharedExpenses = visibleExpenses.filter((e: any) => !e.isPrivate);
+  // Base: further filter by "與我有關" if selected
+  const baseExpenses = expenseView === 'mine'
+    ? visibleExpenses.filter(isMyExpense)
+    : visibleExpenses;
+
+  const nonSettlementExpenses = baseExpenses.filter((e: any) => e.category !== 'settlement');
+  const sharedExpenses = baseExpenses.filter((e: any) => !e.isPrivate);
   const totalTWD = sharedExpenses.reduce(
     (s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')),
     0
@@ -555,6 +607,20 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     return { key, label: info.label, emoji: info.emoji, value: total };
   }).filter(d => d.value > 0);
   const catTotal = categoryBreakdown.reduce((s, d) => s + d.value, 0);
+
+  // ── Settlement grouping (by creditor) ────────────────────────────────────
+  const settlementByCreditor = settlements.reduce((groups, s) => {
+    if (!groups[s.to]) groups[s.to] = [];
+    groups[s.to].push(s);
+    return groups;
+  }, {} as Record<string, { from: string; to: string; amount: number }[]>);
+  const creditorOrder = Object.keys(settlementByCreditor).sort((a, b) => {
+    if (a === currentUserName) return -1;
+    if (b === currentUserName) return 1;
+    return 0;
+  });
+  const getMemberColor = (name: string) => members.find((m: any) => m.name === name)?.color || C.sageLight;
+  const getMemberAvatar = (name: string) => members.find((m: any) => m.name === name)?.avatarUrl || null;
 
   // ── Filter / Sort logic ──────────────────────────────────────────────────
   const FILTER_CATS = [
@@ -568,7 +634,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     { key: 'settlement', label: '結清' },
   ];
 
-  const filteredExpenses = visibleExpenses
+  const filteredExpenses = baseExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
     .sort((a: any, b: any) => {
       if (sortMode === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
@@ -652,10 +718,17 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               {/* Amount */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
-                <input style={iStyle} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
+                <input ref={amtRef} style={{ ...iStyle, textAlign: 'right' }} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
                 {form.amount && (
                   <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0', textAlign: 'right' }}>
-                    ≈ NT$ {toTWD(Number(form.amount), form.currency).toLocaleString()}
+                    ≈ NT$ {form.currency === 'IDR' && liveIdrRate
+                      ? Math.round(Number(form.amount) * liveIdrRate).toLocaleString()
+                      : toTWD(Number(form.amount), form.currency).toLocaleString()}
+                    {form.currency === 'IDR' && (
+                      <span style={{ fontSize: 10, marginLeft: 4, color: liveIdrRate ? C.sageDark : C.barkLight }}>
+                        {liveIdrRate ? '(即時匯率)' : '(參考匯率)'}
+                      </span>
+                    )}
                   </p>
                 )}
               </div>
@@ -686,8 +759,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   {Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => (
                     <button key={key} onClick={() => set('category', key)}
                       className={form.category === key ? `tm-cat-active-${key}` : ''}
-                      style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: form.category === key ? '#333' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                      {info.emoji} {info.label}
+                      style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: form.category === key ? '#333' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                      <FontAwesomeIcon icon={CATEGORY_ICONS[key] || CATEGORY_ICONS.other} style={{ fontSize: 11 }} />
+                      {info.label}
                     </button>
                   ))}
                 </div>
@@ -720,17 +794,20 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   ))}
                 </div>
 
-                {/* Equal split: member selector */}
+                {/* Equal split: member selector — default all-selected, click to deselect */}
                 {form.splitMode === 'equal' && (
                   <div>
-                    <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>選擇分攤成員（不選則全員）</p>
+                    <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>點擊成員以剔除（預設全員分攤）</p>
                     <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                      {memberNames.map((name: string) => (
-                        <button key={name} onClick={() => toggleSplitMember(name)}
-                          style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.splitWith.includes(name) ? C.sageDark : C.creamDark}`, background: form.splitWith.includes(name) ? C.sage : 'var(--tm-card-bg)', color: form.splitWith.includes(name) ? 'white' : C.bark, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
-                          {name}
-                        </button>
-                      ))}
+                      {memberNames.map((name: string) => {
+                        const selected = isMemberSelected(name);
+                        return (
+                          <button key={name} onClick={() => toggleSplitMember(name)}
+                            style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${selected ? C.sageDark : C.creamDark}`, background: selected ? C.sage : 'var(--tm-card-bg)', color: selected ? 'white' : C.barkLight, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, fontSize: 13, opacity: selected ? 1 : 0.55, textDecoration: selected ? 'none' : 'line-through' }}>
+                            {name}
+                          </button>
+                        );
+                      })}
                     </div>
                     {mainAmt > 0 && activeSplitMembers.length > 0 && (
                       <p style={{ fontSize: 12, color: C.barkLight, marginTop: 6 }}>
@@ -965,13 +1042,58 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
         {/* ── Settlement suggestions (hidden for visitors) ── */}
         {!isVisitor && settlements.length > 0 && (
-          <div style={{ ...cardStyle, marginBottom: 12, background: '#EAF3DE', border: '1px solid #B5CFA7' }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 6px' }}>💡 建議結算方式</p>
-            {settlements.map((s, i) => (
-              <p key={i} style={{ fontSize: 12, color: '#4A7A35', margin: '2px 0' }}>
-                {s.from} 付給 {s.to}：NT$ {s.amount.toLocaleString()}
-              </p>
-            ))}
+          <div style={{ marginBottom: 12 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} /> 建議結算方式
+            </p>
+            {creditorOrder.map(creditor => {
+              const debts = settlementByCreditor[creditor];
+              const isMyGroup = creditor === currentUserName;
+              return (
+                <div key={creditor} style={{ ...cardStyle, marginBottom: 8, background: isMyGroup ? '#E0F4FF' : '#EAF3DE', border: `1px solid ${isMyGroup ? '#9AC8E8' : '#B5CFA7'}`, padding: '12px 14px' }}>
+                  {/* Creditor header */}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: getMemberColor(creditor), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                      {getMemberAvatar(creditor)
+                        ? <img src={getMemberAvatar(creditor)!} alt={creditor} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                        : creditor[0]?.toUpperCase()}
+                    </div>
+                    <p style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1 }}>
+                      {creditor}{isMyGroup ? ' 👤' : ''}
+                    </p>
+                    <span style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
+                  </div>
+                  {/* Debtors */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {debts.map((debt, i) => {
+                      const sKey = `${debt.from}-${debt.to}`;
+                      const isMe = debt.from === currentUserName;
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', borderRadius: 10, padding: '8px 10px' }}>
+                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: getMemberColor(debt.from), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                            {getMemberAvatar(debt.from)
+                              ? <img src={getMemberAvatar(debt.from)!} alt={debt.from} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : debt.from[0]?.toUpperCase()}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{debt.from}{isMe ? ' 👤' : ''}</p>
+                            <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
+                          </div>
+                          {!isReadOnly && (
+                            <button
+                              onClick={() => handleQuickSettle(debt.from, debt.to, debt.amount)}
+                              disabled={settlingId === sKey}
+                              style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: settlingId === sKey ? C.creamDark : '#4A7A35', color: settlingId === sKey ? C.barkLight : 'white', fontSize: 11, fontWeight: 700, cursor: settlingId === sKey ? 'default' : 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                              {settlingId === sKey ? '處理中...' : '✓ 確認還款'}
+                            </button>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         )}
 
@@ -992,7 +1114,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   {categoryBreakdown.map(d => (
                     <div key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                       <div style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[d.key] || '#C8C8C8', flexShrink: 0 }} />
-                      <span style={{ fontSize: 11, color: C.bark, flex: 1 }}>{d.emoji} {d.label}</span>
+                      <FontAwesomeIcon icon={CATEGORY_ICONS[d.key] || CATEGORY_ICONS.other} style={{ fontSize: 11, color: C.barkLight, width: 12 }} />
+                      <span style={{ fontSize: 11, color: C.bark, flex: 1 }}>{d.label}</span>
                       <span style={{ fontSize: 11, color: C.earth, fontWeight: 600 }}>{catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%</span>
                     </div>
                   ))}
@@ -1003,12 +1126,25 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
                 {categoryBreakdown.map(d => (
                   <span key={d.key} className={`tm-expense-chip tm-expense-chip-${d.key}`}
-                    style={{ fontSize: 11, background: EXPENSE_CATEGORY_MAP[d.key]?.bg || '#F0F0F0', borderRadius: 8, padding: '5px 10px', color: C.bark, fontWeight: 600 }}>
-                    {d.emoji} {d.label} {catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%
+                    style={{ fontSize: 11, background: EXPENSE_CATEGORY_MAP[d.key]?.bg || '#F0F0F0', borderRadius: 8, padding: '5px 10px', color: C.bark, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                    <FontAwesomeIcon icon={CATEGORY_ICONS[d.key] || CATEGORY_ICONS.other} style={{ fontSize: 10 }} />
+                    {d.label} {catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%
                   </span>
                 ))}
               </div>
             )}
+          </div>
+        )}
+
+        {/* ── Segmented control: 全團 / 與我有關 ── */}
+        {!isVisitor && currentUserName && (
+          <div style={{ display: 'flex', background: 'var(--tm-cream)', borderRadius: 14, padding: 3, marginBottom: 12 }}>
+            <button onClick={() => setExpenseView('all')} style={{ flex: 1, padding: '9px 8px', borderRadius: 11, border: 'none', background: expenseView === 'all' ? 'var(--tm-card-bg)' : 'transparent', color: expenseView === 'all' ? C.bark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, boxShadow: expenseView === 'all' ? C.shadowSm : 'none', transition: 'all 0.18s' }}>
+              👥 全團支出
+            </button>
+            <button onClick={() => setExpenseView('mine')} style={{ flex: 1, padding: '9px 8px', borderRadius: 11, border: 'none', background: expenseView === 'mine' ? 'var(--tm-card-bg)' : 'transparent', color: expenseView === 'mine' ? C.bark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, boxShadow: expenseView === 'mine' ? C.shadowSm : 'none', transition: 'all 0.18s' }}>
+              👤 與我有關
+            </button>
           </div>
         )}
 
@@ -1067,13 +1203,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: isSettlement ? '#EAF3DE' : cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 18, flexShrink: 0 }}>
-                      {isSettlement ? '💸' : cat?.emoji}
+                    <div style={{ width: 40, height: 40, borderRadius: 12, background: isSettlement ? '#EAF3DE' : cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <FontAwesomeIcon icon={CATEGORY_ICONS[isSettlement ? 'settlement' : (e.category || 'other')] || CATEGORY_ICONS.other} style={{ fontSize: 16, color: C.bark, opacity: 0.75 }} />
                     </div>
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
                         <p style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, wordBreak: 'break-word' }}>{e.description}</p>
+                        {e._pending && (
+                          <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>↻</span>
+                        )}
                         {isPrivateExpense && (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A' }}>🔒 私人</span>
                         )}
