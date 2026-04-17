@@ -30,7 +30,7 @@
   ],
   "rewrites": [
     {
-      "source": "/((?!assets|favicon\\.ico|ots-qr\\.png).*)",
+      "source": "/((?!assets|favicon\\.ico|ots-qr\\.png|sw\\.js|firebase-messaging-sw\\.js|manifest\\.webmanifest|workbox-.*).*)",
       "destination": "/index.html"
     }
   ]
