@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLock, faPen, faTrashCan, faClipboardList, faFileImport, faUsers } from '@fortawesome/free-solid-svg-icons';
+import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLock, faPen, faTrashCan, faClipboardList, faFileImport, faUsers, faAddressBook, faCalendarPlus, faArrowRight, faTowerBroadcast, faPlus } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { db, auth } from '../../config/firebase';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp, query, where, getDocs } from 'firebase/firestore';
@@ -571,7 +571,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
   // ── Views ──────────────────────────────────────────────────────
 
   if (view === 'create-step2') return (
-    <Screen title="👤 建立旅伴名單" onBack={() => {}} hideBack stepLabel="步驟 2 / 3">
+    <Screen title={<><FontAwesomeIcon icon={faAddressBook} style={{ marginRight: 8 }} />建立旅伴名單</>} onBack={() => {}} hideBack stepLabel="步驟 2 / 3">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         {/* ── 自己的卡片 ── */}
         <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: 0.5 }}>我的卡片</p>
@@ -676,7 +676,7 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},13:00,午餐,food,
 ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,地點`;
 
   if (view === 'create-step3') return (
-    <Screen title="📅 匯入行程（選填）" onBack={() => setView('create-step2')} stepLabel="步驟 3 / 3">
+    <Screen title={<><FontAwesomeIcon icon={faCalendarPlus} style={{ marginRight: 8 }} />匯入行程（選填）</>} onBack={() => setView('create-step2')} stepLabel="步驟 3 / 3">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.6 }}>
           若已有行程規劃，可貼上資料一次匯入。留空直接跳過即可。
@@ -711,7 +711,7 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
 
         <button onClick={handleBulkImport} disabled={bulkImporting}
           style={{ padding: 14, borderRadius: 14, border: 'none', background: bulkText.trim() ? C.earth : C.sage, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: bulkImporting ? 0.6 : 1 }}>
-          {bulkImporting ? '匯入中...' : bulkText.trim() ? <><FontAwesomeIcon icon={faFileImport} style={{ marginRight: 6 }} />匯入並進入行程</> : '🌸 開始規劃旅行 →'}
+          {bulkImporting ? '匯入中...' : bulkText.trim() ? <><FontAwesomeIcon icon={faFileImport} style={{ marginRight: 6 }} />匯入並進入行程</> : <><FontAwesomeIcon icon={faArrowRight} style={{ marginRight: 6 }} />開始規劃旅行</>}
         </button>
         <button onClick={() => createdProject && onEnterProject(createdProject)}
           style={{ padding: 12, borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
@@ -804,7 +804,7 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
               value={newRate} onChange={e => setNewRate(e.target.value)} />
             <button onClick={handleFetchRate} disabled={fetchingRate}
               style={{ padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, flexShrink: 0, opacity: fetchingRate ? 0.6 : 1 }}>
-              {fetchingRate ? '查詢中' : '📡 即時查詢'}
+              {fetchingRate ? '查詢中' : <><FontAwesomeIcon icon={faTowerBroadcast} style={{ marginRight: 4 }} />即時查詢</>}
             </button>
           </div>
           <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>留空或稍後在記帳頁更新</p>
@@ -812,7 +812,7 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
         {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
         <button onClick={handleCreate} disabled={busy}
           style={{ padding: 14, borderRadius: 14, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: busy ? 0.6 : 1 }}>
-          {busy ? '建立中...' : '🌸 建立旅行'}
+          {busy ? '建立中...' : <><FontAwesomeIcon icon={faPlus} style={{ marginRight: 6 }} />建立旅行</>}
         </button>
       </div>
     </Screen>
@@ -866,8 +866,12 @@ ${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,�
             </div>
           ) : (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ padding: '10px 14px', borderRadius: 12, background: '#FFF8E1', marginBottom: 10, fontSize: 12, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FontAwesomeIcon icon={faLightbulb} />建立或編輯行程需要登入 Google 帳號，訪客可直接使用分享連結進入
+              <div style={{ padding: '12px 14px', borderRadius: 14, background: '#FFF8E1', marginBottom: 10, border: '1px solid #F0D080' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#9A6800', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <FontAwesomeIcon icon={faLightbulb} />溫馨提醒
+                </p>
+                <p style={{ fontSize: 12, color: '#9A6800', margin: '0 0 3px', lineHeight: 1.6 }}>若要「建立」或「編輯」行程，請先登入 Google 帳號。</p>
+                <p style={{ fontSize: 12, color: '#9A6800', margin: 0, lineHeight: 1.6 }}>訪客仍可透過「分享連結」直接進入預覽行程。</p>
               </div>
               {error && <p style={{ fontSize: 12, color: '#C0392B', margin: '0 0 8px' }}>{error}</p>}
               <button onClick={handleGoogleSignIn} disabled={signingIn}

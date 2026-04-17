@@ -6,7 +6,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -589,13 +589,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     ...memberOrder.filter((n: string) => memberNames.includes(n)),
     ...memberNames.filter((n: string) => !memberOrder.includes(n)),
   ];
-  // If not owner, put current user's card first
-  const displayMemberNames = isOwner
-    ? orderedMemberNames
-    : [
-        ...orderedMemberNames.filter(n => n === currentUserName),
-        ...orderedMemberNames.filter(n => n !== currentUserName),
-      ];
+  // Always put current user's card first (own card top rule)
+  const displayMemberNames = [
+    ...orderedMemberNames.filter(n => n === currentUserName),
+    ...orderedMemberNames.filter(n => n !== currentUserName),
+  ];
 
   // Build per-member settlement totals for card display (consistent with suggestion row)
   const settlementReceive: Record<string, number> = {};
@@ -857,13 +855,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   {(['cash', 'card'] as const).map(m => (
                     <button key={m} onClick={() => set('paymentMethod', m)}
                       style={{ flex: 1, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.paymentMethod === m ? C.sageDark : C.creamDark}`, background: form.paymentMethod === m ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                      {m === 'cash' ? '💵 現金' : '💳 刷卡'}
+                      {m === 'cash' ? <><FontAwesomeIcon icon={faMoneyBill1} style={{ marginRight: 5 }} />現金</> : <><FontAwesomeIcon icon={faCreditCard} style={{ marginRight: 5 }} />刷卡</>}
                     </button>
                   ))}
                 </div>
                 {form.paymentMethod === 'card' && form.currency !== 'TWD' && (
                   <div style={{ marginTop: 8, background: '#FFF8E0', borderRadius: 10, padding: '7px 12px', border: '1px solid #E8C96A', display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <span style={{ fontSize: 13 }}>💳</span>
+                    <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 13, color: '#9A6800' }} />
                     <div>
                       <p style={{ fontSize: 11, fontWeight: 700, color: '#9A6800', margin: 0 }}>海外刷卡手續費提醒</p>
                       <p style={{ fontSize: 10, color: '#9A6800', margin: '1px 0 0' }}>
@@ -910,9 +908,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               {!form.isPrivate && <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>分帳方式</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
-                  {([['equal', '⚖️', '均分'], ['weighted', '%', '比例'], ['amount', '✍️', '自訂金額']] as [SplitMode, string, string][]).map(([mode, icon, label]) => (
+                  {([
+                    ['equal',    <FontAwesomeIcon icon={faScaleBalanced} />, '均分'],
+                    ['weighted', <FontAwesomeIcon icon={faPercent} />,       '比例'],
+                    ['amount',   <FontAwesomeIcon icon={faPen} />,           '自訂金額'],
+                  ] as [SplitMode, React.ReactNode, string][]).map(([mode, icon, label]) => (
                     <button key={mode} onClick={() => set('splitMode', mode)}
-                      style={{ padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${form.splitMode === mode ? C.sageDark : C.creamDark}`, background: form.splitMode === mode ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      style={{ padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${form.splitMode === mode ? C.sageDark : C.creamDark}`, background: form.splitMode === mode ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                       {icon} {label}
                     </button>
                   ))}
@@ -1061,7 +1063,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
               {/* Receipt photo attachment */}
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>📎 附件（發票／收據）</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}><FontAwesomeIcon icon={faPaperclip} style={{ marginRight: 4 }} />附件（發票／收據）</label>
                 <input ref={receiptRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
                   onChange={e => { if (e.target.files?.[0]) handleReceiptUpload(e.target.files[0]); e.target.value = ''; }} />
                 {form.receiptUrl ? (
@@ -1101,7 +1103,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       )}
 
       {/* ── Page header ── */}
-      <PageHeader title="旅行記帳" subtitle="支出記錄・分帳結算" emoji="💰" color={C.sage}>
+      <PageHeader title="旅行記帳" subtitle="支出記錄・分帳結算" emoji={<FontAwesomeIcon icon={faMoneyBill1} />} color={C.sage}>
         {!isVisitor && (
           <div style={{ marginTop: 12, background: 'rgba(255,255,255,0.2)', borderRadius: 14, padding: '12px 14px' }}>
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '0 0 2px' }}>
@@ -1145,7 +1147,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   <div key={ms.name} onClick={() => setMemberDetailName(ms.name)}
                     style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, flexShrink: 0, width: 160, scrollSnapAlign: 'start', border: isMe ? `2px solid ${C.sageDark}` : undefined, cursor: 'pointer', userSelect: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 1 }}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{ms.name}{isMe ? ' 👤' : ''}</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{ms.name}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
                     </div>
                     <p style={{ fontSize: 9, color: C.barkLight, margin: '0 0 6px' }}>點擊查看明細 ›</p>
                     <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
@@ -1194,7 +1196,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         : creditor[0]?.toUpperCase()}
                     </div>
                     <p style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1 }}>
-                      {creditor}{isMyGroup ? ' 👤' : ''}
+                      {creditor}{isMyGroup ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
                     </p>
                     <span style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
                   </div>
@@ -1211,7 +1213,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                               : debt.from[0]?.toUpperCase()}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{debt.from}{isMe ? ' 👤' : ''}</p>
+                            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
                             <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
                           </div>
                           {!isReadOnly && (
@@ -1278,7 +1280,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               <FontAwesomeIcon icon={faUsers} style={{ fontSize: 11, marginRight: 5 }} />全團支出
             </button>
             <button onClick={() => setExpenseView('mine')} style={{ flex: 1, padding: '9px 8px', borderRadius: 11, border: 'none', background: expenseView === 'mine' ? 'var(--tm-card-bg)' : 'transparent', color: expenseView === 'mine' ? C.bark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, boxShadow: expenseView === 'mine' ? C.shadowSm : 'none', transition: 'all 0.18s' }}>
-              👤 與我有關
+              <FontAwesomeIcon icon={faUser} style={{ fontSize: 11, marginRight: 5 }} />與我有關
             </button>
           </div>
         )}
@@ -1413,7 +1415,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     <div onClick={() => setLightboxUrl(e.receiptUrl)} style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${C.creamDark}`, cursor: 'pointer', display: 'flex', alignItems: 'center', background: 'var(--tm-input-bg)' }}>
                       <img src={e.receiptUrl} alt="附件" style={{ width: 56, height: 56, objectFit: 'cover', flexShrink: 0 }} />
                       <div style={{ padding: '0 12px', flex: 1 }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, margin: '0 0 2px' }}>📎 收據附件</p>
+                        <p style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, margin: '0 0 2px' }}><FontAwesomeIcon icon={faPaperclip} style={{ marginRight: 4 }} />收據附件</p>
                         <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>點擊查看完整圖片</p>
                       </div>
                       <span style={{ fontSize: 18, marginRight: 12, color: C.barkLight }}>›</span>

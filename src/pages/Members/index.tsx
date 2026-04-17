@@ -454,7 +454,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       <PageHeader
         title="旅伴"
         subtitle={headerSubtitle}
-        emoji="👥"
+        emoji={<FontAwesomeIcon icon={faUsers} />}
         color={C.earth}
       />
 

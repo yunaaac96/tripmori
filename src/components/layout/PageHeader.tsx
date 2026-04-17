@@ -1,12 +1,13 @@
+import type { ReactNode } from 'react';
 import { FONT } from '../../App';
 
 interface Props {
   title: string;
   subtitle?: string;
-  subtitleAction?: React.ReactNode;
-  emoji?: string;
+  subtitleAction?: ReactNode;
+  emoji?: ReactNode;
   color: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 export default function PageHeader({ title, subtitle, subtitleAction, emoji, color, children }: Props) {

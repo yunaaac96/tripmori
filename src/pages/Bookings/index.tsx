@@ -6,7 +6,7 @@ import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap, faPhone, faQrcode, faArrowRightToBracket, faArrowRightFromBracket, faClock } from '@fortawesome/free-solid-svg-icons';
+import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap, faPhone, faQrcode, faArrowRightToBracket, faArrowRightFromBracket, faClock, faRotateLeft, faCalendarDays, faMoneyBill1 } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
 const BOOKING_TYPE_ICONS: Record<string, IconDefinition> = {
@@ -517,7 +517,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         </div>
       )}
 
-      <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji="✈️" color={C.sky} />
+      <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji={<FontAwesomeIcon icon={faPlane} />} color={C.sky} />
 
       <div style={{ padding: '8px 16px 80px' }}>
 
@@ -563,7 +563,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </div>
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <div style={{ borderTop: '2px dashed rgba(255,255,255,0.5)', position: 'relative' }}>
-                    <span style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', fontSize: 14, color: 'white' }}><FontAwesomeIcon icon={faPlane} /></span>
+                    <span style={{ position: 'absolute', top: -9, left: '50%', transform: 'translateX(-50%)', fontSize: 16, color: 'white', lineHeight: 1 }}><FontAwesomeIcon icon={faPlane} /></span>
                   </div>
                 </div>
                 <div style={{ textAlign: 'center', minWidth: 68 }}>
@@ -576,7 +576,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               {(() => {
                 const ptc = (f.participants || []).map((id: string) => members.find((m: any) => m.id === id)).filter(Boolean);
                 return ptc.length > 0 ? (
-                  <div style={{ display: 'flex', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.2)' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
+                    onClick={e => { e.stopPropagation(); setParticipantPopover(participantPopover ? null : ptc.map((m: any) => m.name)); }}>
                     {ptc.map((m: any, i: number) => (
                       <div key={m.id} title={m.name} style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: '2.5px solid white', background: m.color || 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: i === 0 ? 0 : -8, flexShrink: 0 }}>
                         {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -847,7 +848,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 /* Visitor: show date only, hide confirmCode/cost/qr */
                 b.date && (
                   <div className="tm-booking-date" style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px', marginBottom: 8, display: 'inline-block' }}>
-                    <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📅 日期</p>
+                    <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}><FontAwesomeIcon icon={faCalendarDays} style={{ marginRight: 3 }} />日期</p>
                     <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
                   </div>
                 )
@@ -856,7 +857,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <div style={{ display: 'grid', gridTemplateColumns: [b.date, b.confirmCode, b.cost].filter(Boolean).length >= 3 ? '1fr 1fr 1fr' : [b.date, b.confirmCode, b.cost].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr', gap: 6, marginBottom: 8 }}>
                     {b.date && (
                       <div className="tm-booking-date" style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px' }}>
-                        <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📅 日期</p>
+                        <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}><FontAwesomeIcon icon={faCalendarDays} style={{ marginRight: 3 }} />日期</p>
                         <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
                       </div>
                     )}
@@ -924,7 +925,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                         {(['去程', '回程'] as const).map(dir => (
                           <button key={dir} onClick={() => setFF(idx, 'direction', dir)}
                             style={{ padding: '5px 14px', borderRadius: 10, border: `1.5px solid ${f.direction === dir ? C.sageDark : C.creamDark}`, background: f.direction === dir ? C.sage : 'var(--tm-card-bg)', color: f.direction === dir ? 'white' : C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                            {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : '↩️ 回程'}
+                            {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : <><FontAwesomeIcon icon={faRotateLeft} style={{ marginRight: 4 }} />回程</>}
                           </button>
                         ))}
                       </div>
@@ -1129,7 +1130,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 {(['去程', '回程'] as const).map(dir => (
                   <button key={dir} onClick={() => setSF('direction', dir)}
                     style={{ padding: '5px 18px', borderRadius: 10, border: `1.5px solid ${singleFlightForm.direction === dir ? C.sageDark : C.creamDark}`, background: singleFlightForm.direction === dir ? C.sage : 'var(--tm-card-bg)', color: singleFlightForm.direction === dir ? 'white' : C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                    {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : '↩️ 回程'}
+                    {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : <><FontAwesomeIcon icon={faRotateLeft} style={{ marginRight: 4 }} />回程</>}
                   </button>
                 ))}
               </div>
@@ -1239,7 +1240,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       {expensePrompt && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: '0 20px' }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 360, fontFamily: FONT, boxSizing: 'border-box' }}>
-            <p style={{ fontSize: 20, textAlign: 'center', margin: '0 0 8px', color: C.earth }}>💰</p>
+            <p style={{ fontSize: 20, textAlign: 'center', margin: '0 0 8px', color: C.earth }}><FontAwesomeIcon icon={faMoneyBill1} /></p>
             <p style={{ fontSize: 16, fontWeight: 700, color: '#5C4A38', margin: '0 0 8px', textAlign: 'center' }}>是否新增至記帳？</p>
             <p style={{ fontSize: 13, color: '#8C7B6E', margin: '0 0 10px', textAlign: 'center', lineHeight: 1.6 }}>
               偵測到費用 <strong>{expensePrompt.currency === 'TWD' ? 'NT$' : expensePrompt.currency === 'IDR' ? 'Rp' : '¥'} {expensePrompt.amount.toLocaleString()}</strong>，是否同步新增至記帳？

@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock } from '@fortawesome/free-solid-svg-icons';
+import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList } from '@fortawesome/free-solid-svg-icons';
 
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
@@ -421,7 +421,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         </div>
       )}
 
-      <PageHeader title="旅行準備" subtitle="待辦清單・行李清單" emoji="📋" color={C.earth}>
+      <PageHeader title="旅行準備" subtitle="待辦清單・行李清單" emoji={<FontAwesomeIcon icon={faClipboardList} />} color={C.earth}>
         {allTotal > 0 && (
           <div style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -485,7 +485,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                   const clickable = activeSection === 'todo' || isOwner;
                   return (
                     <button key={m.name} onClick={() => clickable && setActive(m.name)}
-                      style={{ flexShrink: 0, padding: '4px 10px 4px 5px', borderRadius: 20, border: `1.5px solid ${active ? (m.color || C.sageDark) : C.creamDark}`, background: active ? (m.color ? m.color + '33' : C.sageLight) : 'var(--tm-card-bg)', color: active ? (m.color || C.sageDark) : C.bark, fontWeight: active ? 700 : 600, fontSize: 12, cursor: clickable ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s', outline: active ? `2px solid ${m.color || C.sageDark}` : 'none', outlineOffset: -1 }}>
+                      style={{ flexShrink: 0, padding: '4px 10px 4px 5px', borderRadius: 20, border: `1.5px solid ${active ? (m.color || C.sageDark) : C.creamDark}`, background: active ? (m.color || C.sageDark) : 'var(--tm-card-bg)', color: active ? 'white' : C.barkLight, fontWeight: active ? 700 : 600, fontSize: 12, cursor: clickable ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s', boxShadow: active ? `0 1px 6px ${m.color || C.sageDark}55` : 'none' }}>
                       <Av m={m} />
                       {m.name}
                     </button>
