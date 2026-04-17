@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -196,7 +197,12 @@ function App() {
       setAuthUid(user && !user.isAnonymous ? user.uid : null);
       if (user && !user.isAnonymous && user.email) {
         wasGoogleSignedIn.current = true;
-        syncUserTrips(user.uid, user.email);
+        // Backfill ownerUid via Admin SDK (bypasses security rules) so that
+        // legacy trips created without ownerUid become writable again.
+        const functions = getFunctions(undefined, 'us-central1');
+        httpsCallable(functions, 'claimOwnership')()
+          .then(() => syncUserTrips(user.uid, user.email!))
+          .catch(() => syncUserTrips(user.uid, user.email!)); // always sync, even if claim fails
 
         // ── Complete pending key upgrade if a validated key is waiting ──
         if (pendingKeyRef.current) {
