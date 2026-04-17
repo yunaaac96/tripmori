@@ -305,6 +305,20 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     { id: 'packing', label: <><FontAwesomeIcon icon={faSuitcase} style={{ fontSize: 12, marginRight: 4 }} />行李</>, items: packing },
   ];
 
+  // Visitor mode: hide all planning content
+  if (isReadOnly) {
+    return (
+      <div style={{ fontFamily: FONT }}>
+        <PageHeader title="旅行準備" subtitle="待辦清單・行李清單" emoji={<FontAwesomeIcon icon={faClipboardList} />} color={C.earth} />
+        <div style={{ padding: '60px 20px', textAlign: 'center' }}>
+          <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
+          <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>準備清單僅旅伴可查看</p>
+          <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>請輸入協作金鑰加入旅行團</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ fontFamily: FONT }}>
 

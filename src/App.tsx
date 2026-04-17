@@ -197,14 +197,11 @@ function App() {
       setAuthUid(user && !user.isAnonymous ? user.uid : null);
       if (user && !user.isAnonymous && user.email) {
         wasGoogleSignedIn.current = true;
-        // Backfill ownerUid via Admin SDK (bypasses security rules) so that
-        // legacy trips created without ownerUid become writable again.
-        const functions = getFunctions(undefined, 'us-central1');
-        httpsCallable(functions, 'claimOwnership')()
-          .then(() => syncUserTrips(user.uid, user.email!))
-          .catch(() => syncUserTrips(user.uid, user.email!)); // always sync, even if claim fails
 
         // ── Complete pending key upgrade if a validated key is waiting ──
+        // Must run BEFORE claimOwnership/syncUserTrips to avoid a race where
+        // syncUserTrips deletes the newly-upgraded project because allowedEditorUids
+        // hasn't propagated to Firestore yet.
         if (pendingKeyRef.current) {
           pendingKeyRef.current = '';
           setUpgradeStep('none');
@@ -221,8 +218,17 @@ function App() {
             setShowMemberBind(true); // trigger member card binding screen
             return upgraded;
           });
-          return; // skip owner check for this event
+          // Delay sync so the Firestore write propagates before editorQ is queried
+          setTimeout(() => syncUserTrips(user.uid, user.email!), 2000);
+          return; // skip claimOwnership & checkOwnerRole for this event
         }
+
+        // Normal sign-in path: backfill ownerUid then sync all trips
+        const functions = getFunctions(undefined, 'us-central1');
+        httpsCallable(functions, 'claimOwnership')()
+          .then(() => syncUserTrips(user.uid, user.email!))
+          .catch(() => syncUserTrips(user.uid, user.email!));
+
         checkOwnerRole(user.email).then(role => {
           if (role === 'owner') {
             setActiveProjectState(prev => {
@@ -383,6 +389,26 @@ function App() {
     return members.find((m: any) => m.googleUid === authUid)?.id ?? null;
   }, [authUid, members]);
   useFcm(activeProject?.id ?? null, boundMemberId);
+
+  // ── PWA install prompt ────────────────────────────────────────────────────
+  // Capture the beforeinstallprompt event so we can show it at the right time.
+  const pwaPromptRef = useRef<any>(null);
+  useEffect(() => {
+    const handler = (e: any) => { e.preventDefault(); pwaPromptRef.current = e; };
+    window.addEventListener('beforeinstallprompt', handler);
+    return () => window.removeEventListener('beforeinstallprompt', handler);
+  }, []);
+  // When user has both Google account AND a bound member card, trigger install + notifications
+  useEffect(() => {
+    if (!authUid || !boundMemberId) return;
+    const t = setTimeout(() => {
+      if (pwaPromptRef.current) {
+        pwaPromptRef.current.prompt();
+        pwaPromptRef.current = null;
+      }
+    }, 2500);
+    return () => clearTimeout(t);
+  }, [authUid, boundMemberId]);
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）

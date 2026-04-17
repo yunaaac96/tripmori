@@ -168,7 +168,6 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role } = firestore;
   const isVisitor = isReadOnly;
   const isOwner = role === 'owner';
-  const currentUserName = localStorage.getItem('tripmori_current_user') || '';
 
   const projCurrency = (project?.currency || 'JPY') as Currency;
   const defaultForm = { ...EMPTY_FORM, currency: projCurrency };
@@ -181,6 +180,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     });
     return unsub;
   }, []);
+
+  // Derive current user's member name from their Google UID (trip-aware, not localStorage-based)
+  // Falls back to localStorage for backwards compatibility when UID isn't bound yet
+  const currentUserName = (googleUid
+    ? (members as any[]).find(m => m.googleUid === googleUid)?.name
+    : null) || localStorage.getItem('tripmori_current_user') || '';
 
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -1138,10 +1143,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               {displayMemberNames.map(name => {
                 const ms = memberStats.find(m => m.name === name);
                 if (!ms) return null;
-                const toReceive = settlementReceive[ms.name] || 0;
-                const toPay     = settlementPay[ms.name]     || 0;
                 const isCreditor = ms.net >= 0;
-                const displayAmt = isCreditor ? toReceive : toPay;
+                // Use raw net (paid - owed) so card is consistent with detail modal formula:
+                // 目前花費 = (個人份額 + 代付金額) = ms.paid
+                // 代墊金額 = ms.net when positive; 需還款金額 = |ms.net| when negative
+                const displayAmt = Math.abs(ms.net);
                 const isMe = name === currentUserName;
                 return (
                   <div key={ms.name} onClick={() => setMemberDetailName(ms.name)}
