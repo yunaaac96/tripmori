@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList } from '@fortawesome/free-solid-svg-icons';
+import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList, faLock } from '@fortawesome/free-solid-svg-icons';
 
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
@@ -99,6 +99,14 @@ export default function PlanningPage({ lists, members, firestore, project }: any
 
   const packing  = packingForTab; // alias
   const todos    = lists.filter((l: any) => l.listType === 'todo');
+  // Visitor-visible packing: global preset items only (no member-private items)
+  const visitorPackingItems = lists.filter((l: any) =>
+    l.listType === 'packing' && l.assignedTo === 'all' && !l.privateOwnerUid
+  ).sort((a: any, b: any) => {
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return ta - tb;
+  });
   const allDone  = lists.filter((l: any) => isPackingCheckedFor(l, googleUid || '') || (l.listType === 'todo' && isTodoChecked(l))).length;
   const allTotal = lists.length;
 
@@ -310,20 +318,6 @@ export default function PlanningPage({ lists, members, firestore, project }: any
     { id: 'packing', label: <><FontAwesomeIcon icon={faSuitcase} style={{ fontSize: 12, marginRight: 4 }} />行李</>, items: packing },
   ];
 
-  // Visitor mode: hide all planning content
-  if (isReadOnly) {
-    return (
-      <div style={{ fontFamily: FONT }}>
-        <PageHeader title="旅行準備" subtitle="待辦清單・行李清單" emoji={<FontAwesomeIcon icon={faClipboardList} />} color={C.earth} />
-        <div style={{ padding: '60px 20px', textAlign: 'center' }}>
-          <div style={{ fontSize: 48, marginBottom: 12 }}>🔒</div>
-          <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>準備清單僅旅伴可查看</p>
-          <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>請輸入協作金鑰加入旅行團</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={{ fontFamily: FONT }}>
 
@@ -462,7 +456,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
 
       <div style={{ padding: '12px 16px 80px' }}>
         {/* ── 成員篩選列（待辦 & 行李統一使用頭像樣式）── */}
-        {(activeSection === 'todo' || activeSection === 'packing') && (() => {
+        {!isReadOnly && (activeSection === 'todo' || activeSection === 'packing') && (() => {
           // Use owner-defined memberOrder as base, then put current user first
           const memberOrder: string[] = project?.memberOrder || [];
           const sortedMembers: any[] = (() => {
@@ -550,7 +544,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
               style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${activeSection === s.id ? C.earth : C.creamDark}`, background: activeSection === s.id ? C.earth : 'var(--tm-card-bg)', color: activeSection === s.id ? 'white' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
               {s.label}
               <span style={{ marginLeft: 5, fontSize: 11, opacity: 0.75 }}>
-                ({(s.id === 'todo' ? todos : packing).filter((i: any) => s.id === 'packing' ? !isPackingCheckedFor(i, tabMemberUid) : !isTodoChecked(i)).length})
+                ({isReadOnly ? (s.id === 'packing' ? visitorPackingItems.length : 0) : (s.id === 'todo' ? todos : packing).filter((i: any) => s.id === 'packing' ? !isPackingCheckedFor(i, tabMemberUid) : !isTodoChecked(i)).length})
             </span>
             </button>
           ))}
@@ -558,8 +552,14 @@ export default function PlanningPage({ lists, members, firestore, project }: any
 
         {SECTIONS.map(s => s.id === activeSection && (
           <div key={s.id}>
-            {(() => {
-              const filtered = applyFilter(s.items);
+            {isReadOnly && s.id === 'todo' ? (
+              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+                <div style={{ fontSize: 36, marginBottom: 12, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
+                <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>待辦清單僅旅伴可查看</p>
+                <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>請輸入協作金鑰加入旅行團</p>
+              </div>
+            ) : (() => {
+              const filtered = isReadOnly ? visitorPackingItems : applyFilter(s.items);
               return (
                 <>
                   {filtered.length === 0 ? (
@@ -578,7 +578,10 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                         // Packing badge logic (tab-aware)
                         let badgeBg = '#D0C8BE';
                         let badgeLabel = item.assignedTo || '—';
-                        if (isPacking) {
+                        if (isPacking && isReadOnly) {
+                          // Visitor mode: all visible items are global presets
+                          badgeBg = '#C8E6C0'; badgeLabel = '預設';
+                        } else if (isPacking) {
                           const isAssignedByOther = isPrivateItem && item.createdBy !== tabMemberUid;
                           const isGlobal = !isPrivateItem && item.assignedTo === 'all';
                           const isSelfPrivate = isPrivateItem && item.createdBy === tabMemberUid;
