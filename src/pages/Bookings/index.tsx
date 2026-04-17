@@ -6,7 +6,7 @@ import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock } from '@fortawesome/free-solid-svg-icons';
+import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
 const BOOKING_TYPE_ICONS: Record<string, IconDefinition> = {
@@ -526,12 +526,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <button onClick={openFlightEdit} style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, background: 'none', border: `1.5px solid ${C.sageDark}`, borderRadius: 10, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT }}>
             ＋ 新增 / 管理
           </button>
-        ) : undefined}>✈️ 航班資訊</SectionTitle>
+        ) : undefined}><FontAwesomeIcon icon={faPlane} style={{ marginRight: 6 }} />航班資訊</SectionTitle>
         {!staticLoaded ? null : flights === null || flights.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
-            <p style={{ fontSize: 28, margin: '0 0 8px' }}>✈️</p>
+            <p style={{ fontSize: 28, margin: '0 0 8px', color: C.sageLight }}><FontAwesomeIcon icon={faPlane} /></p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>航班資訊待更新</p>
-            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊右上方 ✏️ 填入航班資料</p>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊右上方 <FontAwesomeIcon icon={faPen} style={{ fontSize: 10 }} /> 填入航班資料</p>
             {!isReadOnly && (
               <button onClick={openFlightEdit}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
@@ -563,7 +563,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </div>
                 <div style={{ flex: 1, textAlign: 'center' }}>
                   <div style={{ borderTop: '2px dashed rgba(255,255,255,0.5)', position: 'relative' }}>
-                    <span style={{ position: 'absolute', top: -12, left: '50%', transform: 'translateX(-50%)', fontSize: 18 }}>✈️</span>
+                    <span style={{ position: 'absolute', top: -10, left: '50%', transform: 'translateX(-50%)', fontSize: 14, color: 'white' }}><FontAwesomeIcon icon={faPlane} /></span>
                   </div>
                 </div>
                 <div style={{ textAlign: 'center', minWidth: 68 }}>
@@ -596,12 +596,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         ))}
 
         {/* ── 住宿 ── */}
-        <SectionTitle>🏨 住宿安排</SectionTitle>
+        <SectionTitle><FontAwesomeIcon icon={faBed} style={{ marginRight: 6 }} />住宿安排</SectionTitle>
         {!staticLoaded ? null : hotels === null || hotels.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
-            <p style={{ fontSize: 28, margin: '0 0 8px' }}>🏨</p>
+            <p style={{ fontSize: 28, margin: '0 0 8px', color: C.sageLight }}><FontAwesomeIcon icon={faBed} /></p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>住宿安排待更新</p>
-            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 ✏️ 填入訂房資訊</p>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 <FontAwesomeIcon icon={faPen} style={{ fontSize: 10 }} /> 填入訂房資訊</p>
             {!isReadOnly && (
               <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
                 style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
@@ -687,7 +687,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 {h.mapUrl && (
                   <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
                     style={{ fontSize: 12, color: C.sky, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
-                    🗺 查看地圖
+                    <FontAwesomeIcon icon={faMap} style={{ marginRight: 4 }} />查看地圖
                   </a>
                 )}
                 <ParticipantAvatars ids={h.participants} />
@@ -698,10 +698,10 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         })}
 
         {/* ── 租車 ── */}
-        <SectionTitle>🚗 租車/包車資訊</SectionTitle>
+        <SectionTitle><FontAwesomeIcon icon={faBus} style={{ marginRight: 6 }} />租車/包車資訊</SectionTitle>
         {!staticLoaded ? null : car === null ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
-            <p style={{ fontSize: 28, margin: '0 0 8px' }}>🚗</p>
+            <p style={{ fontSize: 28, margin: '0 0 8px', color: C.sageLight }}><FontAwesomeIcon icon={faBus} /></p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>此行程未安排租車/包車</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>如有租車/包車需求，擁有者可點擊下方按鈕新增</p>
             {!isReadOnly && (
@@ -735,12 +735,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           {/* ── Pickup / Return ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
             <div className="tm-booking-pickup" style={{ background: '#EAF8E6', borderRadius: 12, padding: '10px 12px' }}>
-              <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: '0 0 4px' }}>{car.carMode === 'charter' ? '🟢 出發' : '🟢 取車'}</p>
+              <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: '0 0 4px' }}><FontAwesomeIcon icon={faCircleDot} style={{ marginRight: 4 }} />{car.carMode === 'charter' ? '出發' : '取車'}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.pickupLocation}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.pickupTime}</p>
             </div>
             <div className="tm-booking-return" style={{ background: '#FFEBEB', borderRadius: 12, padding: '10px 12px' }}>
-              <p style={{ fontSize: 10, color: '#9A3A3A', fontWeight: 700, margin: '0 0 4px' }}>{car.carMode === 'charter' ? '🔴 結束' : '🔴 還車'}</p>
+              <p style={{ fontSize: 10, color: '#9A3A3A', fontWeight: 700, margin: '0 0 4px' }}><FontAwesomeIcon icon={faCircleDot} style={{ marginRight: 4 }} />{car.carMode === 'charter' ? '結束' : '還車'}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.returnLocation || '—'}</p>
               <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.returnTime || '—'}</p>
             </div>
@@ -748,7 +748,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           {/* ── Cost / Lock ── */}
           {isVisitor ? (
             <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14 }}>🔒</span>
+              <span style={{ fontSize: 14 }}><FontAwesomeIcon icon={faLock} /></span>
               <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用與訂單詳情僅旅伴可查看</span>
             </div>
           ) : car.totalCost ? (
@@ -924,7 +924,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                         {(['去程', '回程'] as const).map(dir => (
                           <button key={dir} onClick={() => setFF(idx, 'direction', dir)}
                             style={{ padding: '5px 14px', borderRadius: 10, border: `1.5px solid ${f.direction === dir ? C.sageDark : C.creamDark}`, background: f.direction === dir ? C.sage : 'var(--tm-card-bg)', color: f.direction === dir ? 'white' : C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                            {dir === '去程' ? '✈️ 去程' : '↩️ 回程'}
+                            {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : '↩️ 回程'}
                           </button>
                         ))}
                       </div>
@@ -1120,7 +1120,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           onClick={e => { if (e.target === e.currentTarget) setEditFlightIdx(null); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '92vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>✈️ 編輯航班</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><FontAwesomeIcon icon={faPlane} style={{ fontSize: 14 }} />編輯航班</p>
               <button onClick={() => setEditFlightIdx(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1129,7 +1129,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 {(['去程', '回程'] as const).map(dir => (
                   <button key={dir} onClick={() => setSF('direction', dir)}
                     style={{ padding: '5px 18px', borderRadius: 10, border: `1.5px solid ${singleFlightForm.direction === dir ? C.sageDark : C.creamDark}`, background: singleFlightForm.direction === dir ? C.sage : 'var(--tm-card-bg)', color: singleFlightForm.direction === dir ? 'white' : C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                    {dir === '去程' ? '✈️ 去程' : '↩️ 回程'}
+                    {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : '↩️ 回程'}
                   </button>
                 ))}
               </div>
@@ -1172,7 +1172,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           onClick={e => { if (e.target === e.currentTarget) closeCustomForm(); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>{editBookingId ? '✏️ 修改預訂' : '📋 新增預訂'}</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><FontAwesomeIcon icon={editBookingId ? faPen : faClipboardList} style={{ fontSize: 14 }} />{editBookingId ? '修改預訂' : '新增預訂'}</p>
               <button onClick={closeCustomForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
