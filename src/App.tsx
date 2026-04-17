@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
@@ -13,10 +13,12 @@ import ExpensePage from './pages/Expense/index';
 import JournalPage from './pages/Journal/index';
 import PlanningPage from './pages/Planning/index';
 import MembersPage from './pages/Members/index';
+import { useFcm } from './hooks/useFcm';
 import ProjectHub, {
   ensureDefaultProject, loadProjects, saveProject, removeProject, setActiveProject, getActiveProject,
-  checkOwnerRole, StoredProject, TripRole,
+  checkOwnerRole,
 } from './pages/ProjectHub/index';
+import type { StoredProject, TripRole } from './pages/ProjectHub/index';
 
 export const TRIP_ID = "74pfE7RXyEIusEdRV0rZ"; // default / fallback
 export const C = {
@@ -96,6 +98,7 @@ const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()
 
 function App() {
   const wasGoogleSignedIn = useRef(false);
+  const [authUid, setAuthUid] = useState<string | null>(null);
 
   // ── Sync all trips for logged-in user from Firestore ─────────
   const syncUserTrips = async (uid: string, email: string) => {
@@ -180,6 +183,7 @@ function App() {
   // ── 登出時：清除 localStorage 並回到 hub
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
+      setAuthUid(user && !user.isAnonymous ? user.uid : null);
       if (user && !user.isAnonymous && user.email) {
         wasGoogleSignedIn.current = true;
         syncUserTrips(user.uid, user.email);
@@ -356,6 +360,13 @@ function App() {
   const pendingKeyRef = useRef<string>(''); // survives re-renders / closure
   const [showMemberBind, setShowMemberBind] = useState(false);
   const [bindingMember, setBindingMember]   = useState(false);
+
+  // ── FCM: find bound member ID for current user ──────────────────────────
+  const boundMemberId = useMemo(() => {
+    if (!authUid || !members.length) return null;
+    return members.find((m: any) => m.googleUid === authUid)?.id ?? null;
+  }, [authUid, members]);
+  useFcm(activeProject?.id ?? null, boundMemberId);
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）
@@ -582,8 +593,8 @@ function App() {
   const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly, tripNotifications };
 
   return (
-    <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
-      <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', minHeight: '100vh', position: 'relative', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
+    <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
+      <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', backgroundAttachment: 'local', minHeight: '100vh', position: 'relative', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
 
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (

@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser } from '@fortawesome/free-solid-svg-icons';
+import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock } from '@fortawesome/free-solid-svg-icons';
 
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
@@ -580,7 +580,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                             </div>
                             <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
                               <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{displayText}</p>
-                              {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>{status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? '⏰ 即將到期：' : '截止：'}{item.dueDate}</p>}
+                              {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>{status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? <><FontAwesomeIcon icon={faClock} style={{ fontSize: 9 }} /> 即將到期：</> : '截止：'}{item.dueDate}</p>}
                             </div>
                             <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
                               {badgeLabel}

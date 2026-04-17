@@ -9,7 +9,8 @@ import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLo
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { db, auth } from '../../config/firebase';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp, query, where, getDocs } from 'firebase/firestore';
-import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged, User } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
+import type { User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 import CurrencySearch from '../../components/CurrencySearch';
 import DateRangePicker from '../../components/DateRangePicker';

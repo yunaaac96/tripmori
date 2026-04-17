@@ -1069,7 +1069,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     <img src={form.receiptUrl} alt="附件預覽" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }}
                       onClick={() => setLightboxUrl(form.receiptUrl)} />
                     <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 11, color: C.sageDark, fontWeight: 600, margin: '0 0 4px' }}>✅ 附件已上傳</p>
+                      <p style={{ fontSize: 11, color: C.sageDark, fontWeight: 600, margin: '0 0 4px' }}>✓ 附件已上傳</p>
                       <button onClick={() => set('receiptUrl', '')}
                         style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
                         ✕ 移除
@@ -1079,7 +1079,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 ) : (
                   <button onClick={() => receiptRef.current?.click()} disabled={receiptUploading}
                     style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-input-bg)', color: receiptUploading ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: receiptUploading ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    {receiptUploading ? '⏳ 上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />拍照 / 上傳附件</>}
+                    {receiptUploading ? '上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />拍照 / 上傳附件</>}
                   </button>
                 )}
               </div>

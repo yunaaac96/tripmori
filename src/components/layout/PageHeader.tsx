@@ -13,7 +13,7 @@ export default function PageHeader({ title, subtitle, subtitleAction, emoji, col
   return (
     <div style={{
       background: color,
-      padding: '52px 20px 20px',
+      padding: '52px 16px 20px',
       borderRadius: '0 0 28px 28px',
       boxShadow: '0 4px 16px rgba(107,92,78,0.14)',
       fontFamily: FONT,

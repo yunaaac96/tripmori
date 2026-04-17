@@ -2,6 +2,7 @@ import { initializeApp } from 'firebase/app';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAuth, signInAnonymously, onAuthStateChanged, browserLocalPersistence, setPersistence } from 'firebase/auth';
+import { getMessaging, isSupported } from 'firebase/messaging';
 
 const firebaseConfig = {
   apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
@@ -38,5 +39,10 @@ export const initAuth = () =>
       }
     });
   });
+
+// Firebase Messaging (only initialised on supported browsers)
+export const messagingPromise: Promise<ReturnType<typeof getMessaging> | null> = isSupported()
+  .then(ok => ok ? getMessaging(app) : null)
+  .catch(() => null);
 
 export default app;

@@ -6,7 +6,7 @@ import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap } from '@fortawesome/free-solid-svg-icons';
+import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap, faPhone, faQrcode, faArrowRightToBracket, faArrowRightFromBracket, faClock } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
 const BOOKING_TYPE_ICONS: Record<string, IconDefinition> = {
@@ -616,7 +616,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div key={hotelKey} style={{ ...cardStyle, textAlign: 'left' }}>
             {/* ── Always visible: header ── */}
             <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-              <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}>🌸</div>
+              <div style={{ width: 50, height: 50, borderRadius: 16, background: `linear-gradient(135deg,${C.sky},${C.sageLight})`, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, flexShrink: 0 }}><FontAwesomeIcon icon={faBed} style={{ fontSize: 20, color: 'white' }} /></div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, wordBreak: 'break-word' }}>{h.name}</p>
                 {(h.nameLocal || h.nameJa) && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameLocal || h.nameJa}</p>}
@@ -627,11 +627,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             {/* ── Always visible: check-in/out ── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '12px 0 8px' }}>
               <div className="tm-booking-checkin" style={{ background: '#EAF8E6', borderRadius: 12, padding: '8px 10px' }}>
-                <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: 0 }}>📥 Check-in</p>
+                <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: 0 }}><FontAwesomeIcon icon={faArrowRightToBracket} style={{ marginRight: 4 }} />Check-in</p>
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkIn}</p>
               </div>
               <div className="tm-booking-checkout" style={{ background: '#FFF2E6', borderRadius: 12, padding: '8px 10px' }}>
-                <p style={{ fontSize: 10, color: '#9A5A00', fontWeight: 700, margin: 0 }}>📤 Check-out</p>
+                <p style={{ fontSize: 10, color: '#9A5A00', fontWeight: 700, margin: 0 }}><FontAwesomeIcon icon={faArrowRightFromBracket} style={{ marginRight: 4 }} />Check-out</p>
                 <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '3px 0 0' }}>{h.checkOut}</p>
               </div>
             </div>
@@ -728,7 +728,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </span>
               </div>
               {!isVisitor && car.confirmCode && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
-              {!isVisitor && car.carMode === 'charter' && car.contactInfo && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>📞 {car.contactInfo}</p>}
+              {!isVisitor && car.carMode === 'charter' && car.contactInfo && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}><FontAwesomeIcon icon={faPhone} style={{ fontSize: 10, marginRight: 4 }} />{car.contactInfo}</p>}
             </div>
             {!isReadOnly && <EditBtn onClick={() => openEdit('car')} />}
           </div>
@@ -769,7 +769,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <button onClick={() => setShowCarQR(v => !v)}
                 style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: car.participants?.length ? 8 : 0 }}>
                 <span>{showCarQR ? '▲' : '▼'}</span>
-                {showCarQR ? '收起 QR Code' : `📱 展開${car.carMode === 'charter' ? '包車' : '取車'} QR Code`}
+                {showCarQR ? '收起 QR Code' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />展開{car.carMode === 'charter' ? '包車' : '取車'} QR Code</>}
               </button>
               {showCarQR && (
                 <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
@@ -884,7 +884,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <button onClick={() => setShowQrFor(isQrOpen ? null : b.id)}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${isQrOpen ? C.sageDark : C.creamDark}`, background: isQrOpen ? C.sage : 'var(--tm-card-bg)', color: isQrOpen ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 2 }}>
                     <span>{isQrOpen ? '▲' : '▼'}</span>
-                    {isQrOpen ? '收起 QR Code' : '📱 展開 QR Code'}
+                    {isQrOpen ? '收起 QR Code' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />展開 QR Code</>}
                   </button>
                   {isQrOpen && (
                     <div style={{ marginTop: 10, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
@@ -1090,7 +1090,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   ) : (
                     <button onClick={() => carQrFileRef.current?.click()} disabled={uploadingCarQr}
                       style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: uploadingCarQr ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
-                      {uploadingCarQr ? '⏳ 上傳中...' : '📱 上傳 QR Code 圖片'}
+                      {uploadingCarQr ? '上傳中...' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />上傳 QR Code 圖片</>}
                     </button>
                   )}
                 </div>
@@ -1216,7 +1216,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 ) : (
                   <button onClick={() => qrFileRef.current?.click()} disabled={uploading}
                     style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: uploading ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, boxSizing: 'border-box' }}>
-                    {uploading ? '⏳ 上傳中...' : '📱 上傳 QR Code 圖片'}
+                    {uploading ? '上傳中...' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />上傳 QR Code 圖片</>}
                   </button>
                 )}
               </div>
