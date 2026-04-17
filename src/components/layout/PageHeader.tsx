@@ -1,19 +1,20 @@
+import type { ReactNode } from 'react';
 import { FONT } from '../../App';
 
 interface Props {
   title: string;
   subtitle?: string;
-  subtitleAction?: React.ReactNode;
-  emoji?: string;
+  subtitleAction?: ReactNode;
+  emoji?: ReactNode;
   color: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
 }
 
 export default function PageHeader({ title, subtitle, subtitleAction, emoji, color, children }: Props) {
   return (
     <div style={{
       background: color,
-      padding: '52px 20px 20px',
+      padding: '52px 16px 20px',
       borderRadius: '0 0 28px 28px',
       boxShadow: '0 4px 16px rgba(107,92,78,0.14)',
       fontFamily: FONT,

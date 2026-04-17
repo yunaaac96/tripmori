@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [
     react(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.ts',
       registerType: 'autoUpdate',
       includeAssets: ['favicon.svg', 'favicon.ico', 'icons/*.png'],
       manifest: {
@@ -28,23 +31,8 @@ export default defineConfig({
           { src: '/icons/icon-512-light.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
         ],
       },
-      workbox: {
+      injectManifest: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/firestore\.googleapis\.com/,
-            handler: 'NetworkFirst',
-            options: { cacheName: 'firestore-cache' },
-          },
-          {
-            urlPattern: /^https:\/\/storage\.googleapis\.com/,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'storage-cache',
-              expiration: { maxEntries: 100, maxAgeSeconds: 60 * 60 * 24 * 30 },
-            },
-          },
-        ],
       },
     }),
   ],

@@ -6,7 +6,7 @@ import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary, ExpandableNotes } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTree, faUtensils, faPalette, faBus, faBed, faEllipsis, faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faClipboardList, faLocationDot, faPlane, faCar, faTicket, faCalendarDays, faThumbtack, faPersonWalking } from '@fortawesome/free-solid-svg-icons';
+import { faTree, faUtensils, faPalette, faBus, faBed, faEllipsis, faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faClipboardList, faLocationDot, faPlane, faCar, faTicket, faCalendarDays, faThumbtack, faPersonWalking, faClock, faRocket } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
 const SCHEDULE_CAT_ICONS: Record<string, IconDefinition> = {
@@ -947,7 +947,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 disabled={bulkImporting || !bulkText.trim()}
                 style={{ ...btnPrimary, width: '100%', marginTop: 10, opacity: bulkImporting || !bulkText.trim() ? 0.5 : 1 }}
               >
-                {bulkImporting ? '匯入中…' : '🚀 一鍵匯入'}
+                {bulkImporting ? '匯入中…' : <><FontAwesomeIcon icon={faRocket} style={{ marginRight: 5 }} />一鍵匯入</>}
               </button>
             </div>
 
@@ -1282,11 +1282,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
             {tripPhase === 'after' ? (
               <>
                 <span style={{ fontWeight: 700, fontSize: 12, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faPlane} />旅程已結束</span>
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', opacity: 0.75 }}>回憶珍藏中 🌸</span>
+                <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', opacity: 0.75 }}>回憶珍藏中</span>
               </>
             ) : (
               <>
-                <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}>⏰ 距離出發</span>
+                <span style={{ fontWeight: 700, fontSize: 12, color: C.bark }}><FontAwesomeIcon icon={faClock} style={{ marginRight: 4 }} />距離出發</span>
                 <div style={{ display: 'flex', gap: 4, fontWeight: 900, color: C.bark, alignItems: 'baseline' }}>
                   {([['d', '天', countdown.d], ['h', '時', countdown.h], ['m', '分', countdown.m], ['s', '秒', countdown.s]] as [string, string, number][]).map(([k, u, v], i) => (
                     <span key={k} style={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
