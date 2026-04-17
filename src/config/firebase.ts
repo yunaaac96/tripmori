@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager } from 'firebase/firestore';
+import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAuth, signInAnonymously, onAuthStateChanged, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getMessaging, isSupported } from 'firebase/messaging';
@@ -16,11 +16,22 @@ const firebaseConfig = {
 // 初始化 Firebase
 const app  = initializeApp(firebaseConfig);
 
-// 啟用離線持久化 + 自動偵測 Long Polling（解決 QUIC ERR_QUIC_PROTOCOL_ERROR）
-export const db = initializeFirestore(app, {
-  cache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-  experimentalAutoDetectLongPolling: true,
-});
+// 啟用離線持久化：多 tab 模式（需 SharedWorker），不支援時自動降級為單 tab
+// 自動偵測 Long Polling（解決 QUIC ERR_QUIC_PROTOCOL_ERROR）
+function createDb() {
+  try {
+    return initializeFirestore(app, {
+      cache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      experimentalAutoDetectLongPolling: true,
+    });
+  } catch {
+    return initializeFirestore(app, {
+      cache: persistentLocalCache({ tabManager: persistentSingleTabManager() }),
+      experimentalAutoDetectLongPolling: true,
+    });
+  }
+}
+export const db = createDb();
 
 export const storage = getStorage(app);
 export const auth    = getAuth(app);

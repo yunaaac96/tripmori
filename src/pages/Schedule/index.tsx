@@ -571,11 +571,14 @@ export default function SchedulePage({ events, members = [], project, firestore,
       } else if (mode === 'edit' && selectedEvent) {
         await updateDoc(doc(db, 'trips', TRIP_ID, 'events', selectedEvent.id), payload);
       }
-    } catch (e) { console.error(e); }
+      // Only close form on success
+      if (payload.date) setActiveDay(payload.date);
+      setMode('view'); setSelectedEvent(null);
+    } catch (e) {
+      console.error(e);
+      alert('儲存失敗，請檢查網路連線後再試');
+    }
     setSaving(false);
-    // Navigate to the event's date (may have changed during edit)
-    if (payload.date) setActiveDay(payload.date);
-    setMode('view'); setSelectedEvent(null);
   };
 
   const handleDelete = async () => {
@@ -634,7 +637,10 @@ export default function SchedulePage({ events, members = [], project, firestore,
         });
       }
       setEditingMeta(false);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      alert('儲存失敗，請檢查網路連線後再試');
+    }
     setSavingMeta(false);
   };
 
