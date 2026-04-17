@@ -1419,7 +1419,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                           <FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 10 }} />查看地圖
                         </a>
                       )}
-                      {event.participants?.length > 0 && (() => {
+                      {!isReadOnly && event.participants?.length > 0 && (() => {
                         const ptcMembers = (event.participants as string[])
                           .map((id: string) => members.find((m: any) => m.id === id))
                           .filter(Boolean);
