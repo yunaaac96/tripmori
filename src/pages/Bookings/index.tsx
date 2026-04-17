@@ -415,6 +415,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const [participantPopover, setParticipantPopover] = useState<string[] | null>(null);
 
   const ParticipantAvatars = ({ ids }: { ids: string[] }) => {
+    if (isVisitor) return null; // hide participant names in visitor/read-only mode
     if (!ids?.length) return null;
     const ptc = ids.map((id: string) => members.find((m: any) => m.id === id)).filter(Boolean);
     if (!ptc.length) return null;
@@ -800,6 +801,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div style={{ textAlign: 'center', padding: '20px 0 8px', color: C.barkLight }}>
             <p style={{ fontSize: 13, margin: '0 0 4px' }}>尚無其他預訂</p>
             {!isReadOnly && <p style={{ fontSize: 11, margin: 0 }}>點擊右上角「＋ 新增」加入行程相關預訂</p>}
+          </div>
+        )}
+
+        {isVisitor && sortedBookings.length > 0 && (
+          <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: 0, fontStyle: 'italic' }}>費用與訂單詳情僅旅伴可查看</p>
           </div>
         )}
 
