@@ -142,6 +142,16 @@ function App() {
       if (emailSnap)  merge(emailSnap,  'owner');
       if (editorSnap) merge(editorSnap, 'editor');
 
+      // Backfill ownerUid for trips found via ownerEmail that are missing it.
+      // This migrates legacy trips so UID-based security rules work going forward.
+      if (emailSnap) {
+        emailSnap.forEach((d: any) => {
+          if (!d.data().ownerUid) {
+            updateDoc(doc(db, 'trips', d.id), { ownerUid: uid }).catch(console.warn);
+          }
+        });
+      }
+
       // Build set of trip IDs that actually exist in Firestore for this user
       const firestoreIds = new Set<string>();
       [ownedSnap, emailSnap, editorSnap].forEach(snap => {

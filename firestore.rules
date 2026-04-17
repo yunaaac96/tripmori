@@ -15,9 +15,14 @@ service cloud.firestore {
     }
 
     // Owner of the trip
+    // Primary check: ownerUid matches (new trips).
+    // Fallback: ownerEmail matches when ownerUid hasn't been written yet (legacy trips).
     function isOwner(tripId) {
-      return isGoogleAuthed() &&
-        get(/databases/$(database)/documents/trips/$(tripId)).data.ownerUid == request.auth.uid;
+      let d = get(/databases/$(database)/documents/trips/$(tripId)).data;
+      return isGoogleAuthed() && (
+        d.ownerUid == request.auth.uid ||
+        (d.ownerUid == null && d.ownerEmail == request.auth.token.email)
+      );
     }
 
     // Editor of the trip (uid in allowedEditorUids array)
