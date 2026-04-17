@@ -29,7 +29,10 @@ export function useFcm(tripId: string | null, memberId: string | null) {
       if (permission !== 'granted') return;
 
       try {
-        const token = await getToken(messaging, { vapidKey: VAPID_KEY });
+        // Use the already-registered service worker (sw.js) rather than letting
+        // FCM default to registering /firebase-messaging-sw.js (which doesn't exist).
+        const swReg = await navigator.serviceWorker.ready;
+        const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
         if (token) {
           // Persist token on the member card (array-union avoids duplicates)
           await updateDoc(
