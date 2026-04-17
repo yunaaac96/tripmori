@@ -1120,7 +1120,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                           <a href={`https://www.google.com/maps/dir/?api=1&origin=${encodeURIComponent(form.location.trim())}&destination=${encodeURIComponent(nextEvt.location?.trim() || nextEvt.title)}&travelmode=transit`}
                             target="_blank" rel="noopener noreferrer"
                             style={{ flexShrink: 0, padding: '8px 12px', borderRadius: 10, border: 'none', background: canCalc ? '#4285F4' : C.creamDark, color: canCalc ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: canCalc ? 'pointer' : 'default', fontFamily: FONT, textDecoration: 'none', display: 'inline-block', pointerEvents: canCalc ? 'auto' : 'none', whiteSpace: 'nowrap' }}>
-                            🗺 Google Maps
+                            <FontAwesomeIcon icon={faLocationDot} style={{ marginRight: 4 }} />Google Maps
                           </a>
                         ) : (
                           <button onClick={() => calcTravelTime(nextEvt.location || nextEvt.title, nextEvt.title, nextEvt.mapUrl)} disabled={!canCalc || travelCalcStatus === 'loading'}
@@ -1130,11 +1130,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
                         )}
                       </div>
                     )}
-                    {travelCalcStatus === 'error' && <p style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px', lineHeight: 1.5 }}>⚠️ {travelCalcMsg || '無法取得路線，請手動輸入或確認地點名稱'}</p>}
+                    {travelCalcStatus === 'error' && <p style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} />{travelCalcMsg || '無法取得路線，請手動輸入或確認地點名稱'}</p>}
                     {!nextEvt && travelMode !== 'transit' && <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px' }}>當天無下一站行程，可手動填寫</p>}
                     {travelMode === 'transit' ? (
                       <div style={{ background: '#EAF2FF', border: '1.5px solid #4285F4', borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#2A6A9A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span>🗺</span>
+                        <FontAwesomeIcon icon={faLocationDot} />
                         <span>儲存後行程卡片將顯示「大眾運輸最佳通勤時間」Google Maps 快捷鍵</span>
                       </div>
                     ) : (
@@ -1248,7 +1248,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 {locResults.map((r: any, i: number) => (
                   <button key={i} onClick={() => handleLocSelect(r)}
                     style={{ textAlign: 'left', padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>📍 {r.name}</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 12 }} />{r.name}</p>
                     <p style={{ fontSize: 11, color: 'var(--tm-bark-light)', margin: '2px 0 0' }}>
                       {[r.admin1, r.country].filter(Boolean).join('・')}
                       <span style={{ marginLeft: 6, opacity: 0.6 }}>{r.latitude?.toFixed(2)}, {r.longitude?.toFixed(2)}</span>
@@ -1281,7 +1281,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
           <div style={{ marginTop: 14, background: tripPhase === 'after' ? '#E8F5E2' : C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
             {tripPhase === 'after' ? (
               <>
-                <span style={{ fontWeight: 700, fontSize: 12, color: '#4A7A35' }}>✈️ 旅程已結束</span>
+                <span style={{ fontWeight: 700, fontSize: 12, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faPlane} />旅程已結束</span>
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', opacity: 0.75 }}>回憶珍藏中 🌸</span>
               </>
             ) : (
@@ -1405,12 +1405,12 @@ export default function SchedulePage({ events, members = [], project, firestore,
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 4 }}><FontAwesomeIcon icon={SCHEDULE_CAT_ICONS[event.category] || faEllipsis} style={{ fontSize: 9 }} /> {cat.label}</span>
                       <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px', wordBreak: 'break-word' }}>{event.title}</p>
-                      {event.location && <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>📍 {event.location}</p>}
+                      {event.location && <p style={{ fontSize: 11, color: C.barkLight, margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 9, flexShrink: 0 }} />{event.location}</p>}
                       {event.notes && <ExpandableNotes notes={event.notes} color={C.barkLight} />}
                       {mapUrl && (
                         <a href={mapUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}
-                          style={{ fontSize: 11, color: C.sky, fontWeight: 600, marginTop: 4, display: 'inline-block', textDecoration: 'none' }}>
-                          🗺 查看地圖
+                          style={{ fontSize: 11, color: C.sky, fontWeight: 600, marginTop: 4, display: 'inline-flex', alignItems: 'center', gap: 4, textDecoration: 'none' }}>
+                          <FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 10 }} />查看地圖
                         </a>
                       )}
                       {event.participants?.length > 0 && (() => {
@@ -1451,7 +1451,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                     <div style={{ margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
                       <a href={mapsHref} target="_blank" rel="noopener noreferrer"
                         style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 10, background: '#4285F4', color: 'white', fontWeight: 700, fontSize: 12, textDecoration: 'none', boxShadow: '0 2px 6px #4285F455', fontFamily: FONT }}>
-                        🗺 大眾運輸最佳通勤時間
+                        <FontAwesomeIcon icon={faLocationDot} />大眾運輸最佳通勤時間
                       </a>
                     </div>
                   );

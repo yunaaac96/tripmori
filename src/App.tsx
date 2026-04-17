@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, g
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { runImport } from './scripts/importData';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLightbulb } from '@fortawesome/free-solid-svg-icons';
+import { faLightbulb, faEye } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
 import SchedulePage from './pages/Schedule/index';
@@ -608,7 +608,7 @@ function App() {
               /* Step 1: key input */
               <>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A' }}>👁 訪客模式（唯讀）</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#2A6A9A', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faEye} />訪客模式（唯讀）</span>
                   <button
                     onClick={() => { setShowKeyUpgrade(v => !v); setVisitorKeyError(''); setVisitorKeyInput(''); setUpgradeStep('none'); }}
                     style={{ fontSize: 11, fontWeight: 700, color: '#2A6A9A', background: 'white', border: '1.5px solid #A8CADF', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
