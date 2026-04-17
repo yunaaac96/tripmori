@@ -200,7 +200,10 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       });
       setForm({ ...EMPTY_FORM, listType: form.listType });
       setShowSheet(false);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      alert('新增失敗，請檢查網路連線後再試');
+    }
     setSaving(false);
   };
 
@@ -225,7 +228,10 @@ export default function PlanningPage({ lists, members, firestore }: any) {
         await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', editTarget.id), payload);
       }
       setEditTarget(null); setShowSheet(false);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error(e);
+      alert('儲存失敗，請檢查網路連線後再試');
+    }
     setSaving(false);
   };
 

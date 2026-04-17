@@ -208,8 +208,14 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const handleUnbindGoogle = async (memberId: string) => {
     if (!window.confirm('確定要解除此成員的 Google 帳號綁定嗎？')) return;
     try {
-      await updateDoc(doc(db, 'trips', TRIP_ID, 'members', memberId), { googleUid: '', googleEmail: '' });
-    } catch (e) { console.error(e); }
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'members', memberId), {
+        googleUid: deleteField(),
+        googleEmail: deleteField(),
+      });
+    } catch (e) {
+      console.error(e);
+      alert('解除綁定失敗，請重試');
+    }
   };
 
   // ── Notes (message board) ─────────────────────────────────────
