@@ -1,11 +1,22 @@
 /// <reference lib="webworker" />
 import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
+import { registerRoute } from 'workbox-routing';
+import { NetworkOnly } from 'workbox-strategies';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
 
 declare const self: ServiceWorkerGlobalScope;
 
-// Workbox precache (injected by vite-plugin-pwa)
+// ── Pass ALL cross-origin requests directly to the network (never cache) ──────
+// This prevents Workbox from intercepting Firebase/Google API streaming
+// connections (e.g. Firestore Listen/channel) and trying to cache them,
+// which causes Cache.put() network errors and breaks the Firestore connection.
+registerRoute(
+  ({ url }) => url.origin !== self.location.origin,
+  new NetworkOnly()
+);
+
+// ── Workbox precache for app shell ────────────────────────────────────────────
 precacheAndRoute(self.__WB_MANIFEST ?? []);
 cleanupOutdatedCaches();
 
