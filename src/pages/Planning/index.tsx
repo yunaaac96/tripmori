@@ -1,10 +1,10 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useCallback } from 'react';
 import { C, FONT } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf } from '@fortawesome/free-solid-svg-icons';
+import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser } from '@fortawesome/free-solid-svg-icons';
 
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
@@ -41,6 +41,11 @@ export default function PlanningPage({ lists, members, firestore }: any) {
   const [saving, setSaving]               = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
   const textInputRef                      = useRef<HTMLInputElement>(null);
+  const filterScrollRef                   = useRef<HTMLDivElement>(null);
+
+  const scrollFilter = useCallback((dir: 'left' | 'right') => {
+    filterScrollRef.current?.scrollBy({ left: dir === 'right' ? 140 : -140, behavior: 'smooth' });
+  }, []);
 
   // Delayed focus after sheet animation (prevents iOS zoom)
   useEffect(() => {
@@ -431,32 +436,72 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       </PageHeader>
 
       <div style={{ padding: '12px 16px 80px' }}>
-        {/* 篩選 — 代辦專用 */}
-        {activeSection === 'todo' && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-            {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 3 }} />全部</> }, ...memberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
-              <button key={opt.id} onClick={() => setFilterBy(opt.id)}
-                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${filterBy === opt.id ? C.sageDark : C.creamDark}`, background: filterBy === opt.id ? C.sage : 'var(--tm-card-bg)', color: filterBy === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, transition: 'all 0.2s' }}>
-                {opt.label}
+        {/* ── 成員篩選列（待辦 & 行李統一使用頭像樣式）── */}
+        {(activeSection === 'todo' || activeSection === 'packing') && (() => {
+          const sortedMembers: any[] = [...members].sort((a: any, b: any) => {
+            if (a.googleUid === googleUid) return -1;
+            if (b.googleUid === googleUid) return 1;
+            return 0;
+          });
+          const visibleMembers = (activeSection === 'packing' && !isOwner)
+            ? sortedMembers.filter((m: any) => m.googleUid === googleUid)
+            : sortedMembers;
+
+          const activeId = activeSection === 'todo' ? filterBy : packingTab;
+          const setActive = (id: string) => {
+            if (activeSection === 'todo') setFilterBy(id);
+            else if (isOwner) setPackingTab(id);
+          };
+
+          const Av = ({ m }: { m: any }) => m.avatarUrl
+            ? <img src={m.avatarUrl} alt={m.name} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
+            : <div style={{ width: 20, height: 20, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <span style={{ fontSize: 9, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>
+              </div>;
+
+          return (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12 }}>
+              {/* Desktop scroll arrow — left */}
+              <button onClick={() => scrollFilter('left')}
+                style={{ display: 'none', flexShrink: 0, width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', color: C.barkLight, fontSize: 11 }}
+                className="tm-filter-arrow tm-filter-arrow-left">
+                <FontAwesomeIcon icon={faChevronLeft} />
               </button>
-            ))}
-          </div>
-        )}
-        {/* 行李 成員 Tab */}
-        {activeSection === 'packing' && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 12, overflowX: 'auto', scrollbarWidth: 'none', paddingBottom: 2 }}>
-            {(isOwner ? [...members].sort((a: any, b: any) => { if (a.googleUid === googleUid) return -1; if (b.googleUid === googleUid) return 1; return 0; }) : members.filter((m: any) => m.googleUid === googleUid)).map((m: any) => (
-              <button key={m.name} onClick={() => isOwner && setPackingTab(m.name)}
-                style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${packingTab === m.name ? (m.color || C.sageDark) : C.creamDark}`, background: packingTab === m.name ? (m.color || C.sage) : 'var(--tm-card-bg)', color: packingTab === m.name ? '#3A2E24' : C.bark, fontWeight: 700, fontSize: 12, cursor: isOwner ? 'pointer' : 'default', fontFamily: FONT, transition: 'all 0.2s', display: 'flex', alignItems: 'center', gap: 5 }}>
-                {m.avatarUrl
-                  ? <img src={m.avatarUrl} alt={m.name} style={{ width: 18, height: 18, borderRadius: '50%', objectFit: 'cover' }} />
-                  : <div style={{ width: 18, height: 18, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ fontSize: 9, fontWeight: 700, color: 'white' }}>{(m.name||'?')[0]}</span></div>
-                }
-                {m.name}
+
+              <div ref={filterScrollRef} className="tm-filter-scroll"
+                style={{ display: 'flex', gap: 6, overflowX: 'auto', flex: 1, paddingBottom: 2 }}>
+
+                {/* 全部 / 全體 button (todo only) */}
+                {activeSection === 'todo' && (
+                  <button onClick={() => setActive('all')}
+                    style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${activeId === 'all' ? C.sageDark : C.creamDark}`, background: activeId === 'all' ? C.sage : 'var(--tm-card-bg)', color: activeId === 'all' ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.2s' }}>
+                    <FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11 }} />全部
+                  </button>
+                )}
+
+                {/* Member avatar buttons */}
+                {visibleMembers.map((m: any) => {
+                  const active = activeId === m.name;
+                  const clickable = activeSection === 'todo' || isOwner;
+                  return (
+                    <button key={m.name} onClick={() => clickable && setActive(m.name)}
+                      style={{ flexShrink: 0, padding: '4px 10px 4px 5px', borderRadius: 20, border: `1.5px solid ${active ? (m.color || C.sageDark) : C.creamDark}`, background: active ? (m.color ? m.color + '33' : C.sageLight) : 'var(--tm-card-bg)', color: active ? (m.color || C.sageDark) : C.bark, fontWeight: active ? 700 : 600, fontSize: 12, cursor: clickable ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s', outline: active ? `2px solid ${m.color || C.sageDark}` : 'none', outlineOffset: -1 }}>
+                      <Av m={m} />
+                      {m.name}
+                    </button>
+                  );
+                })}
+              </div>
+
+              {/* Desktop scroll arrow — right */}
+              <button onClick={() => scrollFilter('right')}
+                style={{ display: 'none', flexShrink: 0, width: 26, height: 26, borderRadius: '50%', border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', alignItems: 'center', justifyContent: 'center', color: C.barkLight, fontSize: 11 }}
+                className="tm-filter-arrow tm-filter-arrow-right">
+                <FontAwesomeIcon icon={faChevronRight} />
               </button>
-            ))}
-          </div>
-        )}
+            </div>
+          );
+        })()}
 
         {/* 分區 Tab */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>

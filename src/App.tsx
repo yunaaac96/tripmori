@@ -469,7 +469,7 @@ function App() {
             });
             if (hasUnread) setNotifications(prev => ({ ...prev, '日誌': true }));
           }
-        }, logErr('notifications')));
+        }, () => { /* notifications collection not yet provisioned — silently skip */ }));
         setLoading(false);
         if (activeTripId === TRIP_ID && !localStorage.getItem('tripmori_imported')) {
           runImport().then(() => localStorage.setItem('tripmori_imported', '1'));

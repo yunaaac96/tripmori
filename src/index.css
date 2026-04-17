@@ -292,6 +292,11 @@ code {
 .tm-member-scroll::-webkit-scrollbar { display: none; }
 .tm-member-scroll { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Planning filter row scroll container */
+.tm-filter-scroll::-webkit-scrollbar { display: none; }
+.tm-filter-scroll { -ms-overflow-style: none; scrollbar-width: none; }
+
 @media (min-width: 600px) {
   .tm-member-arrow { display: flex !important; }
+  .tm-filter-arrow { display: flex !important; }
 }
