@@ -573,8 +573,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <p style={{ fontSize: 18, fontWeight: 700, margin: '4px 0 0' }}>{f.arr?.time}</p>
                 </div>
               </div>
-              {/* Participant avatar strip — bottom of green card */}
-              {(() => {
+              {/* Participant avatar strip — bottom of green card (members only) */}
+              {!isVisitor && (() => {
                 const ptc = (f.participants || []).map((id: string) => members.find((m: any) => m.id === id)).filter(Boolean);
                 return ptc.length > 0 ? (
                   <div style={{ display: 'flex', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
@@ -804,12 +804,6 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           </div>
         )}
 
-        {isVisitor && sortedBookings.length > 0 && (
-          <div style={{ textAlign: 'center', padding: '4px 0 10px' }}>
-            <p style={{ fontSize: 11, color: C.barkLight, margin: 0, fontStyle: 'italic' }}>費用與訂單詳情僅旅伴可查看</p>
-          </div>
-        )}
-
         {sortedBookings.map((b, bIdx) => {
           const typeInfo = BOOKING_TYPES[b.type] || BOOKING_TYPES.other;
           const isQrOpen = showQrFor === b.id;
@@ -852,13 +846,19 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </button>
               )}
               {isVisitor ? (
-                /* Visitor: show date only, hide confirmCode/cost/qr */
-                b.date && (
-                  <div className="tm-booking-date" style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px', marginBottom: 8, display: 'inline-block' }}>
-                    <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}><FontAwesomeIcon icon={faCalendarDays} style={{ marginRight: 3 }} />日期</p>
-                    <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
+                /* Visitor: show date + lock row (consistent with hotel pattern) */
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                  {b.date && (
+                    <div className="tm-booking-date" style={{ background: '#EAF8E6', borderRadius: 12, padding: '7px 10px', display: 'inline-block', alignSelf: 'flex-start' }}>
+                      <p style={{ fontSize: 9, color: '#4A7A35', fontWeight: 700, margin: 0 }}><FontAwesomeIcon icon={faCalendarDays} style={{ marginRight: 3 }} />日期</p>
+                      <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '2px 0 0' }}>{b.date}</p>
+                    </div>
+                  )}
+                  <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <span style={{ fontSize: 13, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
+                    <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用與訂單詳情僅旅伴可查看</span>
                   </div>
-                )
+                </div>
               ) : (
                 (b.date || b.confirmCode || b.cost) && (
                   <div style={{ display: 'grid', gridTemplateColumns: [b.date, b.confirmCode, b.cost].filter(Boolean).length >= 3 ? '1fr 1fr 1fr' : [b.date, b.confirmCode, b.cost].filter(Boolean).length === 2 ? '1fr 1fr' : '1fr', gap: 6, marginBottom: 8 }}>
