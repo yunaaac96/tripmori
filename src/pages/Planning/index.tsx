@@ -18,7 +18,7 @@ const getDueStatus = (dueDate: string, checked: boolean): 'normal' | 'soon' | 'o
   return 'normal';
 };
 
-export default function PlanningPage({ lists, members, firestore }: any) {
+export default function PlanningPage({ lists, members, firestore, project }: any) {
   const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const isOwner = role === 'owner';
 
@@ -54,11 +54,16 @@ export default function PlanningPage({ lists, members, firestore }: any) {
     return () => clearTimeout(t);
   }, [showSheet]);
 
-  // Initialize packingTab to current user's member or first member
+  // Initialize packingTab to current user's member or first member.
+  // Run whenever googleUid resolves so we correct any early null-based default.
   useEffect(() => {
-    if (!members.length || packingTab) return;
+    if (!members.length) return;
     const myMember = members.find((m: any) => m.googleUid === googleUid);
-    setPackingTab(myMember?.name || members[0]?.name || '');
+    if (myMember) {
+      setPackingTab(myMember.name);
+    } else if (!packingTab) {
+      setPackingTab(members[0]?.name || '');
+    }
   }, [members, googleUid]);
 
   const memberNames: string[] = members.length > 0
@@ -458,19 +463,34 @@ export default function PlanningPage({ lists, members, firestore }: any) {
       <div style={{ padding: '12px 16px 80px' }}>
         {/* ── 成員篩選列（待辦 & 行李統一使用頭像樣式）── */}
         {(activeSection === 'todo' || activeSection === 'packing') && (() => {
-          const sortedMembers: any[] = [...members].sort((a: any, b: any) => {
-            if (a.googleUid === googleUid) return -1;
-            if (b.googleUid === googleUid) return 1;
-            return 0;
-          });
-          const visibleMembers = (activeSection === 'packing' && !isOwner)
-            ? sortedMembers.filter((m: any) => m.googleUid === googleUid)
-            : sortedMembers;
+          // Use owner-defined memberOrder as base, then put current user first
+          const memberOrder: string[] = project?.memberOrder || [];
+          const sortedMembers: any[] = (() => {
+            let result: any[];
+            if (memberOrder.length) {
+              result = [...members].sort((a: any, b: any) => {
+                const ai = memberOrder.indexOf(a.id);
+                const bi = memberOrder.indexOf(b.id);
+                const aPos = ai === -1 ? memberOrder.length : ai;
+                const bPos = bi === -1 ? memberOrder.length : bi;
+                return aPos - bPos;
+              });
+            } else {
+              result = [...members];
+            }
+            // Current user always first
+            if (googleUid) {
+              const myIdx = result.findIndex((m: any) => m.googleUid === googleUid);
+              if (myIdx > 0) { const [me] = result.splice(myIdx, 1); result.unshift(me); }
+            }
+            return result;
+          })();
+          const visibleMembers = sortedMembers;
 
           const activeId = activeSection === 'todo' ? filterBy : packingTab;
           const setActive = (id: string) => {
             if (activeSection === 'todo') setFilterBy(id);
-            else if (isOwner) setPackingTab(id);
+            else setPackingTab(id);
           };
 
           const Av = ({ m }: { m: any }) => m.avatarUrl
@@ -502,7 +522,7 @@ export default function PlanningPage({ lists, members, firestore }: any) {
                 {/* Member avatar buttons */}
                 {visibleMembers.map((m: any) => {
                   const active = activeId === m.name;
-                  const clickable = activeSection === 'todo' || isOwner;
+                  const clickable = activeSection === 'todo' || isOwner || (activeSection === 'packing' && !!googleUid && m.googleUid === googleUid);
                   return (
                     <button key={m.name} onClick={() => clickable && setActive(m.name)}
                       style={{ flexShrink: 0, padding: '4px 10px 4px 5px', borderRadius: 20, border: `1.5px solid ${active ? (m.color || C.sageDark) : C.creamDark}`, background: active ? (m.color || C.sageDark) : 'var(--tm-card-bg)', color: active ? 'white' : C.barkLight, fontWeight: active ? 700 : 600, fontSize: 12, cursor: clickable ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s', boxShadow: active ? `0 1px 6px ${m.color || C.sageDark}55` : 'none' }}>

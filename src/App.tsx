@@ -720,7 +720,7 @@ function App() {
         {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
-        {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} />}
+        {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
 
