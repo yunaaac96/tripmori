@@ -71,9 +71,17 @@ export default function PlanningPage({ lists, members, firestore, project }: any
     : ['uu', 'brian'];
 
   const myMemberName = googleUid ? (members.find((m: any) => m.googleUid === googleUid)?.name || '') : '';
-  const orderedMemberNames = myMemberName
-    ? [myMemberName, ...memberNames.filter(n => n !== myMemberName)]
-    : memberNames;
+
+  // Sort members by owner-defined memberOrder (project?.memberOrder)
+  const memberOrderList: string[] = project?.memberOrder || [];
+  const sortedMemberObjects: any[] = memberOrderList.length
+    ? [...members].sort((a: any, b: any) => {
+        const ai = memberOrderList.indexOf(a.name);
+        const bi = memberOrderList.indexOf(b.name);
+        return (ai === -1 ? memberOrderList.length : ai) - (bi === -1 ? memberOrderList.length : bi);
+      })
+    : [...members];
+  const orderedMemberNames: string[] = sortedMemberObjects.map((m: any) => m.name);
 
   // Tab member info (for packing tab)
   const tabMember    = members.find((m: any) => m.name === packingTab);
@@ -83,7 +91,9 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   const packingForTab = !packingTab ? [] : [...lists.filter((l: any) => {
     if (l.listType !== 'packing') return false;
     if (l.assignedTo === 'all' && !l.privateOwnerUid) return true; // global preset
-    if (tabMemberUid && l.privateOwnerUid === tabMemberUid) return true; // assigned/private to this member
+    if (tabMemberUid && l.privateOwnerUid === tabMemberUid) return true; // UID-based private item
+    // Legacy: name-based assignment (assignedTo = member name, no privateOwnerUid)
+    if (!l.privateOwnerUid && l.assignedTo === packingTab) return true;
     return false;
   })].sort((a: any, b: any) => {
     const aChecked = isPackingCheckedFor(a, tabMemberUid);
@@ -98,7 +108,42 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   });
 
   const packing  = packingForTab; // alias
-  const todos    = lists.filter((l: any) => l.listType === 'todo');
+
+  // Three packing sub-sections
+  const packingGlobal   = packingForTab.filter((l: any) => l.assignedTo === 'all' && !l.privateOwnerUid);
+  const packingAssigned = packingForTab.filter((l: any) =>
+    l.privateOwnerUid === tabMemberUid && l.createdBy && l.createdBy !== tabMemberUid
+  );
+  const packingPersonal = packingForTab.filter((l: any) =>
+    !packingGlobal.includes(l) && !packingAssigned.includes(l)
+  );
+
+  // Is this editor unbound (has key but no member card linked)?
+  const isEditorUnbound = role === 'editor' && (!googleUid || !members.some((m: any) => m.googleUid === googleUid));
+
+  // Todos sorted: overdue → soon → no-date; within same bucket: self > all > others; checked last
+  const todos = [...lists.filter((l: any) => l.listType === 'todo')].sort((a: any, b: any) => {
+    const aChecked = isTodoChecked(a);
+    const bChecked = isTodoChecked(b);
+    if (aChecked !== bChecked) return aChecked ? 1 : -1;
+    // Due status priority: overdue(0) > soon(1) > normal(2)
+    const statusPri = { overdue: 0, soon: 1, normal: 2 } as Record<string, number>;
+    const aStatus = getDueStatus(a.dueDate, aChecked);
+    const bStatus = getDueStatus(b.dueDate, bChecked);
+    if (aStatus !== bStatus) return statusPri[aStatus] - statusPri[bStatus];
+    // Within same bucket: self(0) > all(1) > others(2)
+    const assignScore = (item: any) => {
+      if (!item.assignedTo || item.assignedTo === 'all') return 1;
+      const m = members.find((mm: any) => mm.name === item.assignedTo);
+      return m?.googleUid === googleUid ? 0 : 2;
+    };
+    const aScore = assignScore(a);
+    const bScore = assignScore(b);
+    if (aScore !== bScore) return aScore - bScore;
+    const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+    const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+    return ta - tb;
+  });
   // Visitor-visible packing: global preset items only (no member-private items)
   const visitorPackingItems = lists.filter((l: any) =>
     l.listType === 'packing' && l.assignedTo === 'all' && !l.privateOwnerUid
@@ -384,22 +429,76 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 </div>
               </div>
 
-              {/* 負責人 */}
+              {/* 負責人 / 可見範圍 */}
               {!isEditingPrivatePacking && (
                 <div>
                   <label style={{ fontSize: 12, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>
-                    {form.listType === 'packing' ? '可見範圍' : '負責人'}
+                    {form.listType === 'packing' ? '帶去的人' : '負責人'}
                   </label>
-                  <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                    {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 4 }} />全體</> }, ...orderedMemberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
-                      <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
-                        style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                        {opt.label}
-                      </button>
-                    ))}
-                  </div>
-                  {form.listType === 'packing' && !isOwner && form.assignedTo !== 'all' && (
-                    <p style={{ fontSize: 11, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10 }} /> 指定個人的行李項目僅自己可見</p>
+
+                  {form.listType === 'packing' ? (
+                    /* ── Packing: Segmented control 全員 / 自己 / 指定 ── */
+                    <div>
+                      <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
+                        {[
+                          { val: '__all__',  label: '👥 全員',  title: '加入所有人清單' },
+                          { val: '__self__', label: '⭐ 自己',  title: '加入我的清單' },
+                          ...(isOwner ? [{ val: '__pick__', label: '👤 指定',  title: '指定給特定旅伴' }] : []),
+                        ].map(opt => {
+                          const isPickMode = form.assignedTo !== 'all' && !!members.find((m: any) => m.name === form.assignedTo && m.googleUid !== googleUid);
+                          const isActive =
+                            opt.val === '__all__'  ? form.assignedTo === 'all' :
+                            opt.val === '__self__' ? (form.assignedTo !== 'all' && !isPickMode) :
+                            /* __pick__ */          isPickMode;
+                          return (
+                            <button key={opt.val}
+                              title={opt.title}
+                              onClick={() => {
+                                if (opt.val === '__all__') set('assignedTo', 'all');
+                                else if (opt.val === '__self__') set('assignedTo', myMemberName || 'all');
+                                else if (opt.val === '__pick__') {
+                                  // Auto-select first non-self member (sorted by owner order)
+                                  const firstOther = sortedMemberObjects.find((m: any) => m.googleUid !== googleUid);
+                                  if (firstOther) set('assignedTo', firstOther.name);
+                                }
+                              }}
+                              style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${isActive ? C.sageDark : C.creamDark}`, background: isActive ? C.sage : 'var(--tm-card-bg)', color: isActive ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                              {opt.label}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {/* Member picker for 指定 (owner only) - sorted by owner's memberOrder */}
+                      {isOwner && form.assignedTo !== 'all' && !!members.find((m: any) => m.name === form.assignedTo && m.googleUid !== googleUid) && (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                          {sortedMemberObjects.filter((m: any) => m.googleUid !== googleUid).map((m: any) => (
+                            <button key={m.name} onClick={() => set('assignedTo', m.name)}
+                              style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === m.name ? (m.color || C.sageDark) : C.creamDark}`, background: form.assignedTo === m.name ? (m.color || C.sage) : 'var(--tm-card-bg)', color: form.assignedTo === m.name ? 'white' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                              {m.name}
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                      {isOwner && form.assignedTo !== 'all' && (
+                        <p style={{ fontSize: 11, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}>
+                          <FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10 }} />
+                          {form.assignedTo === myMemberName ? '僅加入你自己的行李清單' : `將此項目指派給 ${form.assignedTo}`}
+                        </p>
+                      )}
+                      {!isOwner && form.assignedTo !== 'all' && (
+                        <p style={{ fontSize: 11, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10 }} /> 個人行李僅自己可見</p>
+                      )}
+                    </div>
+                  ) : (
+                    /* ── Todo: original assignedTo picker ── */
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
+                      {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 4 }} />全體</> }, ...orderedMemberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
+                        <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
+                          style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                          {opt.label}
+                        </button>
+                      ))}
+                    </div>
                   )}
                 </div>
               )}
@@ -455,31 +554,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
       </PageHeader>
 
       <div style={{ padding: '12px 16px 80px' }}>
-        {/* ── 成員篩選列（待辦 & 行李統一使用頭像樣式）── */}
-        {!isReadOnly && (activeSection === 'todo' || activeSection === 'packing') && (() => {
-          // Use owner-defined memberOrder as base, then put current user first
-          const memberOrder: string[] = project?.memberOrder || [];
-          const sortedMembers: any[] = (() => {
-            let result: any[];
-            if (memberOrder.length) {
-              result = [...members].sort((a: any, b: any) => {
-                const ai = memberOrder.indexOf(a.id);
-                const bi = memberOrder.indexOf(b.id);
-                const aPos = ai === -1 ? memberOrder.length : ai;
-                const bPos = bi === -1 ? memberOrder.length : bi;
-                return aPos - bPos;
-              });
-            } else {
-              result = [...members];
-            }
-            // Current user always first
-            if (googleUid) {
-              const myIdx = result.findIndex((m: any) => m.googleUid === googleUid);
-              if (myIdx > 0) { const [me] = result.splice(myIdx, 1); result.unshift(me); }
-            }
-            return result;
-          })();
-          const visibleMembers = sortedMembers;
+        {/* ── 成員篩選列 ──
+            待辦：全員顯示 tab（owner 可切換成員）
+            行李：僅 owner 顯示 tab（editor 只看自己，不需 tab） */}
+        {!isReadOnly && (activeSection === 'todo' || (activeSection === 'packing' && isOwner)) && (() => {
+          // Use owner-defined memberOrder strictly (no current-user-first override)
+          const visibleMembers = sortedMemberObjects;
 
           const activeId = activeSection === 'todo' ? filterBy : packingTab;
           const setActive = (id: string) => {
@@ -559,60 +639,178 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>請輸入協作金鑰加入旅行團</p>
               </div>
             ) : (() => {
-              const filtered = isReadOnly ? visitorPackingItems : applyFilter(s.items);
+              // ── Packing：三分區渲染 ──────────────────────────────────
+              if (s.id === 'packing') {
+                const viewItems = isReadOnly ? visitorPackingItems : packingForTab;
+                const vGlobal   = isReadOnly ? visitorPackingItems : packingGlobal;
+                const vPersonal = isReadOnly ? [] : packingPersonal;
+                const vAssigned = isReadOnly ? [] : packingAssigned;
+
+                const MemberAvatar = ({ uid }: { uid?: string }) => {
+                  const m = uid ? members.find((mm: any) => mm.googleUid === uid) : null;
+                  if (!m) return null;
+                  return m.avatarUrl
+                    ? <img src={m.avatarUrl} alt={m.name} style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
+                    : <div style={{ width: 16, height: 16, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                        <span style={{ fontSize: 8, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>
+                      </div>;
+                };
+
+                const renderPackingItem = (item: any, sectionType: 'global' | 'personal' | 'assigned') => {
+                  const checked = isReadOnly ? (item.checked ?? false) : isPackingCheckedFor(item, tabMemberUid);
+                  const canCheck = isReadOnly ? false : canCheckPacking(item);
+                  const displayText = (isGlobalPackingItem(item) && googleUid)
+                    ? (item.textOverrides?.[googleUid] || item.text)
+                    : item.text;
+                  const showEdit = !isReadOnly && (canDeleteItem(item) || isGlobalPackingItem(item));
+
+                  // Assignee chip
+                  const isMe = tabMemberUid && tabMemberUid === googleUid;
+                  const assignerM = item.createdBy ? members.find((m: any) => m.googleUid === item.createdBy) : null;
+                  const chipEl = (() => {
+                    if (sectionType === 'global') return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#4A4A4A', color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>🌐 所有人</span>
+                    );
+                    if (sectionType === 'personal') return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: C.sage, color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>{isMe ? '⭐ 我' : `👤 ${packingTab}`}</span>
+                    );
+                    // assigned
+                    return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#FFE0C8', color: '#7A3A00', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
+                        🎯 {assignerM ? assignerM.name : '指派'} → <MemberAvatar uid={tabMemberUid} /> {packingTab}
+                      </span>
+                    );
+                  })();
+
+                  return (
+                    <div key={item.id}
+                      style={{ background: 'var(--tm-card-bg)', border: '1.5px solid transparent', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                      <div
+                        onClick={() => canCheck && toggleItem(item)}
+                        style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${checked ? C.sageDark : C.creamDark}`, background: checked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: canCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: canCheck ? 1 : 0.4 }}>
+                        {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                      </div>
+                      <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 3px', textDecoration: checked ? 'line-through' : 'none' }}>{displayText}</p>
+                        {chipEl}
+                      </div>
+                      {showEdit && (
+                        <button
+                          onClick={e => { e.stopPropagation(); openEdit(item); }}
+                          style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
+                          <FontAwesomeIcon icon={faPen} />
+                        </button>
+                      )}
+                    </div>
+                  );
+                };
+
+                const SectionHeader = ({ icon, title, badge, borderColor }: { icon: string; title: string; badge?: React.ReactNode; borderColor?: string }) => (
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '14px 0 6px' }}>
+                    <span style={{ fontSize: 13 }}>{icon}</span>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: 0 }}>{title}</p>
+                    {badge}
+                  </div>
+                );
+
+                return (
+                  <>
+                    {viewItems.length === 0 && (
+                      <div style={{ textAlign: 'center', padding: '32px 0', color: C.barkLight }}>
+                        <p style={{ fontSize: 28, margin: '0 0 8px' }}><FontAwesomeIcon icon={faSuitcase} /></p>
+                        <p style={{ fontSize: 13, margin: 0 }}>尚無行李項目</p>
+                      </div>
+                    )}
+
+                    {/* ① 全體公用 */}
+                    {vGlobal.length > 0 && (
+                      <>
+                        <SectionHeader icon="📢" title="全體公用" badge={
+                          <span style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>👥 全員</span>
+                        } />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {vGlobal.map((item: any) => (
+                            <div key={item.id} style={{ background: '#F0F7FF', border: '1.5px solid #D8EDF8', borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, opacity: isPackingCheckedFor(item, tabMemberUid) ? 0.55 : 1 }}>
+                              <div onClick={() => !isReadOnly && canCheckPacking(item) && toggleItem(item)}
+                                style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${isPackingCheckedFor(item, tabMemberUid) ? C.sageDark : '#A8CCE8'}`, background: isPackingCheckedFor(item, tabMemberUid) ? C.sage : 'white', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (!isReadOnly && canCheckPacking(item)) ? 'pointer' : 'default', transition: 'all 0.2s' }}>
+                                {isPackingCheckedFor(item, tabMemberUid) && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                              </div>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 3px', textDecoration: isPackingCheckedFor(item, tabMemberUid) ? 'line-through' : 'none' }}>
+                                  {(isGlobalPackingItem(item) && googleUid) ? (item.textOverrides?.[googleUid] || item.text) : item.text}
+                                </p>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#4A4A4A', color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>🌐 所有人</span>
+                              </div>
+                              {!isReadOnly && (canDeleteItem(item) || isGlobalPackingItem(item)) && (
+                                <button onClick={e => { e.stopPropagation(); openEdit(item); }}
+                                  style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', fontSize: 11, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
+                                  <FontAwesomeIcon icon={faPen} />
+                                </button>
+                              )}
+                            </div>
+                          ))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ② 個人專屬 */}
+                    {vPersonal.length > 0 && (
+                      <>
+                        <SectionHeader icon="👤" title={tabMemberUid === googleUid ? '我的清單' : `${packingTab} 的清單`} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1.5px solid ${C.sageDark}`, borderRadius: 16, padding: '10px 10px' }}>
+                          {vPersonal.map(item => renderPackingItem(item, 'personal'))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ③ 任務指派 */}
+                    {vAssigned.length > 0 && (
+                      <>
+                        <SectionHeader icon="📋" title="任務指派" />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {vAssigned.map(item => renderPackingItem(item, 'assigned'))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* 新增按鈕：擁有者 或 已綁定的編輯者（自己的 tab） */}
+                    {!isReadOnly && (isOwner || googleUid === tabMemberUid) && (
+                      <button
+                        onClick={() => {
+                          setEditTarget(null);
+                          setForm({ ...EMPTY_FORM, listType: 'packing', assignedTo: isOwner ? 'all' : (myMemberName || 'all') });
+                          setShowSheet(true);
+                        }}
+                        style={{ marginTop: 12, width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxSizing: 'border-box' as const }}>
+                        <span style={{ fontSize: 16 }}>＋</span>新增行李項目
+                      </button>
+                    )}
+                  </>
+                );
+              }
+
+              // ── 待辦：原有渲染 ───────────────────────────────────────
+              const filtered = applyFilter(s.items);
               return (
                 <>
                   {filtered.length === 0 ? (
                     <div style={{ textAlign: 'center', padding: '32px 0', color: C.barkLight }}>
-                      <p style={{ fontSize: 28, margin: '0 0 8px', color: C.barkLight }}><FontAwesomeIcon icon={s.id === 'packing' ? faSuitcase : faSquareCheck} /></p>
-                      <p style={{ fontSize: 13, margin: 0 }}>尚無項目，點下方 ＋ 新增</p>
+                      <p style={{ fontSize: 28, margin: '0 0 8px', color: C.barkLight }}><FontAwesomeIcon icon={faSquareCheck} /></p>
+                      <p style={{ fontSize: 13, margin: 0 }}>尚無待辦項目，點下方 ＋ 新增</p>
                     </div>
                   ) : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       {filtered.map((item: any) => {
-                        const isPacking = item.listType === 'packing';
-                        const isPrivateItem = isPacking && !!item.privateOwnerUid;
-                        // For packing, show completion status from tab member's perspective
-                        const checked = isPacking ? isPackingCheckedFor(item, tabMemberUid) : isTodoChecked(item);
-                        const canCheck = isPacking ? canCheckPacking(item) : canCheckTodo(item);
-                        // Packing badge logic (tab-aware)
-                        let badgeBg = '#D0C8BE';
-                        let badgeLabel = item.assignedTo || '—';
-                        if (isPacking && isReadOnly) {
-                          // Visitor mode: all visible items are global presets
-                          badgeBg = '#C8E6C0'; badgeLabel = '預設';
-                        } else if (isPacking) {
-                          const isAssignedByOther = isPrivateItem && item.createdBy !== tabMemberUid;
-                          const isGlobal = !isPrivateItem && item.assignedTo === 'all';
-                          const isSelfPrivate = isPrivateItem && item.createdBy === tabMemberUid;
-                          if (isAssignedByOther) {
-                            badgeBg = '#FFE0C8'; badgeLabel = '🎯 指派';
-                          } else if (isGlobal) {
-                            // Show tab member's name (not "全體"); "預設" only for owner's own management view
-                            badgeBg = tabMember?.color || '#C8E6C0';
-                            badgeLabel = packingTab || '預設';
-                          } else if (isSelfPrivate) {
-                            badgeBg = '#D8C0F0'; badgeLabel = '🔒 私人';
-                          } else {
-                            badgeBg = tabMember?.color || '#D0C8BE'; badgeLabel = packingTab || item.assignedTo;
-                          }
-                        } else {
-                          // Todo badge
-                          const assignedMember = members.find((m: any) => m.name === item.assignedTo);
-                          badgeBg = isPrivateItem ? '#D8C0F0' : item.assignedTo === 'all' ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
-                          badgeLabel = isPrivateItem
-                            ? (item.privateOwnerUid === googleUid ? '🔒 僅本人可見' : (() => { const pm = members.find((m: any) => m.googleUid === item.privateOwnerUid); return `🔒 僅${pm?.name || '指定人'}可見`; })())
-                            : item.assignedTo === 'all' ? '全體' : (item.assignedTo || '—');
-                        }
-                        // For global packing items, show personal text override
-                        const displayText = (isPacking && isGlobalPackingItem(item) && googleUid)
-                          ? (item.textOverrides?.[googleUid] || item.text)
-                          : item.text;
+                        const checked = isTodoChecked(item);
+                        const canCheck = canCheckTodo(item);
+                        const assignedMember = members.find((m: any) => m.name === item.assignedTo);
+                        const badgeBg = item.assignedTo === 'all' || !item.assignedTo ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
+                        const isMyTodo = assignedMember?.googleUid === googleUid;
+                        const badgeLabel = item.assignedTo === 'all' || !item.assignedTo ? '全體' : (item.assignedTo || '—');
                         const status = getDueStatus(item.dueDate, checked);
                         const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
-                        const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : '1.5px solid transparent';
-                        // showEdit: can delete item OR can override text (global packing items editable by all)
-                        const showEdit = canDeleteItem(item) || isGlobalPackingItem(item);
+                        const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : isMyTodo ? `1.5px solid ${C.sageDark}` : '1.5px solid transparent';
+                        const showEdit = canDeleteItem(item);
                         return (
                           <div key={item.id}
                             style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
@@ -622,7 +820,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                               {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                             </div>
                             <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
-                              <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{displayText}</p>
+                              <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
                               {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>{status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? <><FontAwesomeIcon icon={faClock} style={{ fontSize: 9 }} /> 即將到期：</> : '截止：'}{item.dueDate}</p>}
                             </div>
                             <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
@@ -640,23 +838,18 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       })}
                     </div>
                   )}
-                  {/* 新增按鈕：待辦 → 不限；行李 → 擁有者 或 已綁定Google的成員 */}
-                  {!isReadOnly && (s.id === 'todo' || isOwner || (s.id === 'packing' && googleUid === tabMemberUid)) && (
-                    <button
-                      onClick={() => {
-                        if (s.id === 'packing' && packingTab) {
-                          // Pre-fill assignedTo with current tab member
-                          setEditTarget(null);
-                          setForm({ ...EMPTY_FORM, listType: 'packing', assignedTo: packingTab });
-                          setShowSheet(true);
-                        } else {
-                          openAdd(s.id);
-                        }
-                      }}
-                      style={{ marginTop: 12, width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxSizing: 'border-box' }}>
-                      <span style={{ fontSize: 16 }}>＋</span>
-                      新增{s.id === 'packing' ? '行李' : '待辦'}項目
+                  {/* 新增按鈕：待辦需已綁定才能新增（編輯者未綁不可加） */}
+                  {!isReadOnly && !isEditorUnbound && (
+                    <button onClick={() => openAdd('todo')}
+                      style={{ marginTop: 12, width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, boxSizing: 'border-box' as const }}>
+                      <span style={{ fontSize: 16 }}>＋</span>新增待辦項目
                     </button>
+                  )}
+                  {isEditorUnbound && !isReadOnly && (
+                    <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <FontAwesomeIcon icon={faLock} style={{ fontSize: 12, color: '#9A6800' }} />
+                      <p style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>請先至成員頁綁定 Google 帳號才能新增待辦</p>
+                    </div>
                   )}
                 </>
               );
