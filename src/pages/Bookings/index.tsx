@@ -272,6 +272,36 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setStaticSaving(false);
   };
 
+  // ── Static delete handlers ────────────────────────────────
+  const handleDeleteFlight = async (idx: number) => {
+    if (!isOwner) { showEditorDelToast(); return; }
+    if (!window.confirm(`確定要刪除「${(flights || [])[idx]?.direction || ''}」航班？`)) return;
+    const updated = (flights || []).filter((_: any, i: number) => i !== idx);
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: updated });
+      setFlights(updated);
+    } catch (e) { console.error(e); alert('刪除失敗，請重試'); }
+  };
+
+  const handleDeleteHotel = async (idx: number) => {
+    if (!isOwner) { showEditorDelToast(); return; }
+    if (!window.confirm(`確定要刪除「${(hotels || [])[idx]?.name || '住宿'}」？`)) return;
+    const updated = (hotels || []).filter((_: any, i: number) => i !== idx);
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID), { staticHotels: updated });
+      setHotels(updated);
+    } catch (e) { console.error(e); alert('刪除失敗，請重試'); }
+  };
+
+  const handleDeleteCar = async () => {
+    if (!isOwner) { showEditorDelToast(); return; }
+    if (!window.confirm(`確定要刪除「${car?.company || '租車/包車'}」資訊？`)) return;
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID), { staticCar: null });
+      setCar(null);
+    } catch (e) { console.error(e); alert('刪除失敗，請重試'); }
+  };
+
   // ── Car QR ───────────────────────────────────────────────
   const [showCarQR, setShowCarQR] = useState(false);
   const [carQrErr, setCarQrErr]   = useState(false);
@@ -556,12 +586,16 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         ) : (flights || []).map((f, idx) => (
           <div key={f.id || idx} style={{ borderRadius: 24, overflow: 'hidden', boxShadow: C.shadow, marginBottom: 14 }}>
             <div style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 16px', position: 'relative' }}>
-              {/* Per-card ✏️ — opens single-flight editor */}
+              {/* Per-card ✏️🗑️ — edit / delete */}
               {!isReadOnly && (
-                <div style={{ position: 'absolute', top: 12, right: 12 }}>
+                <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
                   <button onClick={() => openSingleFlightEdit(idx)}
                     style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <FontAwesomeIcon icon={faPen} />
+                  </button>
+                  <button onClick={() => handleDeleteFlight(idx)}
+                    style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,100,100,0.35)', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FontAwesomeIcon icon={faTrashCan} />
                   </button>
                 </div>
               )}
@@ -637,7 +671,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 {(h.nameLocal || h.nameJa) && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{h.nameLocal || h.nameJa}</p>}
                 {h.address && <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 9 }} /> {h.address}</p>}
               </div>
-              {!isReadOnly && <EditBtn onClick={() => openEdit('hotel', idx)} />}
+              {!isReadOnly && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                  <EditBtn onClick={() => openEdit('hotel', idx)} />
+                  <button onClick={() => handleDeleteHotel(idx)}
+                    style={{ width: 28, height: 28, borderRadius: 8, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FontAwesomeIcon icon={faTrashCan} />
+                  </button>
+                </div>
+              )}
             </div>
             {/* ── Always visible: check-in/out ── */}
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, margin: '12px 0 8px' }}>
@@ -745,7 +787,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               {!isVisitor && car.confirmCode && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
               {!isVisitor && car.carMode === 'charter' && car.contactInfo && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}><FontAwesomeIcon icon={faPhone} style={{ fontSize: 10, marginRight: 4 }} />{car.contactInfo}</p>}
             </div>
-            {!isReadOnly && <EditBtn onClick={() => openEdit('car')} />}
+            {!isReadOnly && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                <EditBtn onClick={() => openEdit('car')} />
+                <button onClick={handleDeleteCar}
+                  style={{ width: 28, height: 28, borderRadius: 8, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FontAwesomeIcon icon={faTrashCan} />
+                </button>
+              </div>
+            )}
           </div>
           {/* ── Pickup / Return ── */}
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
