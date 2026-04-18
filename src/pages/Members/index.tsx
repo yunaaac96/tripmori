@@ -573,7 +573,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* 協作金鑰 — tap to copy */}
             <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
-              className={copied === 'collab' ? '' : 'tm-collab-key-bg'}
+              className={copied === 'collab' ? 'tm-copied-success' : 'tm-collab-key-bg'}
               style={{ background: copied === 'collab' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                 <p className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : undefined, margin: 0 }}>協作金鑰（編輯者）</p>
@@ -584,7 +584,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
             </div>
             {/* 訪客連結 — tap to copy */}
             <div onClick={() => handleCopy(`${window.location.origin}/?visit=${project.id}`, 'visit')}
-              className={copied === 'visit' ? '' : 'tm-visitor-link-bg'}
+              className={copied === 'visit' ? 'tm-copied-success' : 'tm-visitor-link-bg'}
               style={{ background: copied === 'visit' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
                 <p className={copied === 'visit' ? '' : 'tm-visitor-link-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'visit' ? '#4A7A35' : undefined, margin: 0 }}>訪客連結（唯讀瀏覽）</p>
@@ -612,7 +612,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
             {notionBusy ? '備份中…' : '立即備份到 Notion'}
           </button>
           {notionResult && (
-            <div style={{ marginTop: 8, padding: '8px 10px', background: '#E0F0D8', borderRadius: 10 }}>
+            <div className="tm-notion-success" style={{ marginTop: 8, padding: '8px 10px', background: '#E0F0D8', borderRadius: 10 }}>
               <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 4px' }}>✅ 備份成功！</p>
               <p style={{ fontSize: 11, color: '#4A7A35', margin: 0 }}>費用總計 NT$ {notionResult.totalTWD.toLocaleString()}</p>
               {notionResult.url && (
@@ -654,7 +654,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 : '';
               return (
                 <div key={uid} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 10px', background: 'var(--tm-input-bg)', borderRadius: 12, border: `1px solid ${C.creamDark}` }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: boundMember?.color || '#D8EDF8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: C.bark, flexShrink: 0 }}>
+                  <div className="tm-member-avatar-dynamic" style={{ width: 32, height: 32, borderRadius: '50%', background: boundMember?.color || '#D8EDF8', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 14, fontWeight: 700, color: C.bark, flexShrink: 0 }}>
                     {(boundMember?.name || displayName)[0]?.toUpperCase() || '?'}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -790,9 +790,9 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>
-                    {isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 6, padding: '1px 6px' }}>我</span>}
+                    {isMyCard && <span className="tm-badge-me" style={{ fontSize: 10, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 6, padding: '1px 6px' }}>我</span>}
                     {m.googleUid && !isMyCard && <span className="tm-badge-sky-sm" style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLink} style={{ fontSize: 8 }} /> 已綁定</span>}
-                    {!m.googleUid && <span style={{ fontSize: 10, fontWeight: 600, background: '#F5F5F5', color: '#9A8A7A', borderRadius: 6, padding: '1px 6px' }}>未綁定</span>}
+                    {!m.googleUid && <span className="tm-badge-unbound" style={{ fontSize: 10, fontWeight: 600, background: '#F5F5F5', color: '#9A8A7A', borderRadius: 6, padding: '1px 6px' }}>未綁定</span>}
                   </div>
                   {/* 擁有者可看到綁定的 Google 帳號 email */}
                   {firestore.role === 'owner' && m.googleEmail && (
