@@ -4,7 +4,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList, faLock } from '@fortawesome/free-solid-svg-icons';
+import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList, faLock, faUsers, faStar, faUserTag } from '@fortawesome/free-solid-svg-icons';
 
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
@@ -99,8 +99,8 @@ export default function PlanningPage({ lists, members, firestore, project }: any
     const aChecked = isPackingCheckedFor(a, tabMemberUid);
     const bChecked = isPackingCheckedFor(b, tabMemberUid);
     if (aChecked !== bChecked) return aChecked ? 1 : -1;
-    // Priority: assigned by others (0) > global preset (1) > own private (2)
-    const pri = (i: any) => i.privateOwnerUid && i.createdBy !== tabMemberUid ? 0 : !i.privateOwnerUid ? 1 : 2;
+    // Priority: own private (0) > assigned by others (1) > global preset (2)
+    const pri = (i: any) => !i.privateOwnerUid ? 2 : i.createdBy !== tabMemberUid ? 1 : 0;
     if (pri(a) !== pri(b)) return pri(a) - pri(b);
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
@@ -327,17 +327,19 @@ export default function PlanningPage({ lists, members, firestore, project }: any
     const filtered = filterBy === 'all' ? items : items.filter((i: any) => {
       if (i.privateOwnerUid) {
         if (isOwner) {
-          // Owner filtering by name: show items whose privateOwnerUid matches that member
           const filterMember = members.find((m: any) => m.name === filterBy);
           return filterMember?.googleUid === i.privateOwnerUid;
         }
-        // Non-owner: show only their own private items
         const myMemberName = members.find((m: any) => m.googleUid === googleUid)?.name;
         return myMemberName === filterBy;
       }
       return i.assignedTo === filterBy || i.assignedTo === 'all';
     });
-    // 未勾選 → 上方，已勾選 → 下方；同層：全體優先，再依人名排序，最後依建立時間
+    // For todos: already sorted by the `todos` computed array; just preserve that order
+    if (items.length > 0 && items[0]?.listType === 'todo') {
+      return filtered; // order from `todos` sort is authoritative
+    }
+    // Packing fallback sort
     return [...filtered].sort((a, b) => {
       const aChecked = a.listType === 'packing' ? isPackingChecked(a) : (a.checked ?? false);
       const bChecked = b.listType === 'packing' ? isPackingChecked(b) : (b.checked ?? false);
@@ -441,9 +443,9 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                     <div>
                       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                         {[
-                          { val: '__all__',  label: '👥 全員',  title: '加入所有人清單' },
-                          { val: '__self__', label: '⭐ 自己',  title: '加入我的清單' },
-                          ...(isOwner ? [{ val: '__pick__', label: '👤 指定',  title: '指定給特定旅伴' }] : []),
+                          { val: '__all__',  icon: faUsers,   label: '全員',  title: '加入所有人清單' },
+                          { val: '__self__', icon: faStar,    label: '自己',  title: '加入我的清單' },
+                          ...(isOwner ? [{ val: '__pick__', icon: faUserTag, label: '指定', title: '指定給特定旅伴' }] : []),
                         ].map(opt => {
                           const isPickMode = form.assignedTo !== 'all' && !!members.find((m: any) => m.name === form.assignedTo && m.googleUid !== googleUid);
                           const isActive =
@@ -457,13 +459,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                                 if (opt.val === '__all__') set('assignedTo', 'all');
                                 else if (opt.val === '__self__') set('assignedTo', myMemberName || 'all');
                                 else if (opt.val === '__pick__') {
-                                  // Auto-select first non-self member (sorted by owner order)
                                   const firstOther = sortedMemberObjects.find((m: any) => m.googleUid !== googleUid);
                                   if (firstOther) set('assignedTo', firstOther.name);
                                 }
                               }}
-                              style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${isActive ? C.sageDark : C.creamDark}`, background: isActive ? C.sage : 'var(--tm-card-bg)', color: isActive ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                              {opt.label}
+                              style={{ flex: 1, padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${isActive ? C.sageDark : C.creamDark}`, background: isActive ? C.sage : 'var(--tm-card-bg)', color: isActive ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                              <FontAwesomeIcon icon={opt.icon} style={{ fontSize: 12 }} />{opt.label}
                             </button>
                           );
                         })}
@@ -705,9 +706,9 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                   );
                 };
 
-                const SectionHeader = ({ icon, title, badge, borderColor }: { icon: string; title: string; badge?: React.ReactNode; borderColor?: string }) => (
+                const SectionHeader = ({ icon, title, badge }: { icon: React.ReactNode; title: string; badge?: React.ReactNode }) => (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '14px 0 6px' }}>
-                    <span style={{ fontSize: 13 }}>{icon}</span>
+                    <span style={{ fontSize: 13, color: C.barkLight, display: 'flex', alignItems: 'center' }}>{icon}</span>
                     <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: 0 }}>{title}</p>
                     {badge}
                   </div>
@@ -722,11 +723,31 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       </div>
                     )}
 
-                    {/* ① 全體公用 */}
+                    {/* ① 個人專屬 */}
+                    {vPersonal.length > 0 && (
+                      <>
+                        <SectionHeader icon={<FontAwesomeIcon icon={faUser} style={{ fontSize: 12 }} />} title={tabMemberUid === googleUid ? '我的清單' : `${packingTab} 的清單`} />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1.5px solid ${C.sageDark}`, borderRadius: 16, padding: '10px 10px' }}>
+                          {vPersonal.map(item => renderPackingItem(item, 'personal'))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ② 任務指派 */}
+                    {vAssigned.length > 0 && (
+                      <>
+                        <SectionHeader icon={<FontAwesomeIcon icon={faUserTag} style={{ fontSize: 12 }} />} title="任務指派" />
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {vAssigned.map(item => renderPackingItem(item, 'assigned'))}
+                        </div>
+                      </>
+                    )}
+
+                    {/* ③ 全體公用 */}
                     {vGlobal.length > 0 && (
                       <>
-                        <SectionHeader icon="📢" title="全體公用" badge={
-                          <span style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>👥 全員</span>
+                        <SectionHeader icon={<FontAwesomeIcon icon={faUsers} style={{ fontSize: 12 }} />} title="全體公用" badge={
+                          <span style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 全員</span>
                         } />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {vGlobal.map((item: any) => (
@@ -739,7 +760,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                                 <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 3px', textDecoration: isPackingCheckedFor(item, tabMemberUid) ? 'line-through' : 'none' }}>
                                   {(isGlobalPackingItem(item) && googleUid) ? (item.textOverrides?.[googleUid] || item.text) : item.text}
                                 </p>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#4A4A4A', color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>🌐 所有人</span>
+                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#4A4A4A', color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 所有人</span>
                               </div>
                               {!isReadOnly && (canDeleteItem(item) || isGlobalPackingItem(item)) && (
                                 <button onClick={e => { e.stopPropagation(); openEdit(item); }}
@@ -749,26 +770,6 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                               )}
                             </div>
                           ))}
-                        </div>
-                      </>
-                    )}
-
-                    {/* ② 個人專屬 */}
-                    {vPersonal.length > 0 && (
-                      <>
-                        <SectionHeader icon="👤" title={tabMemberUid === googleUid ? '我的清單' : `${packingTab} 的清單`} />
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6, border: `1.5px solid ${C.sageDark}`, borderRadius: 16, padding: '10px 10px' }}>
-                          {vPersonal.map(item => renderPackingItem(item, 'personal'))}
-                        </div>
-                      </>
-                    )}
-
-                    {/* ③ 任務指派 */}
-                    {vAssigned.length > 0 && (
-                      <>
-                        <SectionHeader icon="📋" title="任務指派" />
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {vAssigned.map(item => renderPackingItem(item, 'assigned'))}
                         </div>
                       </>
                     )}
