@@ -534,8 +534,21 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const toTWDCalc = (amount: number, currency: string) =>
     Math.round(amount * (CURRENCY_TO_TWD[currency] ?? 1));
 
+  // Pre-compute settlements received per member (expenses where category='settlement' and name is in splitWith)
+  // A settlement "from A to B" is recorded as payer=A, splitWith=[B]; B's owed increases by amount.
+  // To compute net cash paid by each member: paid_out - settlements_received
+  const settlementsReceivedByName: Record<string, number> = {};
+  expenses.forEach((e: any) => {
+    if (e.isPrivate || e.category !== 'settlement') return;
+    const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : [];
+    const eAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
+    sw.forEach((n: string) => {
+      settlementsReceivedByName[n] = (settlementsReceivedByName[n] || 0) + eAmt;
+    });
+  });
+
   const memberStats = memberNames.map(name => {
-    // paid: include private expenses paid by this user (only visible to them)
+    // paid: total non-private expenses paid out by this member
     const paid = expenses
       .filter((e: any) => {
         if (e.isPrivate) return false; // exclude private from shared stats
@@ -564,7 +577,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     }, 0);
 
     const net = paid - owed; // positive = should receive, negative = should pay
-    return { name, paid, owed, net };
+    // 目前花費 = (總支出 + 代付金額) - 已收到的還款金額 = paid - received settlements
+    const netPaid = paid - (settlementsReceivedByName[name] || 0);
+    return { name, paid: netPaid, rawPaid: paid, owed, net };
   });
 
   // Settlement algorithm: creditors receive from debtors

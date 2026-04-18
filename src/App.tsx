@@ -588,6 +588,8 @@ function App() {
         setShowKeyUpgrade(false);
         setUpgradeStep('binding');
         setShowMemberBind(true);
+        // Delay sync so Firestore write propagates before editorQ is queried
+        setTimeout(() => syncUserTrips(user.uid, user.email!), 2000);
       } else {
         // Not logged in → save validated key + trip ID, prompt Google login
         pendingKeyRef.current    = key;

@@ -40,24 +40,23 @@ export default function JournalPage({ journals, members, journalComments, firest
     return () => clearTimeout(t);
   }, [showForm]);
 
-  // 追蹤 Google 登入狀態＋自動帶入綁定成員身份
+  // 追蹤 Google 登入狀態
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
-      if (user && !user.isAnonymous) {
-        setGoogleUid(user.uid);
-        if (members.length > 0) {
-          const bound = members.find((m: any) => m.googleUid === user.uid);
-          if (bound) {
-            localStorage.setItem(LS_USER_KEY, bound.name);
-            setCurrentUser(bound.name);
-          }
-        }
-      } else {
-        setGoogleUid(null);
-      }
+      setGoogleUid(user && !user.isAnonymous ? user.uid : null);
     });
     return unsub;
-  }, [members]);
+  }, []);
+
+  // 當 Google UID 或成員列表更新時，自動帶入綁定成員身份
+  useEffect(() => {
+    if (!googleUid || !members.length) return;
+    const bound = members.find((m: any) => m.googleUid === googleUid);
+    if (bound) {
+      localStorage.setItem(LS_USER_KEY, bound.name);
+      setCurrentUser(bound.name);
+    }
+  }, [googleUid, members]);
 
   // 編輯者且已 Google 登入但尚未綁定成員卡 → 顯示綁定提示
   const isEditorUnbound = !isReadOnly && role === 'editor' && googleUid && !members.some((m: any) => m.googleUid === googleUid);
