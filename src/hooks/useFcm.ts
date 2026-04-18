@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import { getToken, onMessage } from 'firebase/messaging';
-import { doc, setDoc, arrayUnion } from 'firebase/firestore';
+import { doc, updateDoc, arrayUnion } from 'firebase/firestore';
 import { messagingPromise } from '../config/firebase';
 import { db } from '../config/firebase';
 
@@ -34,12 +34,11 @@ export function useFcm(tripId: string | null, memberId: string | null) {
         const swReg = await navigator.serviceWorker.ready;
         const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
         if (token) {
-          // Use setDoc+merge so it works even if the member doc was recreated
-          // (updateDoc would throw "No document to update" on missing docs)
-          await setDoc(
+          // Use updateDoc (not setDoc+merge) so that a deleted member doc
+          // does NOT get silently recreated as a nameless document.
+          await updateDoc(
             doc(db, 'trips', tripId, 'members', memberId),
-            { fcmTokens: arrayUnion(token) },
-            { merge: true }
+            { fcmTokens: arrayUnion(token) }
           );
         }
       } catch (err) {

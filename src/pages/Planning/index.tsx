@@ -665,35 +665,45 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                     : item.text;
                   const showEdit = !isReadOnly && (canDeleteItem(item) || isGlobalPackingItem(item));
 
-                  // Assignee chip
+                  // Card background + border by section type
                   const isMe = tabMemberUid && tabMemberUid === googleUid;
-                  const assignerM = item.createdBy ? members.find((m: any) => m.googleUid === item.createdBy) : null;
-                  const chipEl = (() => {
-                    if (sectionType === 'global') return (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#4A4A4A', color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>🌐 所有人</span>
-                    );
-                    if (sectionType === 'personal') return (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: C.sage, color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>{isMe ? '⭐ 我' : `👤 ${packingTab}`}</span>
-                    );
-                    // assigned
-                    return (
-                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#FFE0C8', color: '#7A3A00', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}>
-                        🎯 {assignerM ? assignerM.name : '指派'} → <MemberAvatar uid={tabMemberUid} /> {packingTab}
-                      </span>
-                    );
-                  })();
+                  const cardBg =
+                    sectionType === 'global'   ? '#F0F9FF' :
+                    sectionType === 'personal' ? 'var(--tm-card-bg)' :
+                    'var(--tm-card-bg)';
+                  const cardBorder =
+                    sectionType === 'global'   ? '1.5px solid #DBEAFE' :
+                    sectionType === 'personal' ? `1.5px solid ${isMe ? '#D1FAE5' : C.creamDark}` :
+                    '1.5px solid transparent';
+
+                  // Assignee chip — right of title, todo-style coloured chip
+                  const tabM = members.find((m: any) => m.name === packingTab);
+                  const chipBg =
+                    sectionType === 'global'   ? '#6B7280' :
+                    sectionType === 'personal' ? (tabM?.color || C.sageDark) :
+                    '#F97316';
+                  const chipLabel =
+                    sectionType === 'global'   ? '全員' :
+                    sectionType === 'personal' ? (isMe ? '我' : packingTab) :
+                    packingTab;
+                  const chipIcon =
+                    sectionType === 'global'   ? <FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> :
+                    sectionType === 'personal' ? (isMe ? <FontAwesomeIcon icon={faStar} style={{ fontSize: 9 }} /> : <FontAwesomeIcon icon={faUser} style={{ fontSize: 9 }} />) :
+                    <FontAwesomeIcon icon={faUserTag} style={{ fontSize: 9 }} />;
 
                   return (
                     <div key={item.id}
-                      style={{ background: 'var(--tm-card-bg)', border: '1.5px solid transparent', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                      style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                       <div
                         onClick={() => canCheck && toggleItem(item)}
                         style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${checked ? C.sageDark : C.creamDark}`, background: checked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: canCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: canCheck ? 1 : 0.4 }}>
                         {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                       </div>
-                      <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
-                        <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 3px', textDecoration: checked ? 'line-through' : 'none' }}>{displayText}</p>
-                        {chipEl}
+                      <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none', flex: 1 }}>{displayText}</p>
+                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: chipBg, color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                          {chipIcon}{chipLabel}
+                        </span>
                       </div>
                       {showEdit && (
                         <button
@@ -750,26 +760,31 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                           <span style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 全員</span>
                         } />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                          {vGlobal.map((item: any) => (
-                            <div key={item.id} style={{ background: '#F0F7FF', border: '1.5px solid #D8EDF8', borderRadius: 16, padding: '12px 14px', display: 'flex', alignItems: 'center', gap: 10, opacity: isPackingCheckedFor(item, tabMemberUid) ? 0.55 : 1 }}>
-                              <div onClick={() => !isReadOnly && canCheckPacking(item) && toggleItem(item)}
-                                style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${isPackingCheckedFor(item, tabMemberUid) ? C.sageDark : '#A8CCE8'}`, background: isPackingCheckedFor(item, tabMemberUid) ? C.sage : 'white', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: (!isReadOnly && canCheckPacking(item)) ? 'pointer' : 'default', transition: 'all 0.2s' }}>
-                                {isPackingCheckedFor(item, tabMemberUid) && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                          {vGlobal.map((item: any) => {
+                            const gChecked = isPackingCheckedFor(item, tabMemberUid);
+                            const gCanCheck = !isReadOnly && canCheckPacking(item);
+                            const gText = (isGlobalPackingItem(item) && googleUid) ? (item.textOverrides?.[googleUid] || item.text) : item.text;
+                            return (
+                              <div key={item.id} style={{ background: '#F0F9FF', border: '1.5px solid #DBEAFE', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: gChecked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                                <div onClick={() => gCanCheck && toggleItem(item)}
+                                  style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${gChecked ? C.sageDark : C.creamDark}`, background: gChecked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: gCanCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: gCanCheck ? 1 : 0.4 }}>
+                                  {gChecked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                                </div>
+                                <div onClick={() => gCanCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: gCanCheck ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: gChecked ? 'line-through' : 'none', flex: 1 }}>{gText}</p>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#6B7280', color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                                    <FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} />全員
+                                  </span>
+                                </div>
+                                {!isReadOnly && (canDeleteItem(item) || isGlobalPackingItem(item)) && (
+                                  <button onClick={e => { e.stopPropagation(); openEdit(item); }}
+                                    style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
+                                    <FontAwesomeIcon icon={faPen} />
+                                  </button>
+                                )}
                               </div>
-                              <div style={{ flex: 1, minWidth: 0 }}>
-                                <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: '0 0 3px', textDecoration: isPackingCheckedFor(item, tabMemberUid) ? 'line-through' : 'none' }}>
-                                  {(isGlobalPackingItem(item) && googleUid) ? (item.textOverrides?.[googleUid] || item.text) : item.text}
-                                </p>
-                                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#4A4A4A', color: 'white', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 所有人</span>
-                              </div>
-                              {!isReadOnly && (canDeleteItem(item) || isGlobalPackingItem(item)) && (
-                                <button onClick={e => { e.stopPropagation(); openEdit(item); }}
-                                  style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'white', fontSize: 11, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
-                                  <FontAwesomeIcon icon={faPen} />
-                                </button>
-                              )}
-                            </div>
-                          ))}
+                            );
+                          })}
                         </div>
                       </>
                     )}
