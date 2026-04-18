@@ -657,7 +657,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
           )}
         </div>
 
-        {memberError && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{memberError}</p>}
+        {memberError && <p className="tm-error-text" style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{memberError}</p>}
         <button onClick={handleCreateMemberCard} disabled={savingMember}
           style={{ padding: 14, borderRadius: 14, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: savingMember ? 0.6 : 1 }}>
           {savingMember ? '儲存中...' : `✓ 完成（${[memberName.trim(), ...extraMembers.map(m => m.name)].filter(Boolean).length} 位旅伴）`}
@@ -730,7 +730,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
     <Screen title={<><FontAwesomeIcon icon={faPlane} style={{ marginRight: 8 }} />建立新旅行</>} onBack={() => { setView('hub'); setError(''); }}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         {!googleUser && (
-          <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="tm-amber-text" style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
             <FontAwesomeIcon icon={faTriangleExclamation} />請先返回首頁登入 Google 帳號後再建立旅行
           </div>
         )}
@@ -814,7 +814,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
           </div>
           <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>留空或稍後在記帳頁更新</p>
         </div>
-        {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
+        {error && <p className="tm-error-text" style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
         <button onClick={handleCreate} disabled={busy}
           style={{ padding: 14, borderRadius: 14, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: busy ? 0.6 : 1 }}>
           {busy ? '建立中...' : <><FontAwesomeIcon icon={faPlus} style={{ marginRight: 6 }} />建立旅行</>}
@@ -832,7 +832,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
         <input style={inputSt} placeholder="COLLAB-XXXXXX-XXXX"
           value={keyInput} onChange={e => setKeyInput(e.target.value.toUpperCase())}
           autoCapitalize="characters" />
-        {error && <p style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
+        {error && <p className="tm-error-text" style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
         <button onClick={handleJoinCollab} disabled={busy}
           style={{ padding: 14, borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 15, cursor: 'pointer', fontFamily: FONT, opacity: busy ? 0.6 : 1 }}>
           {busy ? '驗證中...' : '✓ 加入'}
@@ -871,14 +871,14 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
             </div>
           ) : (
             <div style={{ marginBottom: 20 }}>
-              <div style={{ padding: '12px 14px', borderRadius: 14, background: '#FFF8E1', marginBottom: 10, border: '1px solid #F0D080' }}>
-                <p style={{ fontSize: 12, fontWeight: 700, color: '#9A6800', margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <div className="tm-badge-amber-sm" style={{ padding: '12px 14px', borderRadius: 14, background: '#FFF8E1', marginBottom: 10, border: '1px solid #F0D080' }}>
+                <p style={{ fontSize: 12, fontWeight: 700, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <FontAwesomeIcon icon={faLightbulb} />溫馨提醒
                 </p>
-                <p style={{ fontSize: 12, color: '#9A6800', margin: '0 0 3px', lineHeight: 1.6 }}>若要「建立」或「編輯」行程，請先登入 Google 帳號。</p>
-                <p style={{ fontSize: 12, color: '#9A6800', margin: 0, lineHeight: 1.6 }}>訪客仍可透過「分享連結」直接進入預覽行程。</p>
+                <p style={{ fontSize: 12, margin: '0 0 3px', lineHeight: 1.6 }}>若要「建立」或「編輯」行程，請先登入 Google 帳號。</p>
+                <p style={{ fontSize: 12, margin: 0, lineHeight: 1.6 }}>訪客仍可透過「分享連結」直接進入預覽行程。</p>
               </div>
-              {error && <p style={{ fontSize: 12, color: '#C0392B', margin: '0 0 8px' }}>{error}</p>}
+              {error && <p className="tm-error-text" style={{ fontSize: 12, color: '#C0392B', margin: '0 0 8px' }}>{error}</p>}
               <button onClick={handleGoogleSignIn} disabled={signingIn}
                 style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
                 <span style={{ fontSize: 18 }}><FontAwesomeIcon icon={faLock} /></span>

@@ -200,6 +200,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
   };
 
   const handleLocSelect = async (result: any) => {
+    if (!isOwner) return;
     try {
       await updateDoc(doc(db, 'trips', TRIP_ID), {
         locationLat:      result.latitude,
@@ -232,6 +233,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
   };
 
   const handleScheduleBulkImport = async () => {
+    if (!isOwner) return;
     if (!bulkText.trim()) { setShowBulkImport(false); return; }
     setBulkImporting(true); setBulkError('');
     try {
@@ -468,8 +470,13 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const handleDelete = async () => {
     if (!isOwner) return; // only owner can delete events
     if (!selectedEvent) return;
-    await deleteDoc(doc(db, 'trips', TRIP_ID, 'events', selectedEvent.id));
-    setShowDeleteConfirm(false); setMode('view'); setSelectedEvent(null);
+    try {
+      await deleteDoc(doc(db, 'trips', TRIP_ID, 'events', selectedEvent.id));
+      setShowDeleteConfirm(false); setMode('view'); setSelectedEvent(null);
+    } catch (e) {
+      console.error(e);
+      alert('刪除失敗，請重試');
+    }
   };
 
   const openMetaEdit = async () => {
@@ -499,6 +506,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
   };
 
   const handleSaveMeta = async () => {
+    if (!isOwner) return;
     setSavingMeta(true);
     try {
       await updateDoc(doc(db, 'trips', TRIP_ID), {
@@ -1002,7 +1010,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                         )}
                       </div>
                     )}
-                    {travelCalcStatus === 'error' && <p style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} />{travelCalcMsg || '無法取得路線，請手動輸入或確認地點名稱'}</p>}
+                    {travelCalcStatus === 'error' && <p className="tm-error-text" style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} />{travelCalcMsg || '無法取得路線，請手動輸入或確認地點名稱'}</p>}
                     {!nextEvt && travelMode !== 'transit' && <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px' }}>當天無下一站行程，可手動填寫</p>}
                     {travelMode === 'transit' ? (
                       <div style={{ background: '#EAF2FF', border: '1.5px solid #4285F4', borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#2A6A9A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1330,7 +1338,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 }
                 return (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '4px 0 4px 58px', position: 'relative', zIndex: 1 }}>
-                    <div style={{ background: 'var(--tm-note-1)', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
+                    <div className="tm-amber-text" style={{ background: 'var(--tm-note-1)', borderRadius: 8, padding: '4px 10px', fontSize: 11, color: '#9A6800', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, boxShadow: '0 1px 4px #E8C96A33' }}>
                       {event.travelTime}
                     </div>
                   </div>

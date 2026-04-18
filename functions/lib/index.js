@@ -33,11 +33,17 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.claimOwnership = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
+exports.backupTripToNotion = exports.claimOwnership = exports.addEditor = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
 const https_1 = require("firebase-functions/v2/https");
+const params_1 = require("firebase-functions/params");
+const client_1 = require("@notionhq/client");
+// ── Notion backup config ───────────────────────────────────────────────────
+const NOTION_API_KEY = (0, params_1.defineSecret)('NOTION_API_KEY');
+const NOTION_DATABASE_ID = 'd8ebd7ff-76c7-4ca7-970c-25c2cb845c26'; // 行程備份紀錄（database）
+const NOTION_DATASOURCE_ID = 'd8ebd7ff-76c7-4ca7-970c-25c2cb845c26'; // same — data source ID for query
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
@@ -291,7 +297,32 @@ exports.todoDueDateReminder = (0, scheduler_1.onSchedule)({ schedule: '0 8 * * *
         }
     }
 });
-// ── 6. claimOwnership: backfill ownerUid for trips owned by email ─────────────
+// ── 6. addEditor: validate collaborator key and add caller to allowedEditorUids ──
+// Called from the client when a visitor enters the correct collaborator key.
+// Uses Admin SDK to bypass client-side security rules (trip update is owner-only).
+exports.addEditor = (0, https_1.onCall)(async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'Must be signed in');
+    const { tripId, collaboratorKey } = request.data;
+    if (!tripId || !collaboratorKey)
+        throw new https_1.HttpsError('invalid-argument', 'tripId and collaboratorKey required');
+    const tripDoc = await db.collection('trips').doc(tripId).get();
+    if (!tripDoc.exists)
+        throw new https_1.HttpsError('not-found', 'Trip not found');
+    const data = tripDoc.data();
+    const storedKey = (data.collaboratorKey || '').toUpperCase();
+    if (!storedKey || collaboratorKey.trim().toUpperCase() !== storedKey) {
+        throw new https_1.HttpsError('permission-denied', 'Invalid collaborator key');
+    }
+    const uid = request.auth.uid;
+    const email = request.auth.token.email || '';
+    await tripDoc.ref.update({
+        allowedEditorUids: admin.firestore.FieldValue.arrayUnion(uid),
+        [`editorInfo.${uid}`]: { email, joinedAt: Date.now() },
+    });
+    return { success: true };
+});
+// ── 7. claimOwnership: backfill ownerUid for trips owned by email ─────────────
 // Called from the client after Google sign-in. Uses Admin SDK to bypass
 // client-side security rules and stamp the caller's UID onto any trip
 // where ownerEmail matches but ownerUid is missing or stale.
@@ -315,5 +346,172 @@ exports.claimOwnership = (0, https_1.onCall)(async (request) => {
         }
     }
     return { fixed };
+});
+// ── 8. backupTripToNotion ─────────────────────────────────────────────────────
+// Callable function: owner triggers a backup of a trip to the Notion database.
+// Prerequisites:
+//   firebase functions:secrets:set NOTION_API_KEY
+//   (Use an Internal Integration token from notion.so/my-integrations,
+//    shared with the "TripMori 旅行備份" page.)
+//
+// Client call example:
+//   const fn = httpsCallable(functions, 'backupTripToNotion');
+//   await fn({ tripId: '...' });
+exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, async (request) => {
+    if (!request.auth)
+        throw new https_1.HttpsError('unauthenticated', 'Must be signed in');
+    const { tripId } = request.data;
+    if (!tripId)
+        throw new https_1.HttpsError('invalid-argument', 'tripId required');
+    const notionKey = NOTION_API_KEY.value();
+    if (!notionKey)
+        throw new https_1.HttpsError('failed-precondition', 'NOTION_API_KEY secret not configured');
+    const notion = new client_1.Client({ auth: notionKey });
+    // ── Fetch trip data from Firestore ────────────────────────────────────────
+    const [tripSnap, membersSnap, eventsSnap, expensesSnap, journalsSnap] = await Promise.all([
+        db.collection('trips').doc(tripId).get(),
+        db.collection('trips').doc(tripId).collection('members').get(),
+        db.collection('trips').doc(tripId).collection('events').get(),
+        db.collection('trips').doc(tripId).collection('expenses').get(),
+        db.collection('trips').doc(tripId).collection('journals').get(),
+    ]);
+    if (!tripSnap.exists)
+        throw new https_1.HttpsError('not-found', 'Trip not found');
+    // Verify caller is owner or editor
+    const tripData = tripSnap.data();
+    const uid = request.auth.uid;
+    const isOwner = tripData.ownerUid === uid;
+    const isEditor = (tripData.allowedEditorUids || []).includes(uid);
+    if (!isOwner && !isEditor)
+        throw new https_1.HttpsError('permission-denied', 'Owner or editor only');
+    // ── Compute aggregates ────────────────────────────────────────────────────
+    const currency = tripData.currency || 'JPY';
+    const memberNames = membersSnap.docs.map(d => d.data().name || '');
+    const memberCount = membersSnap.size;
+    const eventCount = eventsSnap.size;
+    // Total expenses converted to TWD (use stored amountTWD if available)
+    const TWD_RATES = { TWD: 1, JPY: 0.22, USD: 32, EUR: 35, KRW: 0.024, CNY: 4.4, HKD: 4.1, MYR: 7.2, THB: 0.9, IDR: 0.002 };
+    const totalTWD = expensesSnap.docs.reduce((sum, d) => {
+        const e = d.data();
+        if (e.isSettlement)
+            return sum;
+        const amt = Number(e.amountTWD) || Number(e.amount) * (TWD_RATES[e.currency] ?? 1);
+        return sum + amt;
+    }, 0);
+    const dateRange = [tripData.startDate, tripData.endDate].filter(Boolean).join(' ～ ') || '—';
+    // Build journal summary (最近 5 筆)
+    const journals = journalsSnap.docs
+        .map(d => d.data())
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
+        .slice(0, 5);
+    // Build events summary (最近 10 筆)
+    const events = eventsSnap.docs
+        .map(d => d.data())
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
+        .slice(0, 10);
+    // Build expenses summary (最多 10 筆)
+    const expenses = expensesSnap.docs
+        .filter(d => !d.data().isSettlement)
+        .map(d => d.data())
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+        .slice(0, 10);
+    // ── Mark previous backups of same trip as 舊版 ────────────────────────────
+    try {
+        const existing = await notion.dataSources.query({
+            dataSourceId: NOTION_DATASOURCE_ID,
+            filter: {
+                property: 'Firestore ID',
+                rich_text: { equals: tripId },
+            },
+        });
+        for (const page of existing.results ?? []) {
+            await notion.pages.update({
+                page_id: page.id,
+                properties: { '狀態': { select: { name: '舊版' } } },
+            });
+        }
+    }
+    catch (_) {
+        // Non-fatal: marking old backups failed, continue
+    }
+    // ── Build Notion page content ─────────────────────────────────────────────
+    const memberList = memberNames.length ? memberNames.map(n => `- ${n}`).join('\n') : '（無成員）';
+    const eventLines = events.length
+        ? events.map(e => `| ${e.date || '—'} | ${e.name || '—'} | ${e.startTime || ''} | ${e.location || ''} |`).join('\n')
+        : '| — | 尚無行程 | | |';
+    const expenseLines = expenses.length
+        ? expenses.map(e => `| ${e.date || '—'} | ${e.description || '—'} | ${e.amount} ${e.currency} | ${e.paidBy || '—'} |`).join('\n')
+        : '| — | 尚無費用 | | |';
+    const journalLines = journals.length
+        ? journals.map(j => `### ${j.date || '—'} — ${j.title || '（無標題）'}\n${(j.body || '').slice(0, 200)}${(j.body || '').length > 200 ? '…' : ''}`).join('\n\n')
+        : '（尚無日誌）';
+    const backupTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
+    const pageContent = `## 🗂 行程資訊
+- **名稱**：${tripData.title || '—'} ${tripData.emoji || ''}
+- **日期**：${dateRange}
+- **幣別**：${currency}
+- **說明**：${tripData.description || '（無）'}
+
+---
+
+## 👥 旅伴（${memberCount} 人）
+${memberList}
+
+---
+
+## 📅 行程摘要（最近 ${events.length} 筆）
+| 日期 | 活動名稱 | 時間 | 地點 |
+|------|----------|------|------|
+${eventLines}
+
+---
+
+## 💰 費用摘要（最近 ${expenses.length} 筆）
+| 日期 | 說明 | 金額 | 付款人 |
+|------|------|------|--------|
+${expenseLines}
+
+> 合計 ≈ NT$ ${Math.round(totalTWD).toLocaleString()}
+
+---
+
+## 📖 日誌（最近 ${journals.length} 篇）
+${journalLines}
+
+---
+
+*備份時間：${backupTime}　|　Firestore ID：\`${tripId}\`*`;
+    // ── Create Notion page in database ────────────────────────────────────────
+    const page = await notion.pages.create({
+        parent: { database_id: NOTION_DATABASE_ID },
+        properties: {
+            '行程名稱': { title: [{ text: { content: `${tripData.emoji || '✈️'} ${tripData.title || '未命名行程'}` } }] },
+            'Firestore ID': { rich_text: [{ text: { content: tripId } }] },
+            '行程日期': { rich_text: [{ text: { content: dateRange } }] },
+            '成員數': { number: memberCount },
+            '活動數': { number: eventCount },
+            '費用總計 TWD': { number: Math.round(totalTWD) },
+            '幣別': { rich_text: [{ text: { content: currency } }] },
+            '狀態': { select: { name: '最新' } },
+        },
+        children: [
+            {
+                object: 'block',
+                type: 'paragraph',
+                paragraph: {
+                    rich_text: [{ type: 'text', text: { content: pageContent } }],
+                },
+            },
+        ],
+    });
+    return {
+        success: true,
+        notionPageId: page.id,
+        notionUrl: page.url || '',
+        memberCount,
+        eventCount,
+        expenseCount: expenses.length,
+        totalTWD: Math.round(totalTWD),
+    };
 });
 //# sourceMappingURL=index.js.map

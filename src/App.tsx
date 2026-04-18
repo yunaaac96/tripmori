@@ -3,7 +3,6 @@ import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
-import { runImport } from './scripts/importData';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faLightbulb, faEye } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
@@ -537,9 +536,6 @@ function App() {
           }
         }, () => { /* notifications collection not yet provisioned — silently skip */ }));
         setLoading(false);
-        if (activeTripId === TRIP_ID && !localStorage.getItem('tripmori_imported')) {
-          runImport().then(() => localStorage.setItem('tripmori_imported', '1'));
-        }
       } catch (err) { console.error(err); setLoading(false); }
     };
     init();
@@ -629,7 +625,7 @@ function App() {
       });
       localStorage.setItem('tripmori_current_user',
         members.find((m: any) => m.id === memberId)?.name || '');
-    } catch (e) { console.error(e); }
+    } catch (e) { console.error(e); alert('綁定失敗，請重試'); }
     setBindingMember(false);
     setShowMemberBind(false);
     setUpgradeStep('none');
@@ -712,7 +708,7 @@ function App() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ fontSize: 16 }}>{activeProject.emoji}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: C.bark }}>{activeProject.title}</span>
-              <span style={{ fontSize: 10, fontWeight: 700, color: activeProject.role === 'owner' ? '#4A7A35' : '#9A6800', background: activeProject.role === 'owner' ? '#E0F0D8' : '#FFF2CC', borderRadius: 6, padding: '1px 6px' }}>
+              <span className={activeProject.role === 'owner' ? 'tm-badge-owner' : 'tm-role-badge-editor'} style={{ fontSize: 10, fontWeight: 700, color: activeProject.role === 'owner' ? '#4A7A35' : '#9A6800', background: activeProject.role === 'owner' ? '#E0F0D8' : '#FFF2CC', borderRadius: 6, padding: '1px 6px' }}>
                 {activeProject.role === 'owner' ? '擁有者' : '編輯者'}
               </span>
             </div>

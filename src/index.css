@@ -94,9 +94,9 @@
     --tm-input-bg: #242118;
     --tm-input-border: #4A4438;
     --tm-cream: #242118;
-    --tm-cream-dark: #3C3830;
+    --tm-cream-dark: #6B5C4E;
     --tm-bark: #EDE4D8;
-    --tm-bark-light: #A8998A;
+    --tm-bark-light: #C0AE9E;
     --tm-text-inv: #1C1A17;
     --tm-shadow: #080706;
     /* note backgrounds: clearly distinguishable, enough saturation to read as color */
@@ -213,6 +213,34 @@
 
   /* Expense — visitor note dark mode */
   .tm-visitor-note { background: #242118 !important; }
+
+  /* Planning — packing global cards */
+  .tm-packing-global-card  { background: #0E2030 !important; border-color: #1A4458 !important; }
+  .tm-packing-global-badge { background: #0E2030 !important; color: #7ABCE0 !important; }
+  .tm-packing-chip-global  { background: #3A4860 !important; }
+  .tm-packing-chip-assigned { background: #8A3A10 !important; }
+  .tm-packing-personal-mine { border-color: #1A4A30 !important; }
+
+  /* Planning — todo status cards */
+  .tm-todo-overdue-card { background: #2A0E10 !important; border-color: #7A3030 !important; }
+  .tm-todo-soon-card    { background: #2A1C08 !important; border-color: #7A5018 !important; }
+
+  /* Planning — todo badge + date text */
+  .tm-todo-badge-all     { background: #1A3A18 !important; color: #80C870 !important; }
+  .tm-todo-badge-member  { color: #EDE4D8 !important; }
+  .tm-todo-date-overdue  { color: #E07070 !important; }
+  .tm-todo-date-soon     { color: #C88040 !important; }
+
+  /* Planning — editor unbound note */
+  .tm-editor-unbound-text { color: #D4A040 !important; }
+
+  /* Cross-page utilities */
+  .tm-amber-text    { color: #D4A040 !important; }
+  .tm-error-text    { color: #E07070 !important; }
+  .tm-badge-sky-sm  { background: #0E2030 !important; color: #7ABCE0 !important; }
+  .tm-badge-amber-sm { background: #3A2C00 !important; color: #D4A040 !important; border-color: #6A4A00 !important; }
+  .tm-badge-sage-sm  { background: #0E2810 !important; color: #80C870 !important; border-color: #2A5A20 !important; }
+  .tm-role-badge-editor { background: #3A2C00 !important; color: #D4A040 !important; }
 }
 
 #root {
@@ -235,22 +263,6 @@
 /* Role badges — light mode */
 .tm-badge-owner  { background: #4A7A35; color: #fff; }
 .tm-badge-editor { background: #9A6800; color: #fff; }
-
-/* Member cards scroll — hide scrollbar */
-.tm-member-scroll {
-  -ms-overflow-style: none;
-  scrollbar-width: none;
-}
-.tm-member-scroll::-webkit-scrollbar {
-  display: none;
-}
-
-/* Show desktop arrow buttons on wide screens */
-@media (min-width: 600px) {
-  .tm-member-arrow {
-    display: flex !important;
-  }
-}
 
 /* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
 .tm-hscroll {

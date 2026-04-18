@@ -522,7 +522,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
             <span style={{ fontSize: 13, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
           </button>
           {authError && (
-            <p style={{ fontSize: 11, color: '#C0392B', margin: '6px 0 0', fontWeight: 600 }}>{authError}</p>
+            <p className="tm-error-text" style={{ fontSize: 11, color: '#C0392B', margin: '6px 0 0', fontWeight: 600 }}>{authError}</p>
           )}
         </div>
       )}
@@ -666,6 +666,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                     )}
                   </div>
                   <button onClick={() => handleRevokeEditor(uid)}
+                    className="tm-badge-amber-sm"
                     style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 10, border: '1px solid #E8C96A', background: '#FFF8E1', color: '#9A6800', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                     降級訪客
                   </button>
@@ -790,7 +791,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                     <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>
                     {isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 6, padding: '1px 6px' }}>我</span>}
-                    {m.googleUid && !isMyCard && <span style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLink} style={{ fontSize: 8 }} /> 已綁定</span>}
+                    {m.googleUid && !isMyCard && <span className="tm-badge-sky-sm" style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLink} style={{ fontSize: 8 }} /> 已綁定</span>}
                     {!m.googleUid && <span style={{ fontSize: 10, fontWeight: 600, background: '#F5F5F5', color: '#9A8A7A', borderRadius: 6, padding: '1px 6px' }}>未綁定</span>}
                   </div>
                   {/* 擁有者可看到綁定的 Google 帳號 email */}
@@ -881,7 +882,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                       </div>
                     </div>
                   ) : (
-                    <div style={{ padding: '10px', borderRadius: 12, background: 'var(--tm-note-1)', color: '#9A6800', fontWeight: 600, fontSize: 12, textAlign: 'center' }}>
+                    <div className="tm-amber-text" style={{ padding: '10px', borderRadius: 12, background: 'var(--tm-note-1)', color: '#9A6800', fontWeight: 600, fontSize: 12, textAlign: 'center' }}>
                       <FontAwesomeIcon icon={faLock} style={{ fontSize: 11, marginRight: 5 }} />請先登入 Google 並綁定成員卡後即可留言
                     </div>
                   )}

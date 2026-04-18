@@ -735,6 +735,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
 
                   return (
                     <div key={item.id}
+                      className={sectionType === 'global' ? 'tm-packing-global-card' : sectionType === 'personal' && isMe ? 'tm-packing-personal-mine' : ''}
                       style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                       <div
                         onClick={() => canCheck && toggleItem(item)}
@@ -743,7 +744,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       </div>
                       <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none', flex: 1 }}>{displayText}</p>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: chipBg, color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                        <span className={sectionType === 'global' ? 'tm-packing-chip-global' : sectionType === 'assigned' ? 'tm-packing-chip-assigned' : ''} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: chipBg, color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
                           {chipIcon}{chipLabel}
                         </span>
                       </div>
@@ -799,7 +800,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                     {vGlobal.length > 0 && (
                       <>
                         <SectionHeader icon={<FontAwesomeIcon icon={faUsers} style={{ fontSize: 12 }} />} title="全體公用" badge={
-                          <span style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 全員</span>
+                          <span className="tm-packing-global-badge" style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 全員</span>
                         } />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {vGlobal.map((item: any) => {
@@ -807,14 +808,14 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                             const gCanCheck = !isReadOnly && canCheckPacking(item);
                             const gText = (isGlobalPackingItem(item) && googleUid) ? (item.textOverrides?.[googleUid] || item.text) : item.text;
                             return (
-                              <div key={item.id} style={{ background: '#F0F9FF', border: '1.5px solid #DBEAFE', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: gChecked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                              <div key={item.id} className="tm-packing-global-card" style={{ background: '#F0F9FF', border: '1.5px solid #DBEAFE', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: gChecked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                                 <div onClick={() => gCanCheck && toggleItem(item)}
                                   style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${gChecked ? C.sageDark : C.creamDark}`, background: gChecked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: gCanCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: gCanCheck ? 1 : 0.4 }}>
                                   {gChecked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                                 </div>
                                 <div onClick={() => gCanCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: gCanCheck ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: gChecked ? 'line-through' : 'none', flex: 1 }}>{gText}</p>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#6B7280', color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                                  <span className="tm-packing-chip-global" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#6B7280', color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
                                     <FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} />全員
                                   </span>
                                 </div>
@@ -865,6 +866,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 const showEdit = canDeleteItem(item);
                 return (
                   <div key={item.id}
+                    className={!checked ? (status === 'overdue' ? 'tm-todo-overdue-card' : status === 'soon' ? 'tm-todo-soon-card' : '') : ''}
                     style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.5 : 1, transition: 'opacity 0.2s' }}>
                     <div
                       onClick={() => canCheck && toggleItem(item)}
@@ -874,12 +876,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                     <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
                       <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
                       {!checked && item.dueDate && (
-                        <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <p className={status === 'overdue' ? 'tm-todo-date-overdue' : status === 'soon' ? 'tm-todo-date-soon' : ''} style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
                           {status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? <><FontAwesomeIcon icon={faClock} style={{ fontSize: 9 }} /> 即將到期：</> : '截止：'}{item.dueDate}
                         </p>
                       )}
                     </div>
-                    <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
+                    <div className={item.assignedTo === 'all' || !item.assignedTo ? 'tm-todo-badge-all' : 'tm-todo-badge-member'} style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
                       {badgeLabel}
                     </div>
                     {showEdit && (
@@ -934,8 +936,8 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                   )}
                   {isEditorUnbound && !isReadOnly && (
                     <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FontAwesomeIcon icon={faLock} style={{ fontSize: 12, color: '#9A6800' }} />
-                      <p style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>請先至成員頁綁定 Google 帳號才能新增待辦</p>
+                      <FontAwesomeIcon icon={faLock} className="tm-editor-unbound-text" style={{ fontSize: 12, color: '#9A6800' }} />
+                      <p className="tm-editor-unbound-text" style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>請先至成員頁綁定 Google 帳號才能新增待辦</p>
                     </div>
                   )}
                 </>
