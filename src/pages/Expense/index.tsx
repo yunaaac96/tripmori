@@ -765,11 +765,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               </div>
               {ms && (
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-                  <div style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
+                  <div className="tm-stat-paid-box" style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
                     <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {ms.paid.toLocaleString()}</p>
                   </div>
-                  <div style={{ flex: 1, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
+                  <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ flex: 1, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
                     <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>{ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: ms.net >= 0 ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
                       NT$ {Math.abs(ms.net).toLocaleString()}
@@ -793,7 +793,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description}</p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>{e.date || ''}</p>
-                          {isPayer && <span style={{ fontSize: 9, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 5, padding: '1px 5px' }}>付款者</span>}
+                          {isPayer && <span className="tm-payer-badge" style={{ fontSize: 9, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 5, padding: '1px 5px' }}>付款者</span>}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
@@ -1173,7 +1173,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     <p style={{ fontSize: 9, color: C.barkLight, margin: '0 0 6px' }}>點擊查看明細 ›</p>
                     <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {ms.paid.toLocaleString()}</p>
-                    <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px' }}>
+                    <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px' }}>
                       <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 1px', fontWeight: 600 }}>
                         {isCreditor ? '代墊金額' : '需還款金額'}
                       </p>
@@ -1197,18 +1197,19 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         {!isVisitor && settlements.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <button onClick={() => setSettlementExpanded(v => !v)}
+              className="tm-settlement-toggle"
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EAF3DE', borderRadius: 14, padding: '10px 14px', border: '1px solid #B5CFA7', cursor: 'pointer', fontFamily: FONT, marginBottom: settlementExpanded ? 8 : 0 }}>
-              <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span className="tm-settlement-toggle-text" style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 6 }}>
                 <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} />
                 建議結算方式（{settlements.length} 筆）
               </span>
-              <span style={{ fontSize: 11, color: '#4A7A35', fontWeight: 600 }}>{settlementExpanded ? '收起 ▲' : '展開 ▼'}</span>
+              <span className="tm-settlement-toggle-text" style={{ fontSize: 11, color: '#4A7A35', fontWeight: 600 }}>{settlementExpanded ? '收起 ▲' : '展開 ▼'}</span>
             </button>
             {settlementExpanded && creditorOrder.map(creditor => {
               const debts = settlementByCreditor[creditor];
               const isMyGroup = creditor === currentUserName;
               return (
-                <div key={creditor} style={{ ...cardStyle, marginBottom: 8, background: isMyGroup ? '#E0F4FF' : '#EAF3DE', border: `1px solid ${isMyGroup ? '#9AC8E8' : '#B5CFA7'}`, padding: '12px 14px' }}>
+                <div key={creditor} className={isMyGroup ? 'tm-settlement-card-mine' : 'tm-settlement-card-other'} style={{ ...cardStyle, marginBottom: 8, background: isMyGroup ? '#E0F4FF' : '#EAF3DE', border: `1px solid ${isMyGroup ? '#9AC8E8' : '#B5CFA7'}`, padding: '12px 14px' }}>
                   {/* Creditor header */}
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
                     <div style={{ width: 30, height: 30, borderRadius: '50%', background: getMemberColor(creditor), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
@@ -1216,10 +1217,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         ? <img src={getMemberAvatar(creditor)!} alt={creditor} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         : creditor[0]?.toUpperCase()}
                     </div>
-                    <p style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1 }}>
+                    <p className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1 }}>
                       {creditor}{isMyGroup ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
                     </p>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
+                    <span className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
                   </div>
                   {/* Debtors */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
@@ -1227,7 +1228,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       const sKey = `${debt.from}-${debt.to}`;
                       const isMe = debt.from === currentUserName;
                       return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', borderRadius: 10, padding: '8px 10px' }}>
+                        <div key={i} className="tm-settlement-debt-row" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', borderRadius: 10, padding: '8px 10px' }}>
                           <div style={{ width: 26, height: 26, borderRadius: '50%', background: getMemberColor(debt.from), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
                             {getMemberAvatar(debt.from)
                               ? <img src={getMemberAvatar(debt.from)!} alt={debt.from} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
@@ -1241,6 +1242,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                             <button
                               onClick={() => handleQuickSettle(debt.from, debt.to, debt.amount)}
                               disabled={settlingId === sKey}
+                              className="tm-settle-confirm-btn"
                               style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: settlingId === sKey ? C.creamDark : '#4A7A35', color: settlingId === sKey ? C.barkLight : 'white', fontSize: 11, fontWeight: 700, cursor: settlingId === sKey ? 'default' : 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                               {settlingId === sKey ? '處理中...' : '✓ 確認還款'}
                             </button>
@@ -1317,7 +1319,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
         {/* ── Visitor note: only category breakdown visible ── */}
         {isVisitor && (
-          <div style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div className="tm-visitor-note" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
             <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訪客模式：僅顯示分類佔比，明細資料僅旅伴可查看</span>
           </div>
@@ -1333,6 +1335,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               </button>
             ))}
             <button onClick={() => setSortMode(nextSort[sortMode])}
+              className="tm-sort-btn"
               style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
               {sortLabels[sortMode]}
             </button>
