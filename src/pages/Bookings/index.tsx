@@ -285,6 +285,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const [showQrFor, setShowQrFor]       = useState<string | null>(null);
   const [deleting, setDeleting]         = useState<string | null>(null);
   const [toggling, setToggling]         = useState<string | null>(null);
+  const [editorDelToast, setEditorDelToast] = useState(false);
 
   const qrFileRef    = useRef<HTMLInputElement>(null);
   const carQrFileRef = useRef<HTMLInputElement>(null);
@@ -394,7 +395,13 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setSaving(false);
   };
 
+  const showEditorDelToast = () => {
+    setEditorDelToast(true);
+    setTimeout(() => setEditorDelToast(false), 3500);
+  };
+
   const handleDelete = async (id: string) => {
+    if (!isOwner) { showEditorDelToast(); return; }
     if (!window.confirm('確定要刪除這筆預訂？')) return;
     setDeleting(id);
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'bookings', id)); }
@@ -519,6 +526,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       )}
 
       <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji={<FontAwesomeIcon icon={faPlane} />} color={C.sky} />
+
+      {editorDelToast && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#5A3A3A', color: 'white', borderRadius: 24, padding: '10px 22px', fontSize: 13, fontWeight: 700, zIndex: 500, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', whiteSpace: 'nowrap', fontFamily: FONT }}>
+          如需刪除，請通知行程擁有者
+        </div>
+      )}
 
       <div style={{ padding: '8px 16px 80px' }}>
 
