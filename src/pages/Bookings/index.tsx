@@ -6,7 +6,7 @@ import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap, faPhone, faQrcode, faArrowRightToBracket, faArrowRightFromBracket, faClock, faRotateLeft, faCalendarDays, faMoneyBill1 } from '@fortawesome/free-solid-svg-icons';
+import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap, faPhone, faQrcode, faArrowRightToBracket, faArrowRightFromBracket, faClock, faRotateLeft, faCalendarDays, faMoneyBill1, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faCheck, faXmark } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 
 const BOOKING_TYPE_ICONS: Record<string, IconDefinition> = {
@@ -97,7 +97,7 @@ function EditBtn({ onClick }: { onClick: () => void }) {
   return (
     <button onClick={onClick}
       style={{ flexShrink: 0, width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-      ✏️
+      <FontAwesomeIcon icon={faPen} />
     </button>
   );
 }
@@ -695,7 +695,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             {/* ── Expand toggle ── */}
             <button onClick={() => toggleHotelExpanded(hotelKey)}
               style={{ width: '100%', padding: '7px 12px', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-              {isExpanded ? '▲ 收起詳細' : '▼ 查看詳細'}
+              <FontAwesomeIcon icon={isExpanded ? faChevronUp : faChevronDown} style={{ marginRight: 6 }} />
+              {isExpanded ? '收起詳細' : '查看詳細'}
             </button>
             {/* ── Expanded details ── */}
             {isExpanded && (
@@ -833,7 +834,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <>
               <button onClick={() => setShowCarQR(v => !v)}
                 style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: car.participants?.length ? 8 : 0 }}>
-                <span>{showCarQR ? '▲' : '▼'}</span>
+                <FontAwesomeIcon icon={showCarQR ? faChevronUp : faChevronDown} />
                 {showCarQR ? '收起 QR Code' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />展開{car.carMode === 'charter' ? '包車' : '取車'} QR Code</>}
               </button>
               {showCarQR && (
@@ -875,7 +876,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
                 <div style={{ width: 46, height: 46, borderRadius: 14, background: b.used ? '#E0E0E0' : typeInfo.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, position: 'relative', color: b.used ? '#9A9A9A' : typeInfo.color }}>
                   <FontAwesomeIcon icon={BOOKING_TYPE_ICONS[b.type] || faEllipsis} />
-                  {b.used && <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: 10, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 4px', fontWeight: 700 }}>✓</span>}
+                  {b.used && <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: 9, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 4px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faCheck} /></span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none', wordBreak: 'break-word' }}>{b.title}</p>
@@ -888,9 +889,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button onClick={() => handleMoveOrder(b, 'up', sortedBookings)} disabled={bIdx === 0}
-                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: bIdx === 0 ? 'default' : 'pointer', opacity: bIdx === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▲</button>
+                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: bIdx === 0 ? 'default' : 'pointer', opacity: bIdx === 0 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faArrowUp} /></button>
                       <button onClick={() => handleMoveOrder(b, 'down', sortedBookings)} disabled={bIdx === sortedBookings.length - 1}
-                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: bIdx === sortedBookings.length - 1 ? 'default' : 'pointer', opacity: bIdx === sortedBookings.length - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>▼</button>
+                        style={{ width: 26, height: 26, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: bIdx === sortedBookings.length - 1 ? 'default' : 'pointer', opacity: bIdx === sortedBookings.length - 1 ? 0.3 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faArrowDown} /></button>
                     </div>
                     <div style={{ display: 'flex', gap: 4 }}>
                       <button onClick={() => openEditBooking(b)}
@@ -954,7 +955,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 <>
                   <button onClick={() => setShowQrFor(isQrOpen ? null : b.id)}
                     style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${isQrOpen ? C.sageDark : C.creamDark}`, background: isQrOpen ? C.sage : 'var(--tm-card-bg)', color: isQrOpen ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 2 }}>
-                    <span>{isQrOpen ? '▲' : '▼'}</span>
+                    <FontAwesomeIcon icon={isQrOpen ? faChevronUp : faChevronDown} />
                     {isQrOpen ? '收起 QR Code' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />展開 QR Code</>}
                   </button>
                   {isQrOpen && (
@@ -981,7 +982,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
                 {editType === 'flight' ? '編輯航班' : editType === 'hotel' ? '編輯住宿' : '編輯租車/包車'}
               </p>
-              <button onClick={() => setEditType(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <button onClick={() => setEditType(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1154,8 +1155,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                     <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)' }}>
                       <img src={editForm.qrUrl} alt="QR" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain' }} />
                       <div>
-                        <p style={{ fontSize: 11, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 已上傳</p>
-                        <button onClick={() => setF('qrUrl', '')} style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 600 }}>✕ 移除</button>
+                        <p style={{ fontSize: 11, color: '#4A7A35', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCheck} /> 已上傳</p>
+                        <button onClick={() => setF('qrUrl', '')} style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faXmark} /> 移除</button>
                       </div>
                     </div>
                   ) : (
@@ -1177,7 +1178,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </button>
                 <button onClick={handleStaticSave} disabled={staticSaving}
                   style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: staticSaving ? 'default' : 'pointer', fontFamily: FONT, opacity: staticSaving ? 0.6 : 1 }}>
-                  {staticSaving ? '儲存中...' : '✓ 儲存'}
+                  {staticSaving ? '儲存中...' : <><FontAwesomeIcon icon={faCheck} style={{ marginRight: 6 }} />儲存</>}
                 </button>
               </div>
             </div>
@@ -1192,7 +1193,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '92vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><FontAwesomeIcon icon={faPlane} style={{ fontSize: 14 }} />編輯航班</p>
-              <button onClick={() => setEditFlightIdx(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <button onClick={() => setEditFlightIdx(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* Direction */}
@@ -1229,7 +1230,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSingleFlightSave} disabled={staticSaving}
                   style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: staticSaving ? 'default' : 'pointer', fontFamily: FONT, opacity: staticSaving ? 0.6 : 1 }}>
-                  {staticSaving ? '儲存中...' : '✓ 儲存'}
+                  {staticSaving ? '儲存中...' : <><FontAwesomeIcon icon={faCheck} style={{ marginRight: 6 }} />儲存</>}
                 </button>
               </div>
             </div>
@@ -1244,7 +1245,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><FontAwesomeIcon icon={editBookingId ? faPen : faClipboardList} style={{ fontSize: 14 }} />{editBookingId ? '修改預訂' : '新增預訂'}</p>
-              <button onClick={closeCustomForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <button onClick={closeCustomForm} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
@@ -1280,8 +1281,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 12px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)' }}>
                     <img src={customForm.qrUrl} alt="QR" style={{ width: 56, height: 56, borderRadius: 8, objectFit: 'contain' }} />
                     <div>
-                      <p style={{ fontSize: 11, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 已上傳</p>
-                      <button onClick={() => setC('qrUrl', '')} style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 600 }}>✕ 移除</button>
+                      <p style={{ fontSize: 11, color: '#4A7A35', fontWeight: 700, margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCheck} /> 已上傳</p>
+                      <button onClick={() => setC('qrUrl', '')} style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: 'none', cursor: 'pointer', padding: 0, fontFamily: FONT, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faXmark} /> 移除</button>
                     </div>
                   </div>
                 ) : (
@@ -1298,7 +1299,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </button>
                 <button onClick={handleCustomSave} disabled={saving || !customForm.title.trim()}
                   style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 14, cursor: saving || !customForm.title.trim() ? 'default' : 'pointer', fontFamily: FONT, opacity: saving || !customForm.title.trim() ? 0.6 : 1 }}>
-                  {saving ? '儲存中...' : editBookingId ? '✓ 儲存修改' : '✓ 新增預訂'}
+                  {saving ? '儲存中...' : <><FontAwesomeIcon icon={faCheck} style={{ marginRight: 6 }} />{editBookingId ? '儲存修改' : '新增預訂'}</>}
                 </button>
               </div>
             </div>
@@ -1332,7 +1333,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               </button>
               <button onClick={handleExpenseImport} disabled={expenseSaving}
                 style={{ flex: 2, padding: '12px', borderRadius: 14, border: 'none', background: '#6A9A5A', color: 'white', fontWeight: 700, fontSize: 14, cursor: expenseSaving ? 'default' : 'pointer', fontFamily: FONT, opacity: expenseSaving ? 0.6 : 1 }}>
-                {expenseSaving ? '新增中...' : '✓ 新增至記帳'}
+                {expenseSaving ? '新增中...' : <><FontAwesomeIcon icon={faCheck} style={{ marginRight: 6 }} />新增至記帳</>}
               </button>
             </div>
           </div>
