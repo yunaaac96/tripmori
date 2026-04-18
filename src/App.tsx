@@ -451,7 +451,7 @@ function App() {
         if (!auth.currentUser) await signInAnonymously(auth);
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
-          ['events', setEvents], ['members', setMembers], ['bookings', setBookings],
+          ['events', setEvents], ['bookings', setBookings],
           ['journals', setJournals], ['lists', setLists],
         ];
         const logErr = (col: string) => (e: Error) => console.warn(`[onSnapshot/${col}]`, e.message);
@@ -460,6 +460,10 @@ function App() {
             setter(snap.docs.map(d => ({ id: d.id, ...d.data() })));
           }, logErr(col))
         );
+        // Members: filter out nameless docs (can be created by stale FCM setDoc)
+        unsubs.push(onSnapshot(collection(tripRef, 'members'), snap => {
+          setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((m: any) => !!m.name));
+        }, logErr('members')));
         // Expenses: include metadata changes to track pending writes (offline indicator)
         unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
           setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
