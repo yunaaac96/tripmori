@@ -203,23 +203,31 @@ function App() {
         // syncUserTrips deletes the newly-upgraded project because allowedEditorUids
         // hasn't propagated to Firestore yet.
         if (pendingKeyRef.current) {
-          pendingKeyRef.current = '';
+          const pendingKey    = pendingKeyRef.current;
+          const pendingTripId = pendingTripIdRef.current;
+          pendingKeyRef.current    = '';
+          pendingTripIdRef.current = '';
           setUpgradeStep('none');
-          setActiveProjectState(prev => {
-            if (!prev) return prev;
-            // Register editor UID in Firestore (fire-and-forget)
-            updateDoc(doc(db, 'trips', prev.id), {
-              allowedEditorUids: arrayUnion(user.uid),
-              [`editorInfo.${user.uid}`]: { email: user.email || '', joinedAt: Date.now() },
-            }).catch(console.error);
-            const upgraded: StoredProject = { ...prev, role: 'editor' };
-            saveProject(upgraded);
-            setActiveProject(upgraded.id);
-            setShowMemberBind(true); // trigger member card binding screen
-            return upgraded;
-          });
-          // Delay sync so the Firestore write propagates before editorQ is queried
-          setTimeout(() => syncUserTrips(user.uid, user.email!), 2000);
+          // Call addEditor CF (Admin SDK → bypasses owner-only update rule)
+          const fnClient = getFunctions(undefined, 'us-central1');
+          httpsCallable(fnClient, 'addEditor')({ tripId: pendingTripId, collaboratorKey: pendingKey })
+            .then(() => {
+              // CF wrote allowedEditorUids → now safe to upgrade local state
+              setActiveProjectState(prev => {
+                if (!prev) return prev;
+                const upgraded: StoredProject = { ...prev, role: 'editor' };
+                saveProject(upgraded);
+                return upgraded;
+              });
+              setShowMemberBind(true);
+              // Delay sync so Firestore write propagates before editorQ is queried
+              setTimeout(() => syncUserTrips(user.uid, user.email!), 2000);
+            })
+            .catch(err => {
+              console.error('addEditor failed:', err);
+              setVisitorKeyError('加入協作失敗，請重試');
+              setUpgradeStep('need-login');
+            });
           return; // skip claimOwnership & checkOwnerRole for this event
         }
 
@@ -379,7 +387,8 @@ function App() {
   // Upgrade flow: key validated → pending Google login → member card binding
   type UpgradeStep = 'none' | 'input' | 'need-login' | 'signing-in' | 'binding';
   const [upgradeStep, setUpgradeStep] = useState<UpgradeStep>('none');
-  const pendingKeyRef = useRef<string>(''); // survives re-renders / closure
+  const pendingKeyRef    = useRef<string>(''); // survives re-renders / closure
+  const pendingTripIdRef = useRef<string>(''); // trip being upgraded (paired with pendingKeyRef)
   const [showMemberBind, setShowMemberBind] = useState(false);
   const [bindingMember, setBindingMember]   = useState(false);
 
@@ -569,11 +578,9 @@ function App() {
       // Key is valid — check if already Google-signed-in
       const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
       if (user) {
-        // Already logged in → complete upgrade immediately
-        await updateDoc(doc(db, 'trips', activeProject.id), {
-          allowedEditorUids: arrayUnion(user.uid),
-          [`editorInfo.${user.uid}`]: { email: user.email || '', joinedAt: Date.now() },
-        });
+        // Already logged in → call addEditor CF (Admin SDK bypasses owner-only rule)
+        const fnClient = getFunctions(undefined, 'us-central1');
+        await httpsCallable(fnClient, 'addEditor')({ tripId: activeProject.id, collaboratorKey: key });
         const upgraded: StoredProject = { ...activeProject, role: 'editor' };
         saveProject(upgraded);
         setActiveProject(upgraded.id);
@@ -582,8 +589,9 @@ function App() {
         setUpgradeStep('binding');
         setShowMemberBind(true);
       } else {
-        // Not logged in → save validated key, prompt Google login
-        pendingKeyRef.current = key;
+        // Not logged in → save validated key + trip ID, prompt Google login
+        pendingKeyRef.current    = key;
+        pendingTripIdRef.current = activeProject.id;
         setUpgradeStep('need-login');
       }
     } catch (e) { setVisitorKeyError('驗證失敗，請重試'); }

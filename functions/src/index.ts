@@ -332,7 +332,35 @@ export const todoDueDateReminder = onSchedule(
   }
 );
 
-// ── 6. claimOwnership: backfill ownerUid for trips owned by email ─────────────
+// ── 6. addEditor: validate collaborator key and add caller to allowedEditorUids ──
+// Called from the client when a visitor enters the correct collaborator key.
+// Uses Admin SDK to bypass client-side security rules (trip update is owner-only).
+export const addEditor = onCall(async (request) => {
+  if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in');
+  const { tripId, collaboratorKey } = request.data as { tripId: string; collaboratorKey: string };
+  if (!tripId || !collaboratorKey) throw new HttpsError('invalid-argument', 'tripId and collaboratorKey required');
+
+  const tripDoc = await db.collection('trips').doc(tripId).get();
+  if (!tripDoc.exists) throw new HttpsError('not-found', 'Trip not found');
+
+  const data = tripDoc.data()!;
+  const storedKey = (data.collaboratorKey || '').toUpperCase();
+  if (!storedKey || collaboratorKey.trim().toUpperCase() !== storedKey) {
+    throw new HttpsError('permission-denied', 'Invalid collaborator key');
+  }
+
+  const uid = request.auth.uid;
+  const email = (request.auth.token.email as string | undefined) || '';
+
+  await tripDoc.ref.update({
+    allowedEditorUids: admin.firestore.FieldValue.arrayUnion(uid),
+    [`editorInfo.${uid}`]: { email, joinedAt: Date.now() },
+  });
+
+  return { success: true };
+});
+
+// ── 7. claimOwnership: backfill ownerUid for trips owned by email ─────────────
 // Called from the client after Google sign-in. Uses Admin SDK to bypass
 // client-side security rules and stamp the caller's UID onto any trip
 // where ownerEmail matches but ownerUid is missing or stale.
