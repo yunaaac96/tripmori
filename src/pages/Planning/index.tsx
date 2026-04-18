@@ -642,6 +642,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                   const clickable = activeSection === 'todo' || isOwner || (activeSection === 'packing' && !!googleUid && m.googleUid === googleUid);
                   return (
                     <button key={m.name} onClick={() => clickable && setActive(m.name)}
+                      className={active ? 'tm-filter-tab-active' : ''}
                       style={{ flexShrink: 0, padding: '4px 10px 4px 5px', borderRadius: 20, border: `1.5px solid ${active ? (m.color || C.sageDark) : C.creamDark}`, background: active ? (m.color || C.sageDark) : 'var(--tm-card-bg)', color: active ? 'white' : C.barkLight, fontWeight: active ? 700 : 600, fontSize: 12, cursor: clickable ? 'pointer' : 'default', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5, transition: 'all 0.2s', boxShadow: active ? `0 1px 6px ${m.color || C.sageDark}55` : 'none' }}>
                       <Av m={m} />
                       {m.name}
@@ -744,7 +745,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       </div>
                       <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none', flex: 1 }}>{displayText}</p>
-                        <span className={sectionType === 'global' ? 'tm-packing-chip-global' : sectionType === 'assigned' ? 'tm-packing-chip-assigned' : ''} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: chipBg, color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                        <span className={sectionType === 'global' ? 'tm-packing-chip-global' : sectionType === 'assigned' ? 'tm-packing-chip-assigned' : 'tm-packing-chip-personal'} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: chipBg, color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
                           {chipIcon}{chipLabel}
                         </span>
                       </div>
