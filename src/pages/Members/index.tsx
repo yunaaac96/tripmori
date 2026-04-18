@@ -2,12 +2,13 @@ import { useState, useRef, useEffect } from 'react';
 import { C, FONT } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck } from '@fortawesome/free-solid-svg-icons';
+import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc, deleteField } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { makeCollabKey, saveProject } from '../ProjectHub/index';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
@@ -36,6 +37,34 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   const [authError, setAuthError]       = useState<string | null>(null);
   const [bindingSummaryOpen, setBindingSummaryOpen] = useState(false);
   const [editorListOpen, setEditorListOpen]         = useState(false);
+
+  // Notification permission state
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(() =>
+    'Notification' in window ? Notification.permission : 'default'
+  );
+  const handleRequestNotif = async () => {
+    const perm = await Notification.requestPermission();
+    setNotifPermission(perm);
+  };
+
+  // Notion backup
+  const [notionBusy, setNotionBusy]       = useState(false);
+  const [notionResult, setNotionResult]   = useState<{ url: string; totalTWD: number } | null>(null);
+  const [notionError, setNotionError]     = useState<string | null>(null);
+  const handleBackupToNotion = async () => {
+    if (!TRIP_ID || notionBusy) return;
+    setNotionBusy(true);
+    setNotionResult(null);
+    setNotionError(null);
+    try {
+      const fn  = httpsCallable(getFunctions(undefined, 'us-central1'), 'backupTripToNotion');
+      const res = await fn({ tripId: TRIP_ID }) as any;
+      setNotionResult({ url: res.data.notionUrl, totalTWD: res.data.totalTWD });
+    } catch (e: any) {
+      setNotionError(e?.message || '備份失敗，請稍後再試');
+    }
+    setNotionBusy(false);
+  };
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
@@ -288,14 +317,24 @@ export default function MembersPage({ members, memberNotes, project, firestore }
   }, [TRIP_ID, firestore.role]);
 
   const handleRevokeEditor = async (uid: string) => {
-    if (!window.confirm('確定要移除此編輯者的權限？對方將立即降級為訪客。')) return;
+    if (!window.confirm('確定要移除此編輯者的權限？對方將立即降級為訪客，並解除成員卡綁定。')) return;
     try {
+      // 1. Remove from allowedEditorUids
       await _updateDoc(_doc(db, 'trips', TRIP_ID), {
         allowedEditorUids: arrayRemove(uid),
         [`editorInfo.${uid}`]: deleteField(),
       });
       setAllowedEditorUids(prev => prev.filter(u => u !== uid));
       setEditorInfo(prev => { const n = { ...prev }; delete n[uid]; return n; });
+
+      // 2. Unbind the member card that was bound to this uid
+      const boundMember = members.find((m: any) => m.googleUid === uid);
+      if (boundMember) {
+        await _updateDoc(_doc(db, 'trips', TRIP_ID, 'members', boundMember.id), {
+          googleUid: deleteField(),
+          googleEmail: deleteField(),
+        });
+      }
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 
@@ -501,6 +540,32 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
+      {/* ── Notification permission status ── */}
+      {'Notification' in window && googleUid && ownMember && (
+        <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '10px 14px', boxShadow: C.shadowSm, border: `1.5px solid ${notifPermission === 'granted' ? '#C2E0B4' : '#EDE8D5'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <span style={{ fontSize: 16, color: notifPermission === 'granted' ? '#4A7A35' : notifPermission === 'denied' ? '#9A6030' : C.barkLight }}>
+            <FontAwesomeIcon icon={notifPermission === 'granted' ? faBell : faBellSlash} />
+          </span>
+          <div style={{ flex: 1 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: notifPermission === 'granted' ? '#4A7A35' : C.bark, margin: 0 }}>
+              推播通知：{notifPermission === 'granted' ? '已開啟' : notifPermission === 'denied' ? '已拒絕' : '尚未設定'}
+            </p>
+            {notifPermission === 'denied' && (
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>請點擊瀏覽器網址列左側的圖示，在「通知」設定中改為允許</p>
+            )}
+            {notifPermission === 'default' && (
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>開啟後可收到留言、反應、航班提醒等通知</p>
+            )}
+          </div>
+          {notifPermission === 'default' && (
+            <button onClick={handleRequestNotif}
+              style={{ fontSize: 11, fontWeight: 700, color: 'white', background: C.earth, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+              啟用通知
+            </button>
+          )}
+        </div>
+      )}
+
       {/* Share project keys (Owner only) */}
       {project?.role === 'owner' && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
@@ -532,6 +597,38 @@ export default function MembersPage({ members, memberNotes, project, firestore }
         </div>
       )}
 
+      {/* ── Notion backup（Owner only）── */}
+      {firestore.role === 'owner' && (
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 14 }}>📓</span> 備份到 Notion
+          </p>
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px' }}>將行程資料（成員、行程、費用、日誌）匯出一份快照到 Notion 備份資料庫。</p>
+          <button
+            onClick={handleBackupToNotion}
+            disabled={notionBusy}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', background: notionBusy ? C.creamDark : '#2F2F2F', color: 'white', fontWeight: 700, fontSize: 13, cursor: notionBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: notionBusy ? 0.6 : 1 }}>
+            <span style={{ fontSize: 15 }}>📓</span>
+            {notionBusy ? '備份中…' : '立即備份到 Notion'}
+          </button>
+          {notionResult && (
+            <div style={{ marginTop: 8, padding: '8px 10px', background: '#E0F0D8', borderRadius: 10 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 4px' }}>✅ 備份成功！</p>
+              <p style={{ fontSize: 11, color: '#4A7A35', margin: 0 }}>費用總計 NT$ {notionResult.totalTWD.toLocaleString()}</p>
+              {notionResult.url && (
+                <a href={notionResult.url} target="_blank" rel="noreferrer"
+                  style={{ fontSize: 11, color: '#2A6A9A', display: 'block', marginTop: 4, textDecoration: 'underline' }}>
+                  在 Notion 中查看 →
+                </a>
+              )}
+            </div>
+          )}
+          {notionError && (
+            <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600 }}>❌ {notionError}</p>
+          )}
+        </div>
+      )}
+
       {/* Editor list management (Owner only) */}
       {firestore.role === 'owner' && allowedEditorUids.length > 0 && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, boxShadow: C.shadowSm, overflow: 'hidden' }}>
@@ -541,7 +638,12 @@ export default function MembersPage({ members, memberNotes, project, firestore }
             <span style={{ fontSize: 12, color: C.barkLight }}>{editorListOpen ? '▲' : '▼'}</span>
           </button>
           {editorListOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 16px 14px' }}>
-            {allowedEditorUids.map(uid => {
+            {/* Sort editor UIDs by owner-defined member card order */}
+            {[...allowedEditorUids].sort((a, b) => {
+              const ai = displayMembers.findIndex((m: any) => m.googleUid === a);
+              const bi = displayMembers.findIndex((m: any) => m.googleUid === b);
+              return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
+            }).map(uid => {
               const info = editorInfo[uid];
               // Try to find member card bound to this uid
               const boundMember = members.find((m: any) => m.googleUid === uid);
@@ -598,11 +700,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               </button>
               {bindingSummaryOpen && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 12px 12px' }}>
-                  {[
-                    ...members.filter((m: any) => googleUid && m.googleUid === googleUid),
-                    ...members.filter((m: any) => m.googleUid && m.googleUid !== googleUid && allowedEditorUids.includes(m.googleUid)),
-                    ...members.filter((m: any) => !m.googleUid || (!allowedEditorUids.includes(m.googleUid) && !(googleUid && m.googleUid === googleUid))),
-                  ].map((m: any) => {
+                  {displayMembers.map((m: any) => {
                     const isOwnerCard  = !!(googleUid && m.googleUid === googleUid);
                     const isEditorCard = !!(m.googleUid && allowedEditorUids.includes(m.googleUid) && !isOwnerCard);
                     const rowClass     = isOwnerCard ? 'tm-binding-owner' : isEditorCard ? 'tm-binding-editor' : 'tm-binding-none';

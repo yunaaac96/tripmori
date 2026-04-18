@@ -23,11 +23,13 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   const isOwner = role === 'owner';
 
   // Current Google user identity
-  const [googleUid, setGoogleUid] = useState<string | null>(null);
+  const [googleUid, setGoogleUid]       = useState<string | null>(null);
+  const [authReady, setAuthReady]       = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       setGoogleUid(user && !user.isAnonymous ? user.uid : null);
+      setAuthReady(true);
     });
     return unsub;
   }, []);
@@ -137,32 +139,44 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   const isEditorUnbound = role === 'editor' && (!googleUid || !members.some((m: any) => m.googleUid === googleUid));
 
   // Todos sort priority (lower = first):
-  //   0 overdue | 1 soon | 2 far-future (any date > 3 days, time-constrained)
-  //   3 no-date-self | 4 no-date-all | 5 no-date-others | 99 checked
-  // Rationale: items WITH any due date have a time constraint and outrank
-  // no-date items; identity priority (self>all>others) only applies when
-  // there is NO time limit at all.
+  //  0  overdue + self      1  overdue + all      2  overdue + others
+  //  3  soon(≤3d) + self    4  soon(≤3d) + all    5  soon(≤3d) + others
+  //  6  far(>3d) + self     7  far(>3d) + all     8  far(>3d) + others
+  //  9  no-date + self     10  no-date + all      11  no-date + others
+  // 99  completed
   const todoSortPri = (item: any): number => {
-    const checked = isTodoChecked(item);
-    if (checked) return 99;
-    if (!item.dueDate) {
-      // No time limit → identity bucket
-      if (!item.assignedTo || item.assignedTo === 'all') return 4;
+    if (isTodoChecked(item)) return 99;
+
+    // Identity bucket: 0=self, 1=all, 2=others
+    let idBucket: number;
+    if (!item.assignedTo || item.assignedTo === 'all') {
+      idBucket = 1;
+    } else {
       const m = members.find((mm: any) => mm.name === item.assignedTo);
-      return m?.googleUid === googleUid ? 3 : 5;
+      idBucket = m?.googleUid === googleUid ? 0 : 2;
     }
+
+    if (!item.dueDate) return 9 + idBucket;   // no-date: 9/10/11
+
     const s = getDueStatus(item.dueDate, false);
-    if (s === 'overdue') return 0;
-    if (s === 'soon') return 1;
-    return 2; // far future — has a specific date, outranks no-date items
+    if (s === 'overdue') return 0 + idBucket;  // overdue: 0/1/2
+    if (s === 'soon')    return 3 + idBucket;  // ≤3 days: 3/4/5
+    return 6 + idBucket;                        // >3 days: 6/7/8
   };
+  // Defer identity-based sort until auth state is resolved to prevent flicker
   const todos = [...lists.filter((l: any) => l.listType === 'todo')].sort((a: any, b: any) => {
+    if (!authReady) {
+      // Stable sort by createdAt only (no identity bucket yet)
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
+    }
     const pa = todoSortPri(a);
     const pb = todoSortPri(b);
     if (pa !== pb) return pa - pb;
-    // Within the same priority: dated items sort by due-date ascending;
-    // no-date items (pri 3-5) fall back to createdAt.
-    if (pa === 2 && a.dueDate && b.dueDate) {
+    // Within the same priority bucket: dated items sort by due-date ascending;
+    // no-date items fall back to createdAt.
+    if (a.dueDate && b.dueDate) {
       return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     }
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -236,7 +250,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
         await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), {
           [`checkedBy.${googleUid}`]: !currentChecked,
         });
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error(e); alert('更新失敗，請重試'); }
     } else {
       // todo: 全體 → per-person checkedBy; 個人 → shared checked
       if (!canCheckTodo(item)) return;
@@ -247,10 +261,10 @@ export default function PlanningPage({ lists, members, firestore, project }: any
           await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), {
             [`checkedBy.${googleUid}`]: !currentChecked,
           });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); alert('更新失敗，請重試'); }
       } else {
         try { await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), { checked: !item.checked }); }
-        catch (e) { console.error(e); }
+        catch (e) { console.error(e); alert('更新失敗，請重試'); }
       }
     }
   };
@@ -320,7 +334,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
 
   const handleDelete = async (itemId: string) => {
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'lists', itemId)); }
-    catch (e) { console.error(e); }
+    catch (e) { console.error(e); alert('刪除失敗，請重試'); }
     setConfirmDelete(null);
   };
 
