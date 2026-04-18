@@ -8,6 +8,7 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLock, faPen, faTrashCan, faClipboardList, faFileImport, faUsers, faAddressBook, faCalendarPlus, faArrowRight, faTowerBroadcast, faPlus } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { db, auth } from '../../config/firebase';
+import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../../utils/universalImporter';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp, query, where, getDocs } from 'firebase/firestore';
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
@@ -531,38 +532,41 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
     setSavingMember(false);
   };
 
-  // ── Bulk import parser ─────────────────────────────────────────
-  // Format: YYYY-MM-DD,HH:MM,名稱[,類別][,地點]
-  // Lines starting with # are comments
-  const CATEGORY_ALIASES: Record<string, string> = {
-    attraction: 'attraction', 景點: 'attraction', 活動: 'attraction',
-    food: 'food', 餐廳: 'food', 飲食: 'food', 用餐: 'food',
-    transport: 'transport', 交通: 'transport',
-    hotel: 'hotel', 住宿: 'hotel', 飯店: 'hotel',
-    shopping: 'shopping', 購物: 'shopping',
-    misc: 'misc', 其他: 'misc',
+  // ── Universal bulk import ──────────────────────────────────────
+  const [bulkCopied, setBulkCopied] = useState(false);
+
+  const copyTemplate = (text: string) => {
+    navigator.clipboard.writeText(text).then(() => {
+      setBulkCopied(true);
+      setTimeout(() => setBulkCopied(false), 2000);
+    });
   };
 
   const handleBulkImport = async () => {
-    if (!createdProject || !bulkText.trim()) { onEnterProject(createdProject!); return; }
+    if (!createdProject) { onEnterProject(createdProject!); return; }
+    if (!bulkText.trim()) { onEnterProject(createdProject); return; }
     setBulkImporting(true); setBulkError('');
-    const lines = bulkText.split('\n').map(l => l.trim()).filter(l => l && !l.startsWith('#'));
-    const eventsToAdd: any[] = [];
-    const errors: string[] = [];
-    lines.forEach((line, idx) => {
-      const parts = line.split(',').map(s => s.trim());
-      if (parts.length < 3) { errors.push(`第 ${idx + 1} 行格式不正確`); return; }
-      const [date, time, title, catRaw = '', location = ''] = parts;
-      if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { errors.push(`第 ${idx + 1} 行日期格式錯誤`); return; }
-      if (!/^\d{2}:\d{2}$/.test(time)) { errors.push(`第 ${idx + 1} 行時間格式錯誤`); return; }
-      if (!title) { errors.push(`第 ${idx + 1} 行缺少名稱`); return; }
-      const category = CATEGORY_ALIASES[catRaw] || 'attraction';
-      eventsToAdd.push({ date, startTime: time, endTime: '', title, category, location, notes: '', mapUrl: '', cost: 0, currency: createdProject.id ? 'JPY' : 'JPY', travelTime: '' });
-    });
-    if (errors.length > 0) { setBulkError(errors.slice(0, 3).join('\n') + (errors.length > 3 ? `\n⋯ 共 ${errors.length} 個錯誤` : '')); setBulkImporting(false); return; }
+    const currency = (createdProject as any).currency || 'JPY';
+    const parsed = parseUniversalImport(bulkText, currency);
+    if (parsed.errors.length > 0) {
+      setBulkError(parsed.errors.slice(0, 5).join('\n') + (parsed.errors.length > 5 ? `\n⋯ 共 ${parsed.errors.length} 個錯誤` : ''));
+      setBulkImporting(false);
+      return;
+    }
     try {
-      const eventsCol = collection(db, 'trips', createdProject.id, 'events');
-      await Promise.all(eventsToAdd.map(ev => addDoc(eventsCol, { ...ev, createdAt: Timestamp.now() })));
+      const tripRef = doc(db, 'trips', createdProject.id);
+      const tripUpdate: any = {};
+      if (parsed.flights.length)  tripUpdate.staticFlights = parsed.flights;
+      if (parsed.hotels.length)   tripUpdate.staticHotels  = parsed.hotels;
+      if (parsed.car)             tripUpdate.staticCar      = parsed.car;
+      if (Object.keys(tripUpdate).length) await updateDoc(tripRef, tripUpdate);
+
+      const eventsCol   = collection(db, 'trips', createdProject.id, 'events');
+      const bookingsCol = collection(db, 'trips', createdProject.id, 'bookings');
+      await Promise.all([
+        ...parsed.events.map(ev => addDoc(eventsCol, { ...ev, createdAt: Timestamp.now() })),
+        ...parsed.bookings.map(b  => addDoc(bookingsCol, { ...b, createdAt: Timestamp.now() })),
+      ]);
       onEnterProject(createdProject);
     } catch (e) { console.error(e); setBulkError('匯入失敗，請重試'); }
     setBulkImporting(false);
@@ -666,40 +670,41 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
     </Screen>
   );
 
-  const BULK_TEMPLATE =
-`# 格式：日期,時間,名稱,類別(可選),地點(可選)
-# 類別可填：attraction / food / transport / hotel / shopping / misc
-# 以 # 開頭的行為註解，會被忽略
-${createdProject?.startDate || 'YYYY-MM-DD'},09:00,早餐,food,飯店附近
-${createdProject?.startDate || 'YYYY-MM-DD'},10:30,景點名稱,attraction,地點
-${createdProject?.startDate || 'YYYY-MM-DD'},13:00,午餐,food,
-${createdProject?.startDate || 'YYYY-MM-DD'},15:00,另一個景點,attraction,地點`;
-
   if (view === 'create-step3') return (
     <Screen title={<><FontAwesomeIcon icon={faCalendarPlus} style={{ marginRight: 8 }} />匯入行程（選填）</>} onBack={() => setView('create-step2')} stepLabel="步驟 3 / 3">
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.6 }}>
-          若已有行程規劃，可貼上資料一次匯入。留空直接跳過即可。
+          若已有機票、住宿或行程規劃，可貼上資料一次匯入。留空直接跳過即可。
         </p>
 
-        {/* 格式說明 */}
+        {/* ① 格式範本 */}
         <div style={{ background: 'var(--tm-note-2)', borderRadius: 14, padding: '12px 14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faClipboardList} />格式範本</p>
-            <button
-              onClick={() => { setBulkText(BULK_TEMPLATE); }}
-              style={{ fontSize: 11, fontWeight: 700, color: C.sky, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
-              套用範本 →
-            </button>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FontAwesomeIcon icon={faClipboardList} />格式範本
+            </p>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <button onClick={() => copyTemplate(UNIVERSAL_TEMPLATE)}
+                style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, background: 'none', border: `1px solid ${C.sageDark}`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+                {bulkCopied ? '✓ 已複製' : '複製空白範本'}
+              </button>
+              <button onClick={() => setBulkText(UNIVERSAL_SAMPLE)}
+                style={{ fontSize: 11, fontWeight: 700, color: C.sky, background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, padding: 0 }}>
+                套用範例 →
+              </button>
+            </div>
           </div>
-          <pre style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{BULK_TEMPLATE}</pre>
+          <pre style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.7, whiteSpace: 'pre-wrap', fontFamily: 'monospace' }}>{UNIVERSAL_TEMPLATE}</pre>
+          <p style={{ fontSize: 10, color: C.barkLight, margin: '8px 0 0', lineHeight: 1.5 }}>
+            ✦ 非必填資訊（確認碼、房型、地圖連結等）可於匯入後點選卡片再補齊
+          </p>
         </div>
 
         <textarea
           value={bulkText}
           onChange={e => { setBulkText(e.target.value); setBulkError(''); }}
-          placeholder="貼上行程資料…"
-          rows={8}
+          placeholder="將空白範本貼至此處，填入內容後匯入…"
+          rows={10}
           style={{ ...inputSt, resize: 'vertical' as const, lineHeight: 1.7, fontFamily: 'monospace', fontSize: 12 }}
         />
 
