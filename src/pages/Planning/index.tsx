@@ -55,16 +55,25 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   }, [showSheet]);
 
   // Initialize packingTab to current user's member or first member.
-  // Run whenever googleUid resolves so we correct any early null-based default.
+  // Run whenever googleUid or members change (incl. when a member binds their account).
   useEffect(() => {
     if (!members.length) return;
     const myMember = members.find((m: any) => m.googleUid === googleUid);
     if (myMember) {
       setPackingTab(myMember.name);
     } else if (!packingTab) {
-      setPackingTab(members[0]?.name || '');
+      // Fall back to the first member in owner-defined order
+      const orderList: string[] = project?.memberOrder || [];
+      const firstOrdered = orderList.length
+        ? [...members].sort((a: any, b: any) => {
+            const ai = orderList.indexOf(a.name);
+            const bi = orderList.indexOf(b.name);
+            return (ai === -1 ? orderList.length : ai) - (bi === -1 ? orderList.length : bi);
+          })[0]
+        : members[0];
+      setPackingTab(firstOrdered?.name || '');
     }
-  }, [members, googleUid]);
+  }, [members, googleUid, project?.memberOrder]);
 
   const memberNames: string[] = members.length > 0
     ? members.map((m: any) => m.name)
@@ -82,6 +91,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
       })
     : [...members];
   const orderedMemberNames: string[] = sortedMemberObjects.map((m: any) => m.name);
+
+  // Todo filter / assignee picker: pin current user's member to top
+  const todoMemberOrder: any[] = [
+    ...sortedMemberObjects.filter((m: any) => m.googleUid === googleUid),
+    ...sortedMemberObjects.filter((m: any) => m.googleUid !== googleUid),
+  ];
 
   // Tab member info (for packing tab)
   const tabMember    = members.find((m: any) => m.name === packingTab);
@@ -121,25 +136,26 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   // Is this editor unbound (has key but no member card linked)?
   const isEditorUnbound = role === 'editor' && (!googleUid || !members.some((m: any) => m.googleUid === googleUid));
 
-  // Todos sorted: overdue → soon → no-date; within same bucket: self > all > others; checked last
-  const todos = [...lists.filter((l: any) => l.listType === 'todo')].sort((a: any, b: any) => {
-    const aChecked = isTodoChecked(a);
-    const bChecked = isTodoChecked(b);
-    if (aChecked !== bChecked) return aChecked ? 1 : -1;
-    // Due status priority: overdue(0) > soon(1) > normal(2)
-    const statusPri = { overdue: 0, soon: 1, normal: 2 } as Record<string, number>;
-    const aStatus = getDueStatus(a.dueDate, aChecked);
-    const bStatus = getDueStatus(b.dueDate, bChecked);
-    if (aStatus !== bStatus) return statusPri[aStatus] - statusPri[bStatus];
-    // Within same bucket: self(0) > all(1) > others(2)
-    const assignScore = (item: any) => {
-      if (!item.assignedTo || item.assignedTo === 'all') return 1;
+  // Todos sort priority (lower = first):
+  //   0 overdue  1 soon  2 no-date-self  3 no-date-all  4 no-date-others  5 far-future  99 checked
+  const todoSortPri = (item: any): number => {
+    const checked = isTodoChecked(item);
+    if (checked) return 99;
+    if (!item.dueDate) {
+      // No time limit → identity bucket
+      if (!item.assignedTo || item.assignedTo === 'all') return 3;
       const m = members.find((mm: any) => mm.name === item.assignedTo);
-      return m?.googleUid === googleUid ? 0 : 2;
-    };
-    const aScore = assignScore(a);
-    const bScore = assignScore(b);
-    if (aScore !== bScore) return aScore - bScore;
+      return m?.googleUid === googleUid ? 2 : 4;
+    }
+    const s = getDueStatus(item.dueDate, false);
+    if (s === 'overdue') return 0;
+    if (s === 'soon') return 1;
+    return 5; // far future date
+  };
+  const todos = [...lists.filter((l: any) => l.listType === 'todo')].sort((a: any, b: any) => {
+    const pa = todoSortPri(a);
+    const pb = todoSortPri(b);
+    if (pa !== pb) return pa - pb;
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return ta - tb;
@@ -491,9 +507,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       )}
                     </div>
                   ) : (
-                    /* ── Todo: original assignedTo picker ── */
+                    /* ── Todo: assignedTo picker — current user pinned first ── */
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' as const }}>
-                      {[{ id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 4 }} />全體</> }, ...orderedMemberNames.map((n: string) => ({ id: n, label: n }))].map(opt => (
+                      {[
+                        { id: 'all', label: <><FontAwesomeIcon icon={faLeaf} style={{ fontSize: 11, marginRight: 4 }} />全體</> },
+                        ...todoMemberOrder.map((m: any) => ({ id: m.name, label: m.name + (m.googleUid === googleUid ? ' ★' : '') })),
+                      ].map(opt => (
                         <button key={opt.id} onClick={() => set('assignedTo', opt.id)}
                           style={{ padding: '7px 14px', borderRadius: 20, border: `1.5px solid ${form.assignedTo === opt.id ? C.sageDark : C.creamDark}`, background: form.assignedTo === opt.id ? C.sage : 'var(--tm-card-bg)', color: form.assignedTo === opt.id ? 'white' : C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
                           {opt.label}
@@ -559,8 +578,8 @@ export default function PlanningPage({ lists, members, firestore, project }: any
             待辦：全員顯示 tab（owner 可切換成員）
             行李：僅 owner 顯示 tab（editor 只看自己，不需 tab） */}
         {!isReadOnly && (activeSection === 'todo' || (activeSection === 'packing' && isOwner)) && (() => {
-          // Use owner-defined memberOrder strictly (no current-user-first override)
-          const visibleMembers = sortedMemberObjects;
+          // Todo: pin current user first; Packing: strict owner-defined order
+          const visibleMembers = activeSection === 'todo' ? todoMemberOrder : sortedMemberObjects;
 
           const activeId = activeSection === 'todo' ? filterBy : packingTab;
           const setActive = (id: string) => {
@@ -805,8 +824,52 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 );
               }
 
-              // ── 待辦：原有渲染 ───────────────────────────────────────
+              // ── 待辦：渲染（未完成 + 獨立已完成區塊） ───────────────────
               const filtered = applyFilter(s.items);
+              const activeTodos   = filtered.filter((item: any) => !isTodoChecked(item));
+              const completedTodos = filtered.filter((item: any) => isTodoChecked(item));
+
+              const renderTodoCard = (item: any) => {
+                const checked = isTodoChecked(item);
+                const canCheck = canCheckTodo(item);
+                const assignedMember = members.find((m: any) => m.name === item.assignedTo);
+                const isMyTodo = assignedMember?.googleUid === googleUid;
+                const badgeBg = item.assignedTo === 'all' || !item.assignedTo ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
+                const badgeLabel = item.assignedTo === 'all' || !item.assignedTo ? '全體' : (item.assignedTo || '—');
+                const status = getDueStatus(item.dueDate, checked);
+                const cardBg = checked ? 'var(--tm-card-bg)' : status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
+                const cardBorder = checked ? `1.5px solid ${C.creamDark}` : status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : isMyTodo ? `1.5px solid ${C.sageDark}` : '1.5px solid transparent';
+                const showEdit = canDeleteItem(item);
+                return (
+                  <div key={item.id}
+                    style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.5 : 1, transition: 'opacity 0.2s' }}>
+                    <div
+                      onClick={() => canCheck && toggleItem(item)}
+                      style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${checked ? C.sageDark : C.creamDark}`, background: checked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: canCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: canCheck ? 1 : 0.4 }}>
+                      {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
+                    </div>
+                    <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
+                      {!checked && item.dueDate && (
+                        <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
+                          {status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? <><FontAwesomeIcon icon={faClock} style={{ fontSize: 9 }} /> 即將到期：</> : '截止：'}{item.dueDate}
+                        </p>
+                      )}
+                    </div>
+                    <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
+                      {badgeLabel}
+                    </div>
+                    {showEdit && (
+                      <button
+                        onClick={e => { e.stopPropagation(); openEdit(item); }}
+                        style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
+                        <FontAwesomeIcon icon={faPen} />
+                      </button>
+                    )}
+                  </div>
+                );
+              };
+
               return (
                 <>
                   {filtered.length === 0 ? (
@@ -815,44 +878,29 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       <p style={{ fontSize: 13, margin: 0 }}>尚無待辦項目，點下方 ＋ 新增</p>
                     </div>
                   ) : (
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {filtered.map((item: any) => {
-                        const checked = isTodoChecked(item);
-                        const canCheck = canCheckTodo(item);
-                        const assignedMember = members.find((m: any) => m.name === item.assignedTo);
-                        const badgeBg = item.assignedTo === 'all' || !item.assignedTo ? '#C8E6C0' : (assignedMember?.color || '#D0C8BE');
-                        const isMyTodo = assignedMember?.googleUid === googleUid;
-                        const badgeLabel = item.assignedTo === 'all' || !item.assignedTo ? '全體' : (item.assignedTo || '—');
-                        const status = getDueStatus(item.dueDate, checked);
-                        const cardBg = status === 'overdue' ? '#FFE4E1' : status === 'soon' ? '#FFF2E0' : 'var(--tm-card-bg)';
-                        const cardBorder = status === 'overdue' ? '1.5px solid #E57373' : status === 'soon' ? '1.5px solid #FFA726' : isMyTodo ? `1.5px solid ${C.sageDark}` : '1.5px solid transparent';
-                        const showEdit = canDeleteItem(item);
-                        return (
-                          <div key={item.id}
-                            style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
-                            <div
-                              onClick={() => canCheck && toggleItem(item)}
-                              style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${checked ? C.sageDark : C.creamDark}`, background: checked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: canCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: canCheck ? 1 : 0.4 }}>
-                              {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
-                            </div>
-                            <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
-                              <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
-                              {item.dueDate && <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>{status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? <><FontAwesomeIcon icon={faClock} style={{ fontSize: 9 }} /> 即將到期：</> : '截止：'}{item.dueDate}</p>}
-                            </div>
-                            <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
-                              {badgeLabel}
-                            </div>
-                            {showEdit && (
-                              <button
-                                onClick={e => { e.stopPropagation(); openEdit(item); }}
-                                style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
-                                <FontAwesomeIcon icon={faPen} />
-                              </button>
-                            )}
+                    <>
+                      {/* 未完成項目 */}
+                      {activeTodos.length > 0 && (
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                          {activeTodos.map(renderTodoCard)}
+                        </div>
+                      )}
+                      {/* 已完成獨立區塊 */}
+                      {completedTodos.length > 0 && (
+                        <>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: `${activeTodos.length > 0 ? 14 : 0}px 0 8px` }}>
+                            <div style={{ flex: 1, height: 1, background: C.creamDark }} />
+                            <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600, whiteSpace: 'nowrap' }}>
+                              <FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 10, marginRight: 4 }} />已完成 {completedTodos.length}
+                            </span>
+                            <div style={{ flex: 1, height: 1, background: C.creamDark }} />
                           </div>
-                        );
-                      })}
-                    </div>
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            {completedTodos.map(renderTodoCard)}
+                          </div>
+                        </>
+                      )}
+                    </>
                   )}
                   {/* 新增按鈕：待辦需已綁定才能新增（編輯者未綁不可加） */}
                   {!isReadOnly && !isEditorUnbound && (
