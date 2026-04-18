@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { getDoc } from 'firebase/firestore';
 import { auth } from '../../config/firebase';
+import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../../utils/universalImporter';
 import CurrencySearch from '../../components/CurrencySearch';
 import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary, ExpandableNotes } from '../../App';
@@ -216,33 +217,12 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const [metaForm, setMetaForm] = useState({ title: '', emoji: '', startDate: '', endDate: '', description: '', currency: '' });
   const [savingMeta, setSavingMeta]   = useState(false);
 
-  // Bulk import (owner only) — multi-section format
+  // Bulk import (owner only) — universal format
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkText, setBulkText]             = useState('');
   const [bulkImporting, setBulkImporting]   = useState(false);
   const [bulkError, setBulkError]           = useState('');
-  const [bulkTab, setBulkTab]               = useState<'flight'|'hotel'|'car'|'booking'|'event'>('flight');
   const [bulkCopied, setBulkCopied]         = useState(false);
-
-  // 空白格式（複製用）
-  const BULK_TEMPLATES = {
-    flight:  `[FLIGHT]\ndirection = \nairline = \nflightNo = \ndate = \ndepAirport = \ndepName = \ndepTime = \narrAirport = \narrName = \narrTime = \nnotes = \ncostPerPerson = `,
-    hotel:   `[HOTEL]\nname = \nnameJa = \naddress = \nroomType = \ncheckIn = \ncheckOut = \ntotalCost = \ncurrency = \nconfirmCode = \npin = \nnotes = \nmapUrl = `,
-    car:     `[CAR]\ncompany = \ncarType = \npickupLocation = \npickupTime = \nreturnLocation = \nreturnTime = \ntotalCost = \ncurrency = \nconfirmCode = \nnotes = `,
-    booking: `[BOOKING]\ntitle = \ntype = activity\ndate = \ncost = \ncurrency = \nconfirmCode = \nnotes = `,
-    event:   `[EVENT]\ndate = \ntime = \ntitle = \ncategory = 景點\nlocation = \nendTime = \ncost = \ncurrency = \nnotes = `,
-  };
-
-  // 填寫範例（預覽用）
-  const BULK_SAMPLES = {
-    flight:  `[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepName = 台北桃園\ndepTime = 06:50\narrAirport = OKA\narrName = 沖繩那霸\narrTime = 09:20\nnotes = 有加購行李 20kg\ncostPerPerson = 3500`,
-    hotel:   `[HOTEL]\nname = 雷克沖繩北谷溫泉度假村\nnameJa = レクー沖縄北谷スパ&リゾート\naddress = 沖繩縣中頭郡北谷町字美濱34番地2\nroomType = 海景雙人房\ncheckIn = 2026-04-23 14:00\ncheckOut = 2026-04-24 11:00\ntotalCost = 3943\ncurrency = TWD\nconfirmCode = ABC123456\npin = 5983\nnotes = 緊鄰美國村，步行可達沖繩海灘\nmapUrl = https://maps.app.goo.gl/xxxxx`,
-    car:     `[CAR]\ncompany = OTS\ncarType = S級別 1台\npickupLocation = 臨空豐崎營業所（那霸機場）\npickupTime = 2026-04-23 11:00\nreturnLocation = 臨空豐崎營業所（那霸機場）\nreturnTime = 2026-04-26 13:30\ntotalCost = 26290\ncurrency = JPY\nconfirmCode = OTS1402455\nnotes = 需國際駕照、日文譯本`,
-    booking: `[BOOKING]\ntitle = 美麗海水族館門票\ntype = activity\ndate = 2026-04-24\ncost = 2180\ncurrency = JPY\nconfirmCode = TKT-98765\nnotes = 需於入場前 15 分鐘取票`,
-    event:   `[EVENT]\ndate = 2026-04-23\ntime = 09:00\ntitle = ⛩ 首里城參觀\ncategory = 景點\nlocation = 首里城公園\nendTime = 11:00\ncost = 400\ncurrency = JPY\nnotes = 建議早上前往，人潮較少`,
-  };
-
-  const BULK_FULL_TEMPLATE = Object.values(BULK_TEMPLATES).join('\n\n');
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text).then(() => {
@@ -251,131 +231,35 @@ export default function SchedulePage({ events, members = [], project, firestore,
     });
   };
 
-  const CATEGORY_ALIASES_MAP: Record<string, string> = {
-    attraction: 'attraction', 景點: 'attraction', 活動: 'attraction',
-    food: 'food', 餐廳: 'food', 飲食: 'food', 用餐: 'food',
-    transport: 'transport', 交通: 'transport',
-    hotel: 'hotel', 住宿: 'hotel', 飯店: 'hotel',
-    shopping: 'shopping', 購物: 'shopping',
-    misc: 'misc', 其他: 'misc',
-  };
-
   const handleScheduleBulkImport = async () => {
     if (!bulkText.trim()) { setShowBulkImport(false); return; }
     setBulkImporting(true); setBulkError('');
     try {
-      // ── Parse sections ──────────────────────────────────────────────
-      type ParsedSection = { type: string; data: Record<string, string> };
-      const sections: ParsedSection[] = [];
-      let cur: ParsedSection | null = null;
-      for (const rawLine of bulkText.split('\n')) {
-        const line = rawLine.trim();
-        if (!line || line.startsWith('#')) continue;
-        const hdr = line.match(/^\[([A-Z_]+)\]$/);
-        if (hdr) { if (cur) sections.push(cur); cur = { type: hdr[1], data: {} }; continue; }
-        if (cur) {
-          const eq = line.indexOf('=');
-          if (eq > 0) cur.data[line.slice(0, eq).trim()] = line.slice(eq + 1).trim();
-        }
+      const currency = project?.currency || 'JPY';
+      const parsed = parseUniversalImport(bulkText, currency);
+      if (parsed.errors.length > 0) {
+        setBulkError(parsed.errors.slice(0, 5).join('\n') + (parsed.errors.length > 5 ? `\n⋯ 共 ${parsed.errors.length} 個錯誤` : ''));
+        setBulkImporting(false);
+        return;
       }
-      if (cur) sections.push(cur);
 
       const tripRef    = doc(db, 'trips', TRIP_ID);
       const tripUpdate: any = {};
+      if (parsed.flights.length) tripUpdate.staticFlights = parsed.flights;
+      if (parsed.hotels.length)  tripUpdate.staticHotels  = parsed.hotels;
+      if (parsed.car)            tripUpdate.staticCar      = parsed.car;
 
-      // ── [FLIGHT] (replaces all flights) ──────────────────────────
-      const flightSecs = sections.filter(s => s.type === 'FLIGHT');
-      if (flightSecs.length) {
-        tripUpdate.staticFlights = flightSecs.map((s, i) => {
-          const d = s.data;
-          return {
-            id: `f${i + 1}`, direction: d.direction || '去程',
-            airline: d.airline || '', flightNo: d.flightNo || '',
-            date: d.date || '',
-            dep: { airport: d.depAirport || '', name: d.depName || '', time: d.depTime || '' },
-            arr: { airport: d.arrAirport || '', name: d.arrName || '', time: d.arrTime || '' },
-            notes: d.notes || '', costPerPerson: d.costPerPerson || '',
-          };
-        });
-      }
-
-      // ── [HOTEL] (replaces all hotels) ────────────────────────────
-      const hotelSecs = sections.filter(s => s.type === 'HOTEL');
-      if (hotelSecs.length) {
-        tripUpdate.staticHotels = hotelSecs.map((s, i) => {
-          const d = s.data;
-          return {
-            id: `h${i + 1}`, name: d.name || '', nameJa: d.nameJa || '',
-            address: d.address || '', roomType: d.roomType || '',
-            checkIn: d.checkIn || '', checkOut: d.checkOut || '',
-            totalCost: d.totalCost || '', currency: d.currency || 'JPY',
-            costPerPerson: d.costPerPerson || '',
-            confirmCode: d.confirmCode || '', pin: d.pin || '',
-            notes: d.notes || '', mapUrl: d.mapUrl || '',
-          };
-        });
-      }
-
-      // ── [CAR] ─────────────────────────────────────────────────────
-      const carSec = sections.find(s => s.type === 'CAR');
-      if (carSec) {
-        const d = carSec.data;
-        tripUpdate.staticCar = {
-          company: d.company || '', carType: d.carType || '',
-          pickupLocation: d.pickupLocation || '', pickupTime: d.pickupTime || '',
-          returnLocation: d.returnLocation || '', returnTime: d.returnTime || '',
-          totalCost: d.totalCost || '', currency: d.currency || 'JPY',
-          confirmCode: d.confirmCode || '', notes: d.notes || '',
-        };
-      }
-
-      // Write all trip-doc updates at once
       if (Object.keys(tripUpdate).length) {
         await updateDoc(tripRef, tripUpdate);
-        if (onProjectUpdate && project) {
-          const up = { ...project };
-          if (tripUpdate.title)       up.title       = tripUpdate.title;
-          if (tripUpdate.emoji)       up.emoji        = tripUpdate.emoji;
-          if (tripUpdate.startDate)   up.startDate    = tripUpdate.startDate;
-          if (tripUpdate.endDate)     up.endDate      = tripUpdate.endDate;
-          if (tripUpdate.currency)    up.currency     = tripUpdate.currency;
-          if (tripUpdate.description) up.description  = tripUpdate.description;
-          onProjectUpdate(up);
-        }
+        if (onProjectUpdate && project) onProjectUpdate({ ...project });
       }
 
-      // ── [BOOKING] (appends) ───────────────────────────────────────
-      const bookingSecs = sections.filter(s => s.type === 'BOOKING');
-      if (bookingSecs.length) {
-        const bookingsCol = collection(doc(db, 'trips', TRIP_ID), 'bookings');
-        await Promise.all(bookingSecs.map(s => {
-          const d = s.data;
-          return addDoc(bookingsCol, {
-            title: d.title || '', type: d.type || 'activity',
-            confirmCode: d.confirmCode || '', notes: d.notes || '',
-            date: d.date || '', cost: d.cost || '', currency: d.currency || 'JPY',
-            createdAt: Timestamp.now(),
-          });
-        }));
-      }
-
-      // ── [EVENT] (appends) ─────────────────────────────────────────
-      const eventSecs = sections.filter(s => s.type === 'EVENT');
-      if (eventSecs.length) {
-        const eventsCol = collection(doc(db, 'trips', TRIP_ID), 'events');
-        await Promise.all(eventSecs.map(s => {
-          const d = s.data;
-          return addDoc(eventsCol, {
-            date: d.date || '', startTime: d.time || d.startTime || '',
-            endTime: d.endTime || '', title: d.title || '',
-            category: CATEGORY_ALIASES_MAP[d.category] || 'attraction',
-            location: d.location || '', notes: d.notes || '',
-            mapUrl: d.mapUrl || '', cost: d.cost ? Number(d.cost) : 0,
-            currency: d.currency || 'JPY', travelTime: d.travelTime || '',
-            createdAt: Timestamp.now(),
-          });
-        }));
-      }
+      const eventsCol   = collection(doc(db, 'trips', TRIP_ID), 'events');
+      const bookingsCol = collection(doc(db, 'trips', TRIP_ID), 'bookings');
+      await Promise.all([
+        ...parsed.events.map(ev => addDoc(eventsCol, { ...ev, createdAt: Timestamp.now() })),
+        ...parsed.bookings.map(b  => addDoc(bookingsCol, { ...b, createdAt: Timestamp.now() })),
+      ]);
 
       setShowBulkImport(false); setBulkText('');
     } catch (e) { console.error(e); setBulkError('匯入失敗，請重試'); }
@@ -895,43 +779,25 @@ export default function SchedulePage({ events, members = [], project, firestore,
 
             {/* Step 1 — copy template */}
             <div style={{ background: 'var(--tm-card-bg)', border: `1.5px solid ${C.creamDark}`, borderRadius: 14, padding: '12px 14px', marginBottom: 12 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px' }}>① 選擇範本並複製</p>
-
-              {/* Section tabs */}
-              <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', scrollbarWidth: 'none' }}>
-                {([
-                  { key: 'flight',  icon: faPlane,        label: '機票'  },
-                  { key: 'hotel',   icon: faBed,          label: '住宿'  },
-                  { key: 'car',     icon: faCar,          label: '租車'  },
-                  { key: 'booking', icon: faTicket,       label: '預訂'  },
-                  { key: 'event',   icon: faCalendarDays, label: '行程'  },
-                ] as const).map(t => (
-                  <button key={t.key} onClick={() => setBulkTab(t.key)}
-                    style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${bulkTab === t.key ? C.sageDark : C.creamDark}`, background: bulkTab === t.key ? C.sage : 'var(--tm-card-bg)', color: bulkTab === t.key ? 'white' : C.bark, fontWeight: 600, fontSize: 11, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>
-                    <FontAwesomeIcon icon={t.icon} style={{ fontSize: 10 }} />{t.label}
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>① 複製空白範本</p>
+                <div style={{ display: 'flex', gap: 6 }}>
+                  <button onClick={() => copyToClipboard(UNIVERSAL_TEMPLATE)}
+                    style={{ padding: '5px 12px', borderRadius: 10, border: `1.5px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                    {bulkCopied ? '✓ 已複製！' : '複製空白範本'}
                   </button>
-                ))}
+                  <button onClick={() => setBulkText(UNIVERSAL_SAMPLE)}
+                    style={{ padding: '5px 12px', borderRadius: 10, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 11, cursor: 'pointer', fontFamily: FONT }}>
+                    套用範例
+                  </button>
+                </div>
               </div>
-
-              {/* Template preview — shows filled example */}
-              <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 5px', lineHeight: 1.4 }}><FontAwesomeIcon icon={faThumbtack} style={{ marginRight: 4 }} />填寫範例（僅供參考，複製後欄位為空白）</p>
-              <pre style={{ margin: '0 0 10px', padding: '8px 10px', background: 'var(--tm-input-bg)', borderRadius: 8, fontSize: 11, color: C.bark, lineHeight: 1.7, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
-                {BULK_SAMPLES[bulkTab]}
+              <pre style={{ margin: 0, padding: '8px 10px', background: 'var(--tm-input-bg)', borderRadius: 8, fontSize: 11, color: C.bark, lineHeight: 1.7, overflowX: 'auto', whiteSpace: 'pre-wrap', wordBreak: 'break-all' }}>
+                {UNIVERSAL_TEMPLATE}
               </pre>
-
-              {/* Copy buttons — always copies blank format */}
-              <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => copyToClipboard(BULK_TEMPLATES[bulkTab])}
-                  style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: `1.5px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                  複製空白格式
-                </button>
-                <button onClick={() => copyToClipboard(BULK_FULL_TEMPLATE)}
-                  style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                  {bulkCopied ? '✓ 已複製！' : '複製全部空白格式'}
-                </button>
-              </div>
               <p style={{ fontSize: 10, color: C.barkLight, margin: '8px 0 0', lineHeight: 1.5 }}>
-                ✦ FLIGHT / HOTEL / CAR 匯入後取代現有資料　✦ BOOKING / EVENT 為新增
+                ✦ [TRANSPORT]機票/[HOTEL] 匯入後取代現有資料　✦ [EVENTS] 為新增<br/>
+                ✦ 非必填資訊（確認碼、房型、地圖連結等）可於匯入後點選卡片補齊
               </p>
             </div>
 
@@ -940,8 +806,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
               <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 8px' }}>② 貼上並填入內容後匯入</p>
               <textarea
                 value={bulkText}
-                onChange={e => setBulkText(e.target.value)}
-                placeholder={'將複製的範本貼至此處，填入對應內容後按下匯入…\n\n範例：\n[FLIGHT]\ndirection = 去程\nairline = 台灣虎航\nflightNo = IT 230\ndate = 2026-04-23\ndepAirport = TPE\ndepTime = 06:50\narrAirport = OKA\narrTime = 09:20'}
+                onChange={e => { setBulkText(e.target.value); setBulkError(''); }}
+                placeholder={'將空白範本貼至此處，填入對應內容後按下匯入…'}
                 rows={10}
                 style={{ ...inputStyle, width: '100%', fontFamily: 'monospace', fontSize: 11, resize: 'vertical', boxSizing: 'border-box', lineHeight: 1.6 }}
               />
