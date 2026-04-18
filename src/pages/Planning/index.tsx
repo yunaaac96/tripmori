@@ -137,25 +137,34 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   const isEditorUnbound = role === 'editor' && (!googleUid || !members.some((m: any) => m.googleUid === googleUid));
 
   // Todos sort priority (lower = first):
-  //   0 overdue  1 soon  2 no-date-self  3 no-date-all  4 no-date-others  5 far-future  99 checked
+  //   0 overdue | 1 soon | 2 far-future (any date > 3 days, time-constrained)
+  //   3 no-date-self | 4 no-date-all | 5 no-date-others | 99 checked
+  // Rationale: items WITH any due date have a time constraint and outrank
+  // no-date items; identity priority (self>all>others) only applies when
+  // there is NO time limit at all.
   const todoSortPri = (item: any): number => {
     const checked = isTodoChecked(item);
     if (checked) return 99;
     if (!item.dueDate) {
       // No time limit → identity bucket
-      if (!item.assignedTo || item.assignedTo === 'all') return 3;
+      if (!item.assignedTo || item.assignedTo === 'all') return 4;
       const m = members.find((mm: any) => mm.name === item.assignedTo);
-      return m?.googleUid === googleUid ? 2 : 4;
+      return m?.googleUid === googleUid ? 3 : 5;
     }
     const s = getDueStatus(item.dueDate, false);
     if (s === 'overdue') return 0;
     if (s === 'soon') return 1;
-    return 5; // far future date
+    return 2; // far future — has a specific date, outranks no-date items
   };
   const todos = [...lists.filter((l: any) => l.listType === 'todo')].sort((a: any, b: any) => {
     const pa = todoSortPri(a);
     const pb = todoSortPri(b);
     if (pa !== pb) return pa - pb;
+    // Within the same priority: dated items sort by due-date ascending;
+    // no-date items (pri 3-5) fall back to createdAt.
+    if (pa === 2 && a.dueDate && b.dueDate) {
+      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+    }
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return ta - tb;
