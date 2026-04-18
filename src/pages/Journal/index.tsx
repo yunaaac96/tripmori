@@ -95,6 +95,7 @@ export default function JournalPage({ journals, members, journalComments, firest
     setForm(p => ({ ...p, photos: p.photos.filter((_, i) => i !== idx) }));
 
   const handleSave = async () => {
+    if (isReadOnly) return;
     const authorToSave = form.author || currentUser;
     if (!form.content || !authorToSave || !googleUid) return;
     setSaving(true);
@@ -115,7 +116,9 @@ export default function JournalPage({ journals, members, journalComments, firest
     if (isReadOnly) return;
     // Editor: can only delete their own journal posts
     if (role !== 'owner' && authorName !== currentUser) return;
-    await deleteDoc(doc(db,'trips',TRIP_ID,'journals',id));
+    try {
+      await deleteDoc(doc(db, 'trips', TRIP_ID, 'journals', id));
+    } catch (e) { console.error(e); alert('刪除失敗，請重試'); }
   };
 
   const closeForm = () => {
@@ -127,7 +130,7 @@ export default function JournalPage({ journals, members, journalComments, firest
   // Each user can only hold one reaction per post; clicking a new emoji
   // auto-removes the previous one in a single atomic write.
   const handleReaction = async (journalId: string, emoji: string, currentReactions: Record<string, string[]>) => {
-    if (!currentUser) return;
+    if (isReadOnly || !currentUser) return;
     const existing = (currentReactions[emoji] || []) as string[];
     const hasReacted = existing.includes(currentUser);
 
@@ -211,7 +214,9 @@ export default function JournalPage({ journals, members, journalComments, firest
 
   const handleDeleteComment = async (id: string) => {
     if (isReadOnly) return;
-    await deleteDoc(doc(db, 'trips', TRIP_ID, 'journalComments', id));
+    try {
+      await deleteDoc(doc(db, 'trips', TRIP_ID, 'journalComments', id));
+    } catch (e) { console.error(e); alert('刪除留言失敗，請重試'); }
   };
 
   // Insert @name into comment input
@@ -250,7 +255,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                     </div>
                   </div>
                 ) : (
-                  <div style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
+                  <div className="tm-amber-text" style={{ padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', fontSize: 12, color: '#9A6800', fontWeight: 600 }}>
                     <FontAwesomeIcon icon={faLock} style={{ fontSize: 11, marginRight: 5 }} />請先至成員頁綁定 Google 帳號後即可發佈日誌
                   </div>
                 )}
@@ -330,7 +335,7 @@ export default function JournalPage({ journals, members, journalComments, firest
         {!isReadOnly && !isEditorUnbound && !googleUid && (
           <div style={{ background: 'var(--tm-note-1)', borderRadius: 14, padding: '12px 16px', marginBottom: 16, display: 'flex', alignItems: 'center', gap: 10 }}>
             <span style={{ fontSize: 18 }}><FontAwesomeIcon icon={faLock} /></span>
-            <p style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>
+            <p className="tm-amber-text" style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>
               請先至「成員」頁面綁定 Google 帳號，即可新增日誌
             </p>
           </div>

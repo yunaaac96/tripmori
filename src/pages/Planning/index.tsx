@@ -23,11 +23,13 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   const isOwner = role === 'owner';
 
   // Current Google user identity
-  const [googleUid, setGoogleUid] = useState<string | null>(null);
+  const [googleUid, setGoogleUid]       = useState<string | null>(null);
+  const [authReady, setAuthReady]       = useState(false);
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, user => {
       setGoogleUid(user && !user.isAnonymous ? user.uid : null);
+      setAuthReady(true);
     });
     return unsub;
   }, []);
@@ -137,32 +139,44 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   const isEditorUnbound = role === 'editor' && (!googleUid || !members.some((m: any) => m.googleUid === googleUid));
 
   // Todos sort priority (lower = first):
-  //   0 overdue | 1 soon | 2 far-future (any date > 3 days, time-constrained)
-  //   3 no-date-self | 4 no-date-all | 5 no-date-others | 99 checked
-  // Rationale: items WITH any due date have a time constraint and outrank
-  // no-date items; identity priority (self>all>others) only applies when
-  // there is NO time limit at all.
+  //  0  overdue + self      1  overdue + all      2  overdue + others
+  //  3  soon(≤3d) + self    4  soon(≤3d) + all    5  soon(≤3d) + others
+  //  6  far(>3d) + self     7  far(>3d) + all     8  far(>3d) + others
+  //  9  no-date + self     10  no-date + all      11  no-date + others
+  // 99  completed
   const todoSortPri = (item: any): number => {
-    const checked = isTodoChecked(item);
-    if (checked) return 99;
-    if (!item.dueDate) {
-      // No time limit → identity bucket
-      if (!item.assignedTo || item.assignedTo === 'all') return 4;
+    if (isTodoChecked(item)) return 99;
+
+    // Identity bucket: 0=self, 1=all, 2=others
+    let idBucket: number;
+    if (!item.assignedTo || item.assignedTo === 'all') {
+      idBucket = 1;
+    } else {
       const m = members.find((mm: any) => mm.name === item.assignedTo);
-      return m?.googleUid === googleUid ? 3 : 5;
+      idBucket = m?.googleUid === googleUid ? 0 : 2;
     }
+
+    if (!item.dueDate) return 9 + idBucket;   // no-date: 9/10/11
+
     const s = getDueStatus(item.dueDate, false);
-    if (s === 'overdue') return 0;
-    if (s === 'soon') return 1;
-    return 2; // far future — has a specific date, outranks no-date items
+    if (s === 'overdue') return 0 + idBucket;  // overdue: 0/1/2
+    if (s === 'soon')    return 3 + idBucket;  // ≤3 days: 3/4/5
+    return 6 + idBucket;                        // >3 days: 6/7/8
   };
+  // Defer identity-based sort until auth state is resolved to prevent flicker
   const todos = [...lists.filter((l: any) => l.listType === 'todo')].sort((a: any, b: any) => {
+    if (!authReady) {
+      // Stable sort by createdAt only (no identity bucket yet)
+      const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return ta - tb;
+    }
     const pa = todoSortPri(a);
     const pb = todoSortPri(b);
     if (pa !== pb) return pa - pb;
-    // Within the same priority: dated items sort by due-date ascending;
-    // no-date items (pri 3-5) fall back to createdAt.
-    if (pa === 2 && a.dueDate && b.dueDate) {
+    // Within the same priority bucket: dated items sort by due-date ascending;
+    // no-date items fall back to createdAt.
+    if (a.dueDate && b.dueDate) {
       return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
     }
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
@@ -236,7 +250,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
         await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), {
           [`checkedBy.${googleUid}`]: !currentChecked,
         });
-      } catch (e) { console.error(e); }
+      } catch (e) { console.error(e); alert('更新失敗，請重試'); }
     } else {
       // todo: 全體 → per-person checkedBy; 個人 → shared checked
       if (!canCheckTodo(item)) return;
@@ -247,10 +261,10 @@ export default function PlanningPage({ lists, members, firestore, project }: any
           await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), {
             [`checkedBy.${googleUid}`]: !currentChecked,
           });
-        } catch (e) { console.error(e); }
+        } catch (e) { console.error(e); alert('更新失敗，請重試'); }
       } else {
         try { await updateDoc(doc(db, 'trips', TRIP_ID, 'lists', item.id), { checked: !item.checked }); }
-        catch (e) { console.error(e); }
+        catch (e) { console.error(e); alert('更新失敗，請重試'); }
       }
     }
   };
@@ -320,7 +334,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
 
   const handleDelete = async (itemId: string) => {
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'lists', itemId)); }
-    catch (e) { console.error(e); }
+    catch (e) { console.error(e); alert('刪除失敗，請重試'); }
     setConfirmDelete(null);
   };
 
@@ -721,6 +735,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
 
                   return (
                     <div key={item.id}
+                      className={sectionType === 'global' ? 'tm-packing-global-card' : sectionType === 'personal' && isMe ? 'tm-packing-personal-mine' : ''}
                       style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                       <div
                         onClick={() => canCheck && toggleItem(item)}
@@ -729,7 +744,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       </div>
                       <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}>
                         <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none', flex: 1 }}>{displayText}</p>
-                        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: chipBg, color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                        <span className={sectionType === 'global' ? 'tm-packing-chip-global' : sectionType === 'assigned' ? 'tm-packing-chip-assigned' : ''} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: chipBg, color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
                           {chipIcon}{chipLabel}
                         </span>
                       </div>
@@ -785,7 +800,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                     {vGlobal.length > 0 && (
                       <>
                         <SectionHeader icon={<FontAwesomeIcon icon={faUsers} style={{ fontSize: 12 }} />} title="全體公用" badge={
-                          <span style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 全員</span>
+                          <span className="tm-packing-global-badge" style={{ background: '#D8EDF8', color: '#1A5276', borderRadius: 20, padding: '2px 8px', fontSize: 10, fontWeight: 700, display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} /> 全員</span>
                         } />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {vGlobal.map((item: any) => {
@@ -793,14 +808,14 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                             const gCanCheck = !isReadOnly && canCheckPacking(item);
                             const gText = (isGlobalPackingItem(item) && googleUid) ? (item.textOverrides?.[googleUid] || item.text) : item.text;
                             return (
-                              <div key={item.id} style={{ background: '#F0F9FF', border: '1.5px solid #DBEAFE', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: gChecked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
+                              <div key={item.id} className="tm-packing-global-card" style={{ background: '#F0F9FF', border: '1.5px solid #DBEAFE', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: gChecked ? 0.55 : 1, transition: 'opacity 0.2s' }}>
                                 <div onClick={() => gCanCheck && toggleItem(item)}
                                   style={{ width: 24, height: 24, borderRadius: 8, border: `2px solid ${gChecked ? C.sageDark : C.creamDark}`, background: gChecked ? C.sage : 'var(--tm-card-bg)', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: gCanCheck ? 'pointer' : 'default', transition: 'all 0.2s', opacity: gCanCheck ? 1 : 0.4 }}>
                                   {gChecked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                                 </div>
                                 <div onClick={() => gCanCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: gCanCheck ? 'pointer' : 'default', display: 'flex', alignItems: 'center', gap: 8 }}>
                                   <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: gChecked ? 'line-through' : 'none', flex: 1 }}>{gText}</p>
-                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#6B7280', color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
+                                  <span className="tm-packing-chip-global" style={{ display: 'inline-flex', alignItems: 'center', gap: 3, background: '#6B7280', color: 'white', borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, flexShrink: 0 }}>
                                     <FontAwesomeIcon icon={faUsers} style={{ fontSize: 9 }} />全員
                                   </span>
                                 </div>
@@ -851,6 +866,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 const showEdit = canDeleteItem(item);
                 return (
                   <div key={item.id}
+                    className={!checked ? (status === 'overdue' ? 'tm-todo-overdue-card' : status === 'soon' ? 'tm-todo-soon-card' : '') : ''}
                     style={{ background: cardBg, border: cardBorder, borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10, opacity: checked ? 0.5 : 1, transition: 'opacity 0.2s' }}>
                     <div
                       onClick={() => canCheck && toggleItem(item)}
@@ -860,12 +876,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                     <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
                       <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
                       {!checked && item.dueDate && (
-                        <p style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
+                        <p className={status === 'overdue' ? 'tm-todo-date-overdue' : status === 'soon' ? 'tm-todo-date-soon' : ''} style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
                           {status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? <><FontAwesomeIcon icon={faClock} style={{ fontSize: 9 }} /> 即將到期：</> : '截止：'}{item.dueDate}
                         </p>
                       )}
                     </div>
-                    <div style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
+                    <div className={item.assignedTo === 'all' || !item.assignedTo ? 'tm-todo-badge-all' : 'tm-todo-badge-member'} style={{ background: badgeBg, borderRadius: 8, padding: '3px 8px', fontSize: 10, fontWeight: 700, color: '#3A2E24', flexShrink: 0, minWidth: 28, textAlign: 'center' }}>
                       {badgeLabel}
                     </div>
                     {showEdit && (
@@ -920,8 +936,8 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                   )}
                   {isEditorUnbound && !isReadOnly && (
                     <div style={{ marginTop: 10, padding: '10px 14px', borderRadius: 12, background: 'var(--tm-note-1)', display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <FontAwesomeIcon icon={faLock} style={{ fontSize: 12, color: '#9A6800' }} />
-                      <p style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>請先至成員頁綁定 Google 帳號才能新增待辦</p>
+                      <FontAwesomeIcon icon={faLock} className="tm-editor-unbound-text" style={{ fontSize: 12, color: '#9A6800' }} />
+                      <p className="tm-editor-unbound-text" style={{ fontSize: 12, color: '#9A6800', fontWeight: 600, margin: 0 }}>請先至成員頁綁定 Google 帳號才能新增待辦</p>
                     </div>
                   )}
                 </>

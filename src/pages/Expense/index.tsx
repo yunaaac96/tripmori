@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
+import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -46,7 +47,7 @@ const CURRENCY_DISPLAY: Record<Currency, { symbol: string; label: string }> = {
 };
 
 // ── SVG Pie Chart ──────────────────────────────────────────────────────────
-const PIE_COLORS: Record<string, string> = {
+const PIE_COLORS_LIGHT: Record<string, string> = {
   transport: '#A8CADF',
   food: '#F7D87C',
   attraction: '#A8D89C',
@@ -54,8 +55,30 @@ const PIE_COLORS: Record<string, string> = {
   hotel: '#C8B0E0',
   other: '#C8C8C8',
 };
+const PIE_COLORS_DARK: Record<string, string> = {
+  transport: '#5AAAD0',
+  food: '#C8A820',
+  attraction: '#60B050',
+  shopping: '#C06060',
+  hotel: '#9060C0',
+  other: '#787878',
+};
+
+function useDarkMode(): boolean {
+  const mq = typeof window !== 'undefined' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+  const [dark, setDark] = useState(() => mq?.matches ?? false);
+  useEffect(() => {
+    if (!mq) return;
+    const handler = (e: MediaQueryListEvent) => setDark(e.matches);
+    mq.addEventListener('change', handler);
+    return () => mq.removeEventListener('change', handler);
+  }, []);
+  return dark;
+}
 
 function PieChart({ data }: { data: { key: string; value: number; label: string }[] }) {
+  const dark = useDarkMode();
+  const PIE_COLORS = dark ? PIE_COLORS_DARK : PIE_COLORS_LIGHT;
   const total = data.reduce((s, d) => s + d.value, 0);
   if (total === 0) return null;
 
@@ -76,10 +99,11 @@ function PieChart({ data }: { data: { key: string; value: number; label: string 
     return { ...d, path, angle };
   });
 
+  const strokeColor = dark ? '#1C1A17' : 'white';
   return (
     <svg viewBox="0 0 160 160" style={{ width: 130, height: 130, flexShrink: 0 }}>
       {slices.map(s => (
-        <path key={s.key} d={s.path} fill={PIE_COLORS[s.key] || '#C8C8C8'} stroke="white" strokeWidth={1.5} />
+        <path key={s.key} d={s.path} fill={PIE_COLORS[s.key] || (dark ? '#505050' : '#C8C8C8')} stroke={strokeColor} strokeWidth={1.5} />
       ))}
     </svg>
   );
@@ -172,6 +196,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const projCurrency = (project?.currency || 'JPY') as Currency;
   const defaultForm = { ...EMPTY_FORM, currency: projCurrency };
 
+  const darkMode = useDarkMode();
+  const PIE_COLORS = darkMode ? PIE_COLORS_DARK : PIE_COLORS_LIGHT;
+
   // Google UID for private expense ownership
   const [googleUid, setGoogleUid] = useState<string | null>(null);
   useEffect(() => {
@@ -243,58 +270,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   const memberNames: string[] = members.map((m: any) => m.name);
 
-  // Approximate exchange rates to TWD (for display convenience)
-  const CURRENCY_TO_TWD: Record<string, number> = {
-    TWD: 1, JPY: JPY_TO_TWD,
-    KRW: 0.024, IDR: 0.0021, EUR: 36, USD: 33, GBP: 42, AUD: 21, NZD: 19,
-    CAD: 24, CHF: 37, SGD: 24, HKD: 4.1, MOP: 4.1, CNY: 4.6, THB: 0.9,
-    MYR: 7.4, VND: 0.0013, PHP: 0.58, AED: 9, SAR: 8.8, TRY: 0.97,
-    ZAR: 1.8, MXN: 1.7, BRL: 6.5, INR: 0.4,
-  };
-  const toTWD = (amount: number, currency: string) =>
-    Math.round(amount * (CURRENCY_TO_TWD[currency] ?? 1));
+  // toTWD: alias for display (rounds to integer)
+  const toTWD = toTWDCalc;
 
-  // ── Percentage split helpers ─────────────────────────────────────────────
-  const getEqualPcts = (names: string[]) => {
-    if (names.length === 0) return {} as Record<string, number>;
-    const base = Math.floor(100 / names.length / 5) * 5;
-    const remainder = 100 - base * names.length;
-    const pcts: Record<string, number> = {};
-    names.forEach((n, i) => { pcts[n] = base + (i === 0 ? remainder : 0); });
-    return pcts;
-  };
-
-  const normalizePcts = (pcts: Record<string, number>, changedName: string, newVal: number) => {
-    const names = Object.keys(pcts);
-    const others = names.filter(n => n !== changedName);
-    const remaining = 100 - newVal;
-    const otherTotal = others.reduce((s, n) => s + pcts[n], 0);
-    const result: Record<string, number> = { ...pcts, [changedName]: newVal };
-    if (otherTotal === 0) {
-      const perOther = Math.floor(remaining / others.length / 5) * 5;
-      const leftover = remaining - perOther * others.length;
-      others.forEach((n, i) => { result[n] = perOther + (i === 0 ? leftover : 0); });
-    } else {
-      let distributed = 0;
-      others.forEach((n, i) => {
-        if (i === others.length - 1) {
-          result[n] = remaining - distributed;
-        } else {
-          const share = Math.round((pcts[n] / otherTotal) * remaining / 5) * 5;
-          result[n] = Math.max(5, share);
-          distributed += result[n];
-        }
-      });
-      // Fix if total != 100
-      const total = Object.values(result).reduce((s, v) => s + v, 0);
-      if (total !== 100) {
-        const diff = 100 - total;
-        const adjustTarget = others[0];
-        result[adjustTarget] = Math.max(5, result[adjustTarget] + diff);
-      }
-    }
-    return result;
-  };
+  // getEqualPcts and normalizePcts are imported from utils/expenseCalc
 
   const setPercentage = (name: string, delta: number) => {
     setForm(p => {
@@ -511,95 +490,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     setSettlingId(null);
   };
 
-  // ── Per-member share calculator ───────────────────────────────────────────
-  const getPersonalShare = (e: any, name: string): number => {
-    if (e.isPrivate) return 0;
-    const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-    if (!sw.includes(name)) return 0;
-    const eAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
-    if (e.splitMode === 'weighted' && e.percentages?.[name] != null) {
-      return Math.ceil(eAmt * e.percentages[name] / 100);
-    }
-    if (e.splitMode === 'amount' && e.customAmounts?.[name] != null) {
-      return toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency || 'JPY');
-    }
-    const sortedSw = [...sw].sort();
-    const myIdx = sortedSw.indexOf(name);
-    const perPerson = Math.floor(eAmt / sortedSw.length);
-    const remainder = eAmt - perPerson * sortedSw.length;
-    return perPerson + (myIdx < remainder ? 1 : 0);
-  };
-
-  // ── Stats ────────────────────────────────────────────────────────────────
-  const toTWDCalc = (amount: number, currency: string) =>
-    Math.round(amount * (CURRENCY_TO_TWD[currency] ?? 1));
-
-  // Pre-compute settlements received per member (expenses where category='settlement' and name is in splitWith)
-  // A settlement "from A to B" is recorded as payer=A, splitWith=[B]; B's owed increases by amount.
-  // To compute net cash paid by each member: paid_out - settlements_received
-  const settlementsReceivedByName: Record<string, number> = {};
-  expenses.forEach((e: any) => {
-    if (e.isPrivate || e.category !== 'settlement') return;
-    const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : [];
-    const eAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
-    sw.forEach((n: string) => {
-      settlementsReceivedByName[n] = (settlementsReceivedByName[n] || 0) + eAmt;
-    });
-  });
-
-  const memberStats = memberNames.map(name => {
-    // paid: total non-private expenses paid out by this member
-    const paid = expenses
-      .filter((e: any) => {
-        if (e.isPrivate) return false; // exclude private from shared stats
-        return e.payer === name;
-      })
-      .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
-
-    const owed = expenses.reduce((s: number, e: any) => {
-      if (e.isPrivate) return s; // exclude private from shared owed
-      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-      if (!sw.includes(name)) return s;
-      const eAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
-      if (e.splitMode === 'weighted' && e.percentages && Object.keys(e.percentages).length > 0) {
-        const pct = e.percentages[name] ?? Math.floor(100 / sw.length);
-        return s + Math.ceil(eAmt * pct / 100);
-      }
-      if (e.splitMode === 'amount' && e.customAmounts && e.customAmounts[name] != null) {
-        return s + toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency || 'JPY');
-      }
-      // Distribute remainder so sum of shares == total exactly (no rounding error)
-      const sortedSw = [...sw].sort();
-      const myIdx = sortedSw.indexOf(name);
-      const perPerson = Math.floor(eAmt / sortedSw.length);
-      const remainder = eAmt - perPerson * sortedSw.length;
-      return s + perPerson + (myIdx < remainder ? 1 : 0);
-    }, 0);
-
-    const net = paid - owed; // positive = should receive, negative = should pay
-    // 目前花費 = (總支出 + 代付金額) - 已收到的還款金額 = paid - received settlements
-    const netPaid = paid - (settlementsReceivedByName[name] || 0);
-    return { name, paid: netPaid, rawPaid: paid, owed, net };
-  });
-
-  // Settlement algorithm: creditors receive from debtors
-  const settlements: { from: string; to: string; amount: number }[] = [];
-  const netCopy = memberStats.map(ms => ({ name: ms.name, net: ms.net }));
-  const creditors = netCopy.filter(m => m.net > 0).sort((a, b) => b.net - a.net);
-  const debtors = netCopy.filter(m => m.net < 0).sort((a, b) => a.net - b.net);
-  let ci = 0, di = 0;
-  const cAmts = creditors.map(c => c.net);
-  const dAmts = debtors.map(d => Math.abs(d.net));
-  while (ci < creditors.length && di < debtors.length) {
-    const transfer = Math.min(cAmts[ci], dAmts[di]);
-    if (transfer > 0) {
-      settlements.push({ from: debtors[di].name, to: creditors[ci].name, amount: Math.ceil(transfer) });
-    }
-    cAmts[ci] -= transfer;
-    dAmts[di] -= transfer;
-    if (cAmts[ci] < 1) ci++;
-    if (dAmts[di] < 1) di++;
-  }
+  // getPersonalShare and memberStats/settlements are imported from utils/expenseCalc
+  const memberStats = computeMemberStats(expenses, memberNames);
+  const settlements = computeSettlements(memberStats);
 
   // ── Member card order ────────────────────────────────────────────────────
   // Owner can reorder; editors see own card first then rest
@@ -646,7 +539,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         .filter((e: any) => e.category !== 'settlement' && isMyExpense(e))
         .reduce((s: number, e: any) => {
           if (e.isPrivate) return s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY'));
-          return s + getPersonalShare(e, currentUserName);
+          return s + getPersonalShare(e, currentUserName, memberNames);
         }, 0)
     : 0;
 
@@ -660,7 +553,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       if (expenseView === 'mine' && currentUserName) {
         // personal burden: full amount for my private, my share for shared
         if (e.isPrivate) return s + rawAmt;
-        return s + getPersonalShare(e, currentUserName);
+        return s + getPersonalShare(e, currentUserName, memberNames);
       }
       // 全團 mode: exclude private expenses from pie
       if (e.isPrivate) return s;
@@ -780,7 +673,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', fontWeight: 600 }}>共 {detailExpenses.length} 筆相關支出</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {detailExpenses.map((e: any) => {
-                  const share = getPersonalShare(e, detailName);
+                  const share = getPersonalShare(e, detailName, memberNames);
                   const amtTWD = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
                   const isPayer = e.payer === detailName;
                   const cat = EXPENSE_CATEGORY_MAP[e.category] || EXPENSE_CATEGORY_MAP.other;
@@ -880,11 +773,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   ))}
                 </div>
                 {form.paymentMethod === 'card' && form.currency !== 'TWD' && (
-                  <div style={{ marginTop: 8, background: '#FFF8E0', borderRadius: 10, padding: '7px 12px', border: '1px solid #E8C96A', display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 13, color: '#9A6800' }} />
+                  <div className="tm-badge-amber-sm" style={{ marginTop: 8, background: '#FFF8E0', borderRadius: 10, padding: '7px 12px', border: '1px solid #E8C96A', display: 'flex', alignItems: 'center', gap: 7 }}>
+                    <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 13 }} />
                     <div>
-                      <p style={{ fontSize: 11, fontWeight: 700, color: '#9A6800', margin: 0 }}>海外刷卡手續費提醒</p>
-                      <p style={{ fontSize: 10, color: '#9A6800', margin: '1px 0 0' }}>
+                      <p style={{ fontSize: 11, fontWeight: 700, margin: 0 }}>海外刷卡手續費提醒</p>
+                      <p style={{ fontSize: 10, margin: '1px 0 0' }}>
                         海外刷卡通常收取 1.5% 手續費，實際約 NT$ {form.amount
                           ? Math.round(toTWD(Number(form.amount), form.currency) * 1.015).toLocaleString()
                           : '—'}
@@ -1377,7 +1270,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         {isSettlement ? (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
                         ) : !isPrivateExpense && (
-                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: e.paymentMethod === 'card' ? '#D8EDF8' : '#EAF3DE', color: e.paymentMethod === 'card' ? '#2A6A9A' : '#4A7A35' }}>
+                          <span className={e.paymentMethod === 'card' ? 'tm-badge-sky-sm' : 'tm-badge-sage-sm'} style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: e.paymentMethod === 'card' ? '#D8EDF8' : '#EAF3DE', color: e.paymentMethod === 'card' ? '#2A6A9A' : '#4A7A35' }}>
                             {e.paymentMethod === 'card' ? '刷卡' : '現金'}
                           </span>
                         )}
@@ -1398,13 +1291,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     {/* Amount + actions */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
                       {expenseView === 'mine' && !isSettlement && !isPrivateExpense && currentUserName ? (() => {
-                        const myShare = getPersonalShare(e, currentUserName);
+                        const myShare = getPersonalShare(e, currentUserName, memberNames);
                         const isPayer = e.payer === currentUserName;
                         return (
                           <>
                             <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {myShare.toLocaleString()}</p>
                             <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}</p>
-                            <span style={{ fontSize: 9, fontWeight: 700, borderRadius: 5, padding: '2px 6px', background: isPayer ? '#E0F0D8' : '#FFF2CC', color: isPayer ? '#4A7A35' : '#9A6800' }}>
+                            <span className={isPayer ? 'tm-badge-sage-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 9, fontWeight: 700, borderRadius: 5, padding: '2px 6px', background: isPayer ? '#E0F0D8' : '#FFF2CC', color: isPayer ? '#4A7A35' : '#9A6800' }}>
                               {isPayer ? '我付款' : '需分攤'}
                             </span>
                           </>

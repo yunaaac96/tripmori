@@ -21,31 +21,35 @@ precacheAndRoute(self.__WB_MANIFEST ?? []);
 cleanupOutdatedCaches();
 
 // Firebase Messaging background handler
-const firebaseApp = initializeApp({
-  apiKey:            import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId:             import.meta.env.VITE_FIREBASE_APP_ID,
-});
-
-const messaging = getMessaging(firebaseApp);
-
-onBackgroundMessage(messaging, (payload) => {
-  const title = payload.notification?.title ?? 'TripMori';
-  const body  = payload.notification?.body  ?? '';
-  const icon  = payload.notification?.icon  ?? '/icons/icon-192-light.png';
-
-  self.registration.showNotification(title, {
-    body,
-    icon,
-    badge: '/icons/icon-192-light.png',
-    data:  payload.data ?? {},
-    tag:   (payload.data as any)?.tag ?? 'tripmori-notification',
-    renotify: true,
+// Guard: if any required env var is missing, skip FCM setup silently rather than throwing.
+const _fbApiKey = import.meta.env.VITE_FIREBASE_API_KEY as string | undefined;
+if (_fbApiKey) {
+  const firebaseApp = initializeApp({
+    apiKey:            _fbApiKey,
+    authDomain:        import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
+    projectId:         import.meta.env.VITE_FIREBASE_PROJECT_ID,
+    storageBucket:     import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
+    messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
+    appId:             import.meta.env.VITE_FIREBASE_APP_ID,
   });
-});
+
+  const messaging = getMessaging(firebaseApp);
+
+  onBackgroundMessage(messaging, (payload) => {
+    const title = payload.notification?.title ?? 'TripMori';
+    const body  = payload.notification?.body  ?? '';
+    const icon  = payload.notification?.icon  ?? '/icons/icon-192-light.png';
+
+    self.registration.showNotification(title, {
+      body,
+      icon,
+      badge: '/icons/icon-192-light.png',
+      data:  payload.data ?? {},
+      tag:   (payload.data as any)?.tag ?? 'tripmori-notification',
+      renotify: true,
+    });
+  });
+} // end if (_fbApiKey)
 
 // Open app on notification click
 self.addEventListener('notificationclick', (event: NotificationEvent) => {
