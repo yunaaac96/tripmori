@@ -41,8 +41,58 @@
 
     <!-- Apple 啟動畫面（基本設定：一張通用 512 px icon 置中於預設背景） -->
     <link rel="apple-touch-startup-image" href="/icons/icon-512-light.png" />
+
+    <!-- Preload splash logo so it paints on the first frame — avoids the
+         white flash before React mounts and the React SplashScreen appears. -->
+    <link rel="preload" href="/logo.png" as="image" />
+
+    <style>
+      /* Match <html> / <body> background to the splash background from the
+         very first paint so there's no flash of white canvas before the
+         inline #app-splash overlay draws. Both modes. */
+      html, body { margin: 0; padding: 0; min-height: 100dvh; background: #F7F4EB; }
+      @media (prefers-color-scheme: dark) {
+        html, body { background: #141C12; }
+      }
+      /* Inline splash — identical framing to the React SplashScreen so the
+         React component can fade in on top without a visual jump. Fades
+         itself out once React has painted (main.tsx does the fade). */
+      #app-splash {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: #F7F4EB;
+        z-index: 99999;
+        transition: opacity 0.28s ease;
+      }
+      @media (prefers-color-scheme: dark) {
+        #app-splash { background: #141C12; }
+      }
+      #app-splash .tm-splash-logo-box {
+        width: 140px;
+        height: 140px;
+        border-radius: 32px;
+        background: #F7F4EB;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10);
+      }
+      #app-splash img {
+        width: 108px;
+        height: auto;
+        display: block;
+      }
+    </style>
   </head>
   <body>
+    <div id="app-splash">
+      <div class="tm-splash-logo-box">
+        <img src="/logo.png" alt="TripMori" />
+      </div>
+    </div>
     <div id="root"></div>
     <script type="module" src="/src/main.tsx"></script>
   </body>

@@ -660,7 +660,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                     {ptc.map((m: any, i: number) => (
                       <div key={m.id} title={m.name} style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: '2.5px solid white', background: m.color || 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: i === 0 ? 0 : -8, flexShrink: 0 }}>
                         {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <span style={{ fontSize: 11, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                          : <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
                       </div>
                     ))}
                   </div>
@@ -919,14 +919,14 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           return (
             <div key={b.id} style={{ ...cardStyle, textAlign: 'left', opacity: b.used ? 0.72 : 1 }}>
               <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 10 }}>
-                <div style={{ width: 46, height: 46, borderRadius: 14, background: b.used ? '#E0E0E0' : typeInfo.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, position: 'relative', color: b.used ? '#9A9A9A' : typeInfo.color }}>
+                <div className={b.used ? undefined : `tm-booking-type-${b.type || 'other'}`} style={{ width: 46, height: 46, borderRadius: 14, background: b.used ? '#E0E0E0' : typeInfo.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, position: 'relative', color: b.used ? '#9A9A9A' : typeInfo.color }}>
                   <FontAwesomeIcon icon={BOOKING_TYPE_ICONS[b.type] || faEllipsis} />
                   {b.used && <span style={{ position: 'absolute', bottom: 0, right: 0, fontSize: 9, background: '#4A7A35', color: 'white', borderRadius: 6, padding: '1px 4px', fontWeight: 700, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faCheck} /></span>}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, textDecoration: b.used ? 'line-through' : 'none', wordBreak: 'break-word' }}>{b.title}</p>
                   <div style={{ display: 'flex', gap: 4, alignItems: 'center', flexWrap: 'wrap', marginTop: 2 }}>
-                    <span style={{ fontSize: 10, fontWeight: 700, color: typeInfo.color, background: typeInfo.bg, borderRadius: 6, padding: '1px 6px' }}>{typeInfo.label}</span>
+                    <span className={`tm-booking-type-${b.type || 'other'}`} style={{ fontSize: 10, fontWeight: 700, color: typeInfo.color, background: typeInfo.bg, borderRadius: 6, padding: '1px 6px' }}>{typeInfo.label}</span>
                     {b.used && <span style={{ fontSize: 10, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', borderRadius: 6, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 9 }} /> 已使用</span>}
                   </div>
                 </div>

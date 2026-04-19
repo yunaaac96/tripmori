@@ -1318,12 +1318,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         <div style={{ display: 'flex', gap: 4 }}>
                           {!isSettlement && (
                             <button onClick={() => openEdit(e)}
-                              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FFF2CC', color: '#9A7200', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faPen} />
                             </button>
                           )}
                           {canDeleteExpense(e) && (
-                            <button onClick={() => handleDelete(e.id, e)}
+                            <button onClick={() => handleDelete(e.id, e)} className="tm-btn-delete-soft"
                               style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faTrashCan} />
                             </button>

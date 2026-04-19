@@ -1038,7 +1038,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                     {travelCalcStatus === 'error' && <p className="tm-error-text" style={{ fontSize: 10, color: '#C0392B', margin: '0 0 6px', lineHeight: 1.5, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} />{travelCalcMsg || '無法取得路線，請手動輸入或確認地點名稱'}</p>}
                     {!nextEvt && travelMode !== 'transit' && <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px' }}>當天無下一站行程，可手動填寫</p>}
                     {travelMode === 'transit' ? (
-                      <div style={{ background: '#EAF2FF', border: '1.5px solid #4285F4', borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#2A6A9A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div className="tm-info-box-sky" style={{ background: '#EAF2FF', border: '1.5px solid #4285F4', borderRadius: 12, padding: '10px 14px', fontSize: 12, color: '#2A6A9A', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                         <FontAwesomeIcon icon={faLocationDot} />
                         <span>儲存後行程卡片將顯示「大眾運輸最佳通勤時間」Google Maps 快捷鍵</span>
                       </div>
