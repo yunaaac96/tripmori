@@ -286,7 +286,8 @@
   .tm-hero-countdown span { color: #EDE4D8 !important; }
   .tm-hero-weather-card { background: linear-gradient(135deg, #1C2838, #1E2A1C) !important; }
   .tm-hero-weather-card p { color: #C0DCBF !important; }
-  .tm-hero-welcome { background: linear-gradient(150deg, #1A2821 0%, #2A1F14 100%) !important; }
+  /* ProjectHub welcome hero keeps its cream/beige gradient in both modes —
+   * header is a deliberate light canvas for the logo, not a dark-mode surface. */
 
   /* CTA buttons that used C.earth / C.sage solid background — in dark mode
    * those var values stay bright and pop too much; desaturate the specific
