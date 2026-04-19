@@ -87,10 +87,11 @@ async function transparent(size) {
   return sharp(SOFT_SRC).resize(size, size, { fit: 'contain', background: TRANS }).png().toBuffer();
 }
 
-// Standard icons use 72% coverage (≈14% inner padding per side) applied to the
-// already-trimmed source, matching iOS native app-icon visual rhythm (Fitdays,
-// Reminders, MOZE sit around the same footprint).
-const STD_COVERAGE = 0.72;
+// Standard icons use 60% coverage (≈20% inner padding per side) applied to the
+// already-trimmed source. Because the compass mark is visually heavy (solid
+// ring + letters + filled needle), it needs more breathing room than lighter
+// icons (Fitdays "F", Reminders dots) to read at the same perceived weight.
+const STD_COVERAGE = 0.60;
 
 // ── 180 — apple-touch-icon default (cream bg) + transparent variant ───────────
 await sharp(await onBg(180, CREAM, STD_COVERAGE)).toFile(join(ICONS_DIR, 'icon-180.png'));
