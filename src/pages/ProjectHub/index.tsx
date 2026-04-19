@@ -878,7 +878,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
             </div>
           ) : (
             <div style={{ marginBottom: 20 }}>
-              <div className="tm-badge-amber-sm" style={{ padding: '12px 14px', borderRadius: 14, background: '#FFF8E1', marginBottom: 10, border: '1px solid #F0D080' }}>
+              <div className="tm-signin-tip" style={{ padding: '12px 14px', borderRadius: 14, marginBottom: 10 }}>
                 <p style={{ fontSize: 12, fontWeight: 700, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
                   <FontAwesomeIcon icon={faLightbulb} />溫馨提醒
                 </p>
@@ -887,9 +887,9 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
               </div>
               {error && <p className="tm-error-text" style={{ fontSize: 12, color: '#C0392B', margin: '0 0 8px' }}>{error}</p>}
               <button onClick={handleGoogleSignIn} disabled={signingIn}
-                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid #E0D9C8', background: 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
-                <span style={{ fontSize: 18 }}><FontAwesomeIcon icon={faLock} /></span>
-                <span style={{ fontSize: 14, fontWeight: 700, color: '#1C3461' }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
+                style={{ width: '100%', padding: '13px 16px', borderRadius: 16, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 12, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>
+                <span className="tm-signin-btn-text" style={{ fontSize: 18 }}><FontAwesomeIcon icon={faLock} /></span>
+                <span className="tm-signin-btn-text" style={{ fontSize: 14, fontWeight: 700 }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
               </button>
             </div>
           )}
