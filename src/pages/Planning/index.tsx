@@ -686,7 +686,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
               // ── Packing：三分區渲染 ──────────────────────────────────
               if (s.id === 'packing') {
                 const viewItems = isReadOnly ? visitorPackingItems : packingForTab;
-                const vGlobal   = isReadOnly ? visitorPackingItems.filter((i: any) => !(i.checked ?? false)) : packingGlobal;
+                const vGlobal   = isReadOnly ? visitorPackingItems : packingGlobal;
                 const vPersonal = isReadOnly ? [] : packingPersonal;
                 const vAssigned = isReadOnly ? [] : packingAssigned;
 
@@ -701,7 +701,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 };
 
                 const renderPackingItem = (item: any, sectionType: 'global' | 'personal' | 'assigned') => {
-                  const checked = isReadOnly ? (item.checked ?? false) : isPackingCheckedFor(item, tabMemberUid);
+                  const checked = isReadOnly ? false : isPackingCheckedFor(item, tabMemberUid);
                   const canCheck = isReadOnly ? false : canCheckPacking(item);
                   const displayText = (isGlobalPackingItem(item) && googleUid)
                     ? (item.textOverrides?.[googleUid] || item.text)
@@ -805,7 +805,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                         } />
                         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                           {vGlobal.map((item: any) => {
-                            const gChecked = isPackingCheckedFor(item, tabMemberUid);
+                            const gChecked = isReadOnly ? false : isPackingCheckedFor(item, tabMemberUid);
                             const gCanCheck = !isReadOnly && canCheckPacking(item);
                             const gText = (isGlobalPackingItem(item) && googleUid) ? (item.textOverrides?.[googleUid] || item.text) : item.text;
                             return (
