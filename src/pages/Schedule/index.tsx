@@ -909,7 +909,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
               {metaForm.currency && metaForm.currency !== 'TWD' && (
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
-                    參考匯率（1 {metaForm.currency} = __ TWD）
+                    對台幣匯率（1 {metaForm.currency} = ? TWD）
                   </label>
                   <input style={inputStyle} type="number" step="0.0001" inputMode="decimal"
                     placeholder="例：0.22 ／ 留空使用系統預設"
