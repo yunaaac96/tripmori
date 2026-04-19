@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, g
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLightbulb, faEye } from '@fortawesome/free-solid-svg-icons';
+import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
 import SchedulePage from './pages/Schedule/index';
@@ -13,7 +13,7 @@ import ExpensePage from './pages/Expense/index';
 import JournalPage from './pages/Journal/index';
 import PlanningPage from './pages/Planning/index';
 import MembersPage from './pages/Members/index';
-import { useFcm } from './hooks/useFcm';
+import { useFcm, enableFcmForMember } from './hooks/useFcm';
 import ProjectHub, {
   ensureDefaultProject, loadProjects, saveProject, removeProject, setActiveProject, getActiveProject,
   checkOwnerRole,
@@ -398,21 +398,105 @@ function App() {
   }, [authUid, members]);
   useFcm(activeProject?.id ?? null, boundMemberId);
 
-  // ── PWA install prompt ────────────────────────────────────────────────────
+  // ── PWA install + notification onboarding ─────────────────────────────────
+  // 1. Intercept `beforeinstallprompt` and stash the event; preventDefault so
+  //    the browser does NOT auto-popup. 2. Only call prompt() from a user
+  //    gesture (handleInstallClick). 3. After install success, chain into an
+  //    opt-in notification permission step for a single-flow onboarding.
   const pwaPromptRef = useRef<any>(null);
   const [pwaInstallAvailable, setPwaInstallAvailable] = useState(false);
+  const [isStandalone, setIsStandalone] = useState(() =>
+    typeof window !== 'undefined' && (
+      window.matchMedia?.('(display-mode: standalone)').matches ||
+      (window.navigator as any).standalone === true
+    )
+  );
+  const isIOS = typeof navigator !== 'undefined'
+    && /iPad|iPhone|iPod/.test(navigator.userAgent)
+    && !(window as any).MSStream;
+  const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
+    typeof Notification !== 'undefined' ? Notification.permission : 'denied'
+  );
+  type OnboardingStep = 'none' | 'install' | 'notifications';
+  const [onboardingStep, setOnboardingStep] = useState<OnboardingStep>('none');
+  const [showIOSInstallHelp, setShowIOSInstallHelp] = useState(false);
+
   useEffect(() => {
-    const handler = (e: any) => { e.preventDefault(); pwaPromptRef.current = e; setPwaInstallAvailable(true); };
-    window.addEventListener('beforeinstallprompt', handler);
-    return () => window.removeEventListener('beforeinstallprompt', handler);
-  }, []);
-  const triggerPwaInstall = () => {
-    if (pwaPromptRef.current) {
-      pwaPromptRef.current.prompt();
+    const onBeforeInstall = (e: any) => {
+      e.preventDefault();
+      pwaPromptRef.current = e;
+      setPwaInstallAvailable(true);
+    };
+    const onAppInstalled = () => {
+      setIsStandalone(true);
       pwaPromptRef.current = null;
       setPwaInstallAvailable(false);
+      // If we were mid-onboarding, chain to the notification step
+      setOnboardingStep(prev => prev === 'install'
+        ? (typeof Notification !== 'undefined' && Notification.permission === 'default' ? 'notifications' : 'none')
+        : prev);
+    };
+    window.addEventListener('beforeinstallprompt', onBeforeInstall);
+    window.addEventListener('appinstalled', onAppInstalled);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', onBeforeInstall);
+      window.removeEventListener('appinstalled', onAppInstalled);
+    };
+  }, []);
+
+  // Called by binding / key-upgrade success paths to kick off the onboarding
+  // banner. Picks the first step the user still needs — never auto-prompts.
+  const startPostSetupOnboarding = () => {
+    const wantsInstall = !isStandalone && (pwaInstallAvailable || isIOS);
+    const wantsNotif = typeof Notification !== 'undefined' && Notification.permission === 'default';
+    if (wantsInstall) setOnboardingStep('install');
+    else if (wantsNotif) setOnboardingStep('notifications');
+    else setOnboardingStep('none');
+  };
+
+  // User clicked the "加入主畫面" button → show iOS help modal on iOS Safari,
+  // otherwise fire the stashed beforeinstallprompt event.
+  const handleInstallClick = async () => {
+    if (isIOS && !pwaPromptRef.current) {
+      setShowIOSInstallHelp(true);
+      return;
+    }
+    const evt = pwaPromptRef.current;
+    if (!evt) return;
+    try {
+      evt.prompt();
+      const result = await evt.userChoice;
+      pwaPromptRef.current = null;
+      setPwaInstallAvailable(false);
+      if (result.outcome === 'accepted') setIsStandalone(true);
+      // Advance to notifications step regardless (user made a decision on install)
+      setOnboardingStep(
+        typeof Notification !== 'undefined' && Notification.permission === 'default' ? 'notifications' : 'none'
+      );
+    } catch (err) {
+      console.warn('PWA install prompt failed:', err);
     }
   };
+
+  // Back-compat alias used by Members/index.tsx install card
+  const triggerPwaInstall = handleInstallClick;
+
+  // User clicked "開啟通知" in the onboarding banner
+  const handleEnableNotifications = async () => {
+    if (!activeProject || !boundMemberId) {
+      setOnboardingStep('none');
+      return;
+    }
+    try {
+      const result = await enableFcmForMember(activeProject.id, boundMemberId);
+      setNotifPermission(result);
+    } catch (err) {
+      console.warn('FCM permission request failed:', err);
+    }
+    setOnboardingStep('none');
+  };
+
+  const dismissOnboarding = () => setOnboardingStep('none');
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 5 秒：動畫 ~2.7s + 停留 ~2.3s）
@@ -614,6 +698,7 @@ function App() {
     const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
     if (!user || !activeProject) return;
     setBindingMember(true);
+    let bindOk = false;
     try {
       await updateDoc(doc(db, 'trips', activeProject.id, 'members', memberId), {
         googleUid: user.uid,
@@ -621,10 +706,13 @@ function App() {
       });
       localStorage.setItem('tripmori_current_user',
         members.find((m: any) => m.id === memberId)?.name || '');
+      bindOk = true;
     } catch (e) { console.error(e); alert('綁定失敗，請重試'); }
     setBindingMember(false);
     setShowMemberBind(false);
     setUpgradeStep('none');
+    // Chain into the install → notification onboarding right after binding
+    if (bindOk) startPostSetupOnboarding();
   };
 
   // ── Splash screen：每次 App 啟動都先顯示（含桌機首次開啟）
@@ -776,6 +864,68 @@ function App() {
               <button onClick={() => { setShowMemberBind(false); setActiveTab('成員'); }}
                 style={{ padding: '12px', borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, width: '100%' }}>
                 ＋ 前往成員頁新增成員卡
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* ── Post-setup onboarding banner (install → notifications) ── */}
+        {onboardingStep !== 'none' && (
+          <div style={{ position: 'fixed', left: 0, right: 0, bottom: 'calc(80px + env(safe-area-inset-bottom))', zIndex: 400, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ width: '92%', maxWidth: 400, background: 'var(--tm-sheet-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: '0 10px 30px rgba(0,0,0,0.22)', border: `1px solid var(--tm-card-border)`, pointerEvents: 'auto', fontFamily: FONT }}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FontAwesomeIcon icon={onboardingStep === 'install' ? faMobileScreen : faBell} style={{ color: C.bark, fontSize: 16 }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 800, color: C.bark, margin: '0 0 4px' }}>
+                    {onboardingStep === 'install' ? '加入主畫面，體驗更順手' : '開啟通知，不漏掉同伴訊息'}
+                  </p>
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', lineHeight: 1.45 }}>
+                    {onboardingStep === 'install'
+                      ? '把 TripMori 放到手機主畫面，開啟速度更快，也能收到通知。'
+                      : '收到日記留言、貼紙便條、航班/待辦提醒時跳出通知。'}
+                  </p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button
+                      onClick={onboardingStep === 'install' ? handleInstallClick : handleEnableNotifications}
+                      style={{ flex: 1, padding: '10px 12px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <FontAwesomeIcon icon={onboardingStep === 'install' ? faMobileScreen : faBell} style={{ fontSize: 12 }} />
+                      {onboardingStep === 'install' ? '加入主畫面' : '開啟通知'}
+                    </button>
+                    <button
+                      onClick={dismissOnboarding}
+                      style={{ padding: '10px 12px', borderRadius: 12, border: `1px solid var(--tm-input-border)`, background: 'transparent', color: C.barkLight, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                      稍後再說
+                    </button>
+                  </div>
+                </div>
+                <button onClick={dismissOnboarding} aria-label="dismiss"
+                  style={{ background: 'transparent', border: 'none', padding: 4, cursor: 'pointer', color: C.barkLight, fontSize: 14 }}>
+                  <FontAwesomeIcon icon={faXmark} />
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── iOS install help modal (Safari has no beforeinstallprompt) ── */}
+        {showIOSInstallHelp && (
+          <div onClick={() => setShowIOSInstallHelp(false)}
+            style={{ position: 'fixed', inset: 0, zIndex: 9999, background: 'rgba(0,0,0,0.55)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24 }}>
+            <div onClick={e => e.stopPropagation()}
+              style={{ width: '100%', maxWidth: 360, background: 'var(--tm-sheet-bg)', borderRadius: 20, padding: '22px 22px 18px', fontFamily: FONT }}>
+              <p style={{ fontSize: 15, fontWeight: 800, color: C.bark, margin: '0 0 14px', display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FontAwesomeIcon icon={faMobileScreen} /> 加入主畫面（iOS Safari）
+              </p>
+              <ol style={{ fontSize: 13, color: C.bark, margin: 0, paddingLeft: 20, lineHeight: 1.7 }}>
+                <li>點下方工具列的 <FontAwesomeIcon icon={faArrowUpFromBracket} style={{ margin: '0 3px' }} /> 分享按鈕</li>
+                <li>下滑找到「<FontAwesomeIcon icon={faSquarePlus} style={{ margin: '0 3px' }} /> 加入主畫面」</li>
+                <li>點右上角「新增」</li>
+              </ol>
+              <button onClick={() => setShowIOSInstallHelp(false)}
+                style={{ marginTop: 18, width: '100%', padding: '11px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                我知道了
               </button>
             </div>
           </div>
