@@ -73,13 +73,14 @@ export default function SplashScreen() {
           boxSizing: 'border-box',
         }}
       >
-        {/* LOGO — 固定奶油底圓角容器，寬版匹配 logo wordmark 比例 */}
+        {/* LOGO — 方形奶油底圓角容器，跟 home-screen app icon 視覺一致 */}
         <div
           className="tm-splash-logo"
           style={{
             marginBottom: 28,
-            padding: '20px 28px',
-            borderRadius: 24,
+            width: 140,
+            height: 140,
+            borderRadius: 32,
             background: '#F7F4EB',
             display: 'flex',
             alignItems: 'center',
@@ -91,7 +92,7 @@ export default function SplashScreen() {
             src="/logo.png"
             alt="TripMori"
             style={{
-              width: 240,
+              width: 108,
               height: 'auto',
               display: 'block',
             }}
