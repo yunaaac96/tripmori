@@ -10,25 +10,26 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'favicon.ico', 'icons/*.png'],
+      includeAssets: ['favicon.svg', 'favicon.ico', 'icons/*.png', 'splash/*.png'],
       manifest: {
         name: 'TripMori 旅行手帳',
         short_name: 'TripMori',
         description: '團體旅遊規劃手帳',
-        theme_color: '#8FAF7E',
+        theme_color: '#F7F4EB',
         background_color: '#F7F4EB',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
-          // Light mode icons (cream background)
-          { src: '/icons/icon-192-light.png', sizes: '192x192', type: 'image/png', purpose: 'any', media: '(prefers-color-scheme: light)' },
-          { src: '/icons/icon-512-light.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable', media: '(prefers-color-scheme: light)' },
-          // Dark mode icons (forest green background)
-          { src: '/icons/icon-192-dark.png', sizes: '192x192', type: 'image/png', purpose: 'any', media: '(prefers-color-scheme: dark)' },
-          { src: '/icons/icon-512-dark.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable', media: '(prefers-color-scheme: dark)' },
-          // Fallback (no media query) for Play Store / universal use
+          // ── any: full-colour icons for launchers that pick the best fit ──
           { src: '/icons/icon-192-light.png', sizes: '192x192', type: 'image/png', purpose: 'any' },
-          { src: '/icons/icon-512-light.png', sizes: '512x512', type: 'image/png', purpose: 'any maskable' },
+          { src: '/icons/icon-512-light.png', sizes: '512x512', type: 'image/png', purpose: 'any' },
+          // ── maskable: safe-zone aware icons for adaptive icon shapes ──────
+          // (dark bg fills the entire canvas; inner TM sits well inside the safe zone)
+          { src: '/icons/icon-192-dark.png',  sizes: '192x192', type: 'image/png', purpose: 'maskable' },
+          { src: '/icons/icon-512-dark.png',  sizes: '512x512', type: 'image/png', purpose: 'maskable' },
+          // ── monochrome: single-colour for iOS 18 "Tinted" home-screen mode ─
+          { src: '/icons/icon-192-mono.png',  sizes: '192x192', type: 'image/png', purpose: 'monochrome' },
+          { src: '/icons/icon-512-mono.png',  sizes: '512x512', type: 'image/png', purpose: 'monochrome' },
         ],
       },
       injectManifest: {

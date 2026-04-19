@@ -10,7 +10,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui"
+    "test:e2e:ui": "playwright test --ui",
+    "generate-pwa-assets": "node scripts/generate-pwa-assets.mjs"
   },
   "dependencies": {
     "@fortawesome/free-regular-svg-icons": "^6.5.1",
