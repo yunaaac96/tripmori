@@ -1349,12 +1349,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 }
 
 // ── Shared layout helpers ────────────────────────────────
+// Rows auto-wrap on narrow (mobile) screens so 3-column forms like the flight
+// modal never overflow the sheet — each Field claims at least ~110px before
+// folding to the next line.
 function Row({ children }: { children: React.ReactNode }) {
-  return <div style={{ display: 'flex', gap: 8 }}>{children}</div>;
+  return <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{children}</div>;
 }
 function Field({ label, children, flex = 1 }: { label: string; children: React.ReactNode; flex?: number }) {
   return (
-    <div style={{ flex, minWidth: 0 }}>
+    <div style={{ flex: `${flex} 1 0`, minWidth: 110 }}>
       <label style={lblSt}>{label}</label>
       {children}
     </div>
