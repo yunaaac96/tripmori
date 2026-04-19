@@ -7,6 +7,14 @@ import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
 
 declare const self: ServiceWorkerGlobalScope;
 
+// ── Activate new SW immediately, don't wait for old tabs to close ─────────────
+self.addEventListener('install', () => {
+  (self as any).skipWaiting();
+});
+self.addEventListener('activate', (event: ExtendableEvent) => {
+  event.waitUntil((self as any).clients.claim());
+});
+
 // ── Pass ALL cross-origin requests directly to the network (never cache) ──────
 // This prevents Workbox from intercepting Firebase/Google API streaming
 // connections (e.g. Firestore Listen/channel) and trying to cache them,
