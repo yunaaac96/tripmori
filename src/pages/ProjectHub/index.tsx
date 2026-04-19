@@ -819,7 +819,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
               {fetchingRate ? '查詢中' : <><FontAwesomeIcon icon={faTowerBroadcast} style={{ marginRight: 4 }} />即時查詢</>}
             </button>
           </div>
-          <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>留空或稍後在記帳頁更新</p>
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '4px 0 0' }}>留空或稍後在「行程頁面 → 編輯旅行設定」調整</p>
         </div>
         {error && <p className="tm-error-text" style={{ fontSize: 12, color: '#C0392B', margin: 0 }}>{error}</p>}
         <button onClick={handleCreate} disabled={busy}
