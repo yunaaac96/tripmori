@@ -10,7 +10,12 @@ export default function SplashScreen() {
     <>
       <style>{`
         @keyframes tm-logo-pop {
-          0%   { opacity: 0; transform: scale(0.72) translateY(12px); }
+          /* Keep opacity 1 throughout — the inline #app-splash in index.html
+           * has already drawn a static logo on the first paint, so starting
+           * the React version at opacity 0 created a flash when the inline
+           * splash faded out (React logo was still mid-fade-in). Animate
+           * only the scale / translate so the handoff is invisible. */
+          0%   { opacity: 1; transform: scale(0.88) translateY(6px); }
           60%  { opacity: 1; transform: scale(1.04) translateY(-2px); }
           100% { opacity: 1; transform: scale(1) translateY(0); }
         }
