@@ -1039,38 +1039,49 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 
               {/* ── Flight form ── */}
               {editType === 'flight' && (<>
+                <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px', lineHeight: 1.6 }}>
+                  <FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10, marginRight: 4 }} />
+                  同行團員如搭不同航班或有轉乘，請分別新增航班卡片
+                </p>
                 {allFlightsForm.map((f, idx) => (
                   <div key={idx} style={{ border: `1.5px solid ${C.creamDark}`, borderRadius: 16, padding: '14px 12px', marginBottom: 4, background: 'var(--tm-card-bg)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
-                      <div style={{ display: 'flex', gap: 6 }}>
-                        {(['去程', '回程'] as const).map(dir => (
-                          <button key={dir} onClick={() => setFF(idx, 'direction', dir)}
-                            style={{ padding: '5px 14px', borderRadius: 10, border: `1.5px solid ${f.direction === dir ? C.sageDark : C.creamDark}`, background: f.direction === dir ? C.sage : 'var(--tm-card-bg)', color: f.direction === dir ? 'white' : C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                            {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : <><FontAwesomeIcon icon={faRotateLeft} style={{ marginRight: 4 }} />回程</>}
-                          </button>
-                        ))}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, flexShrink: 0 }}>方向</span>
+                        {/* Segmented control: one pill with two halves, only one highlighted */}
+                        <div style={{ display: 'inline-flex', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, overflow: 'hidden', background: 'var(--tm-input-bg)' }}>
+                          {(['去程', '回程'] as const).map(dir => {
+                            const sel = f.direction === dir;
+                            return (
+                              <button key={dir} onClick={() => setFF(idx, 'direction', dir)}
+                                style={{ padding: '5px 14px', border: 'none', background: sel ? C.sage : 'transparent', color: sel ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                                {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : <><FontAwesomeIcon icon={faRotateLeft} style={{ marginRight: 4 }} />回程</>}
+                              </button>
+                            );
+                          })}
+                        </div>
                       </div>
                       {allFlightsForm.length > 1 && (
                         <button onClick={() => setAllFlightsForm(prev => prev.filter((_, i) => i !== idx))}
-                          style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT }}>−</button>
+                          style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, flexShrink: 0 }}>−</button>
                       )}
                     </div>
                     <Row>
-                      <Field label="日期" flex={1.3}><input style={inSt} type="date" value={f.date || ''} onChange={e => setFF(idx, 'date', e.target.value)} /></Field>
-                      <Field label="航空公司"><input style={inSt} value={f.airline || ''} onChange={e => setFF(idx, 'airline', e.target.value)} /></Field>
-                      <Field label="航班號" flex={0.8}><input style={inSt} value={f.flightNo || ''} onChange={e => setFF(idx, 'flightNo', e.target.value)} /></Field>
+                      <Field label="日期" flex={1.5}><input style={inSt} type="date" value={f.date || ''} onChange={e => setFF(idx, 'date', e.target.value)} /></Field>
+                      <Field label="航空公司" flex={0.9}><input style={inSt} value={f.airline || ''} onChange={e => setFF(idx, 'airline', e.target.value)} /></Field>
+                      <Field label="航班號" flex={0.7}><input style={inSt} value={f.flightNo || ''} onChange={e => setFF(idx, 'flightNo', e.target.value)} /></Field>
                     </Row>
                     <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '6px 0 4px' }}>出發</p>
                     <Row>
-                      <Field label="機場代碼" flex={0.7}><input style={inSt} value={f.dep?.airport || ''} onChange={e => setFDep(idx, 'airport', e.target.value)} /></Field>
-                      <Field label="機場名稱" flex={1.15}><input style={inSt} value={f.dep?.name || ''} onChange={e => setFDep(idx, 'name', e.target.value)} /></Field>
-                      <Field label="時間" flex={1.15}><input style={inSt} type="time" value={f.dep?.time || ''} onChange={e => setFDep(idx, 'time', e.target.value)} /></Field>
+                      <Field label="機場代碼" flex={0.5}><input style={inSt} value={f.dep?.airport || ''} onChange={e => setFDep(idx, 'airport', e.target.value)} /></Field>
+                      <Field label="機場名稱"><input style={inSt} value={f.dep?.name || ''} onChange={e => setFDep(idx, 'name', e.target.value)} /></Field>
+                      <Field label="時間" flex={1.5}><input style={inSt} type="time" value={f.dep?.time || ''} onChange={e => setFDep(idx, 'time', e.target.value)} /></Field>
                     </Row>
                     <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '6px 0 4px' }}>抵達</p>
                     <Row>
-                      <Field label="機場代碼" flex={0.7}><input style={inSt} value={f.arr?.airport || ''} onChange={e => setFArr(idx, 'airport', e.target.value)} /></Field>
-                      <Field label="機場名稱" flex={1.15}><input style={inSt} value={f.arr?.name || ''} onChange={e => setFArr(idx, 'name', e.target.value)} /></Field>
-                      <Field label="時間" flex={1.15}><input style={inSt} type="time" value={f.arr?.time || ''} onChange={e => setFArr(idx, 'time', e.target.value)} /></Field>
+                      <Field label="機場代碼" flex={0.5}><input style={inSt} value={f.arr?.airport || ''} onChange={e => setFArr(idx, 'airport', e.target.value)} /></Field>
+                      <Field label="機場名稱"><input style={inSt} value={f.arr?.name || ''} onChange={e => setFArr(idx, 'name', e.target.value)} /></Field>
+                      <Field label="時間" flex={1.5}><input style={inSt} type="time" value={f.arr?.time || ''} onChange={e => setFArr(idx, 'time', e.target.value)} /></Field>
                     </Row>
                     <Field label="每人票價（NT$，選填）"><input style={inSt} type="number" value={f.costPerPerson || ''} onChange={e => setFF(idx, 'costPerPerson', e.target.value)} /></Field>
                     <Field label="備註"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={f.notes || ''} onChange={e => setFF(idx, 'notes', e.target.value)} /></Field>
@@ -1234,31 +1245,37 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <button onClick={() => setEditFlightIdx(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {/* Direction */}
-              <div style={{ display: 'flex', gap: 6 }}>
-                {(['去程', '回程'] as const).map(dir => (
-                  <button key={dir} onClick={() => setSF('direction', dir)}
-                    style={{ padding: '5px 18px', borderRadius: 10, border: `1.5px solid ${singleFlightForm.direction === dir ? C.sageDark : C.creamDark}`, background: singleFlightForm.direction === dir ? C.sage : 'var(--tm-card-bg)', color: singleFlightForm.direction === dir ? 'white' : C.bark, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                    {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : <><FontAwesomeIcon icon={faRotateLeft} style={{ marginRight: 4 }} />回程</>}
-                  </button>
-                ))}
+              {/* Direction — same segmented control as the bulk editor */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, flexShrink: 0 }}>方向</span>
+                <div style={{ display: 'inline-flex', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, overflow: 'hidden', background: 'var(--tm-input-bg)' }}>
+                  {(['去程', '回程'] as const).map(dir => {
+                    const sel = singleFlightForm.direction === dir;
+                    return (
+                      <button key={dir} onClick={() => setSF('direction', dir)}
+                        style={{ padding: '5px 18px', border: 'none', background: sel ? C.sage : 'transparent', color: sel ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                        {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : <><FontAwesomeIcon icon={faRotateLeft} style={{ marginRight: 4 }} />回程</>}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
               <Row>
-                <Field label="日期" flex={1.3}><input style={inSt} type="date" value={singleFlightForm.date || ''} onChange={e => setSF('date', e.target.value)} /></Field>
-                <Field label="航空公司"><input style={inSt} value={singleFlightForm.airline || ''} onChange={e => setSF('airline', e.target.value)} /></Field>
-                <Field label="航班號" flex={0.8}><input style={inSt} value={singleFlightForm.flightNo || ''} onChange={e => setSF('flightNo', e.target.value)} /></Field>
+                <Field label="日期" flex={1.5}><input style={inSt} type="date" value={singleFlightForm.date || ''} onChange={e => setSF('date', e.target.value)} /></Field>
+                <Field label="航空公司" flex={0.9}><input style={inSt} value={singleFlightForm.airline || ''} onChange={e => setSF('airline', e.target.value)} /></Field>
+                <Field label="航班號" flex={0.7}><input style={inSt} value={singleFlightForm.flightNo || ''} onChange={e => setSF('flightNo', e.target.value)} /></Field>
               </Row>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '2px 0 0' }}>出發</p>
               <Row>
-                <Field label="機場代碼" flex={0.7}><input style={inSt} value={singleFlightForm.dep?.airport || ''} onChange={e => setSFDep('airport', e.target.value)} /></Field>
-                <Field label="機場名稱" flex={1.15}><input style={inSt} value={singleFlightForm.dep?.name || ''} onChange={e => setSFDep('name', e.target.value)} /></Field>
-                <Field label="時間" flex={1.15}><input style={inSt} type="time" value={singleFlightForm.dep?.time || ''} onChange={e => setSFDep('time', e.target.value)} /></Field>
+                <Field label="機場代碼" flex={0.5}><input style={inSt} value={singleFlightForm.dep?.airport || ''} onChange={e => setSFDep('airport', e.target.value)} /></Field>
+                <Field label="機場名稱"><input style={inSt} value={singleFlightForm.dep?.name || ''} onChange={e => setSFDep('name', e.target.value)} /></Field>
+                <Field label="時間" flex={1.5}><input style={inSt} type="time" value={singleFlightForm.dep?.time || ''} onChange={e => setSFDep('time', e.target.value)} /></Field>
               </Row>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '2px 0 0' }}>抵達</p>
               <Row>
-                <Field label="機場代碼" flex={0.7}><input style={inSt} value={singleFlightForm.arr?.airport || ''} onChange={e => setSFArr('airport', e.target.value)} /></Field>
-                <Field label="機場名稱" flex={1.15}><input style={inSt} value={singleFlightForm.arr?.name || ''} onChange={e => setSFArr('name', e.target.value)} /></Field>
-                <Field label="時間" flex={1.15}><input style={inSt} type="time" value={singleFlightForm.arr?.time || ''} onChange={e => setSFArr('time', e.target.value)} /></Field>
+                <Field label="機場代碼" flex={0.5}><input style={inSt} value={singleFlightForm.arr?.airport || ''} onChange={e => setSFArr('airport', e.target.value)} /></Field>
+                <Field label="機場名稱"><input style={inSt} value={singleFlightForm.arr?.name || ''} onChange={e => setSFArr('name', e.target.value)} /></Field>
+                <Field label="時間" flex={1.5}><input style={inSt} type="time" value={singleFlightForm.arr?.time || ''} onChange={e => setSFArr('time', e.target.value)} /></Field>
               </Row>
               <Field label="每人票價（選填）"><input style={inSt} type="number" value={singleFlightForm.costPerPerson || ''} onChange={e => setSF('costPerPerson', e.target.value)} /></Field>
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={singleFlightForm.notes || ''} onChange={e => setSF('notes', e.target.value)} /></Field>
