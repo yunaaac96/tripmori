@@ -46,12 +46,12 @@ if (_fbApiKey) {
   onBackgroundMessage(messaging, (payload) => {
     const title = payload.notification?.title ?? 'TripMori';
     const body  = payload.notification?.body  ?? '';
-    const icon  = payload.notification?.icon  ?? '/icons/icon-192-light.png';
+    const icon  = payload.notification?.icon  ?? '/logo.png';
 
     self.registration.showNotification(title, {
       body,
       icon,
-      badge: '/icons/icon-192-light.png',
+      badge: '/logo.png',
       data:  payload.data ?? {},
       tag:   (payload.data as any)?.tag ?? 'tripmori-notification',
       renotify: true,
