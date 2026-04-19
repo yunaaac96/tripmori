@@ -747,11 +747,35 @@ function App() {
     }, 1800);
   };
 
+  // Re-check the "one Google account ↔ one member card" rule against the
+  // freshest Firestore data (not the React state snapshot) right before a
+  // write. Also checks the local `members` snapshot for fast bail-out.
+  const assertNotAlreadyBound = async (uid: string, tripId: string): Promise<{ bound: boolean; name?: string }> => {
+    const localHit = members.find((m: any) => m.googleUid === uid);
+    if (localHit) return { bound: true, name: localHit.name };
+    try {
+      const snap = await getDocs(query(collection(db, 'trips', tripId, 'members'), where('googleUid', '==', uid)));
+      if (!snap.empty) {
+        const d = snap.docs[0].data() as any;
+        return { bound: true, name: d.name };
+      }
+    } catch (e) { console.warn('[bind] duplicate check failed', e); }
+    return { bound: false };
+  };
+
   // Bind current Google account to an EXISTING member card
   const handleBindMemberCard = async (memberId: string) => {
     const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
     if (!user || !activeProject) return;
     setBindingMember(true);
+    const dup = await assertNotAlreadyBound(user.uid, activeProject.id);
+    if (dup.bound) {
+      setBindingMember(false);
+      setShowMemberBind(false);
+      setUpgradeStep('none');
+      alert(`此 Google 帳號已經綁定「${dup.name}」，一個帳號只能綁一張成員卡。`);
+      return;
+    }
     let bindOk = false;
     let boundName = '';
     try {
@@ -775,6 +799,17 @@ function App() {
     const name = createFormName.trim();
     if (!user || !activeProject || !name) return;
     setBindingMember(true);
+    const dup = await assertNotAlreadyBound(user.uid, activeProject.id);
+    if (dup.bound) {
+      setBindingMember(false);
+      setShowMemberBind(false);
+      setUpgradeStep('none');
+      setCreateFormOpen(false);
+      setCreateFormName('');
+      setCreateFormColor(MEMBER_COLORS[0]);
+      alert(`此 Google 帳號已經綁定「${dup.name}」，一個帳號只能綁一張成員卡。`);
+      return;
+    }
     let bindOk = false;
     try {
       await addDoc(collection(db, 'trips', activeProject.id, 'members'), {
@@ -797,6 +832,17 @@ function App() {
     setCreateFormColor(MEMBER_COLORS[0]);
     if (bindOk) flashBindSuccess(name);
   };
+
+  // Auto-close the bind modal if the current user is already bound — guards
+  // against the key-upgrade flow re-opening the modal for an owner who was
+  // signed in via incognito/visitor link and already owns a card in this trip.
+  useEffect(() => {
+    if (!showMemberBind) return;
+    if (!boundMemberId) return;
+    setShowMemberBind(false);
+    setUpgradeStep('none');
+    setCreateFormOpen(false);
+  }, [showMemberBind, boundMemberId]);
 
   // ── Splash screen：每次 App 啟動都先顯示（含桌機首次開啟）
   if (!splashDone) return <SplashScreen />;
