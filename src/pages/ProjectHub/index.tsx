@@ -907,7 +907,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
               </div>
               {deleteTarget && (
                 <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 500, padding: 24 }}>
-                  <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 340, fontFamily: FONT, textAlign: 'center' }}>
+                  <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 340, fontFamily: FONT, textAlign: 'center', boxSizing: 'border-box' }}>
                     <div style={{ fontSize: 36, marginBottom: 10 }}><FontAwesomeIcon icon={faTrashCan} /></div>
                     <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>確認刪除旅行？</p>
                     <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 16px', lineHeight: 1.6 }}>

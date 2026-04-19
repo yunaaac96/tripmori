@@ -411,7 +411,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
       {/* ── 刪除確認 ── */}
       {confirmDelete && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 300, padding: 20 }}>
-          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 20, padding: '24px 20px', width: '100%', maxWidth: 320, fontFamily: FONT, textAlign: 'center' }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 20, padding: '24px 20px', width: '100%', maxWidth: 320, fontFamily: FONT, textAlign: 'center', boxSizing: 'border-box' }}>
             <p style={{ fontSize: 28, margin: '0 0 10px', color: '#9A3A3A' }}><FontAwesomeIcon icon={faTrashCan} /></p>
             <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>確定刪除？</p>
             <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 20px' }}>此操作無法復原</p>
