@@ -415,8 +415,8 @@ function App() {
   };
 
   useEffect(() => {
-    // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）
-    const minDelay = new Promise<void>(r => setTimeout(r, 3000));
+    // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 5 秒：動畫 ~2.7s + 停留 ~2.3s）
+    const minDelay = new Promise<void>(r => setTimeout(r, 5000));
     const authReady = auth.authStateReady();
     Promise.all([minDelay, authReady]).then(() => setSplashDone(true));
   }, []);
