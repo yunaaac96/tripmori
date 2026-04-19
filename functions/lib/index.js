@@ -514,7 +514,7 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
     if (allBookings.length) {
         allBookings.forEach(b => {
             const line = [
-                b.name || '未命名',
+                b.title || b.name || '未命名',
                 b.date ? `| ${b.date}${b.time ? ' ' + b.time : ''}` : '',
                 b.cost ? `| ${b.cost} ${b.currency || ''}` : '',
                 b.confirmCode ? `| 確認碼：${b.confirmCode}` : '',
@@ -542,7 +542,7 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
             evs.forEach(e => {
                 const line = [
                     e.startTime || '',
-                    e.name || '—',
+                    e.title || e.name || '—',
                     e.location ? `| 地點：${e.location}` : '',
                     e.category ? `| ${e.category}` : '',
                     e.notes ? `| ${String(e.notes).slice(0, 120)}` : '',
