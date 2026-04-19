@@ -52,8 +52,8 @@ export function useFcm(tripId: string | null, memberId: string | null) {
         if (Notification.permission === 'granted') {
           new Notification(title, {
             body,
-            icon: '/logo.png',
-            badge: '/logo.png',
+            icon: '/icons/icon-192-light.png',
+            badge: '/icons/icon-192-light.png',
             tag: (payload.data as any)?.tag ?? 'tripmori-notification',
           });
         }
