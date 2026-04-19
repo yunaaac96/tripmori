@@ -236,6 +236,20 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [settlingId, setSettlingId] = useState<string | null>(null);
   const [settlementExpanded, setSettlementExpanded] = useState(false);
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
+  // Self-detail privacy tabs (only ever rendered for own card)
+  const [detailTab, setDetailTab] = useState<'all' | 'shared' | 'private'>('all');
+
+  // ── Settlement batch system ─────────────────────────────────────────────
+  // viewBatch drives the expense-list display only. Current-round balances
+  // (memberStats / settlement suggestions) always use settlementBatch == null.
+  const [viewBatch, setViewBatch] = useState<'current' | number>('current');
+  const [closingRound, setClosingRound] = useState(false);
+
+  // Adjustment (補記差額) modal state — opened from past-batch expense cards
+  const [adjustTarget, setAdjustTarget] = useState<any | null>(null);
+  const [adjustAmount, setAdjustAmount] = useState('');
+  const [adjustNote, setAdjustNote] = useState('');
+  const [adjustSaving, setAdjustSaving] = useState(false);
 
   // Member card scroll ref (for arrow nav)
   const memberScrollRef = useRef<HTMLDivElement>(null);
@@ -425,6 +439,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       receiptUrl: form.receiptUrl || '',
       isPrivate: form.isPrivate || false,
       privateOwnerUid: form.isPrivate ? (googleUid || null) : null,
+      settlementBatch: null, // new expenses always start in the current (unsettled) round
     };
 
     try {
@@ -480,6 +495,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       date: new Date().toISOString().slice(0, 10),
       notes: `${from} → ${to}`,
       createdAt: Timestamp.now(),
+      settlementBatch: null,
     };
     await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
   };
@@ -491,9 +507,95 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     setSettlingId(null);
   };
 
-  // getPersonalShare and memberStats/settlements are imported from utils/expenseCalc
-  const memberStats = computeMemberStats(expenses, memberNames);
+  // ── Close current round: bump every settlementBatch==null expense to the
+  // next batch number. From this point the round is history & read-only.
+  const handleCloseRound = async () => {
+    if (isReadOnly || closingRound) return;
+    const toBump = (expenses as any[]).filter((e: any) => e.settlementBatch == null);
+    if (toBump.length === 0) return;
+    if (!window.confirm(
+      `確定本輪已全數結清？\n\n執行後，目前 ${toBump.length} 筆記帳與結清紀錄會封存為「批次 ${(allBatches.length > 0 ? Math.max(...allBatches) : 0) + 1}」不可再編輯。之後新增的記帳會開始新的一輪。`
+    )) return;
+    setClosingRound(true);
+    try {
+      const nextBatch = (allBatches.length > 0 ? Math.max(...allBatches) : 0) + 1;
+      await Promise.all(toBump.map(e =>
+        updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), { settlementBatch: nextBatch })
+      ));
+    } catch (e) {
+      console.error(e);
+      alert('批次封存失敗，請重試');
+    } finally {
+      setClosingRound(false);
+    }
+  };
+
+  // ── Adjustment entry: add a delta expense to correct a closed-batch record.
+  // Payer / splitWith / mode / category are copied from original; amount is the
+  // delta (can be negative for refunds). New expense lives in the current round.
+  const openAdjustForm = (original: any) => {
+    setAdjustTarget(original);
+    setAdjustAmount('');
+    setAdjustNote('');
+  };
+  const closeAdjustForm = () => {
+    setAdjustTarget(null);
+    setAdjustAmount('');
+    setAdjustNote('');
+  };
+  const handleAdjustSave = async () => {
+    if (!adjustTarget || !adjustAmount || adjustSaving) return;
+    const amt = Number(adjustAmount);
+    if (!amt || Number.isNaN(amt)) return;
+    setAdjustSaving(true);
+    try {
+      const original = adjustTarget;
+      const currency = original.currency || 'JPY';
+      const amtTWD = toTWD(Math.abs(amt), currency) * (amt < 0 ? -1 : 1);
+      const payload: any = {
+        description: `${original.description}（補記）`,
+        amount: amt, currency, amountTWD: amtTWD,
+        category: original.category || 'other',
+        payer: original.payer || '',
+        paymentMethod: original.paymentMethod || 'cash',
+        splitMode: original.splitMode || 'equal',
+        splitWith: original.splitWith || [],
+        percentages: original.percentages || {},
+        customAmounts: original.customAmounts || {},
+        subItems: [],
+        date: new Date().toISOString().slice(0, 10),
+        notes: adjustNote || `補記原筆：${original.description}`,
+        receiptUrl: '',
+        isPrivate: original.isPrivate || false,
+        privateOwnerUid: original.privateOwnerUid || null,
+        adjustmentOf: original.id,
+        settlementBatch: null,
+        createdAt: Timestamp.now(),
+        createdBy: currentUserName,
+      };
+      await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
+      closeAdjustForm();
+    } catch (e) {
+      console.error(e);
+      alert('補記失敗，請重試');
+    } finally {
+      setAdjustSaving(false);
+    }
+  };
+
+  // getPersonalShare and memberStats/settlements are imported from utils/expenseCalc.
+  // Current-round (batch=null) expenses ONLY drive the "need to pay" balances —
+  // closed batches are history and don't count toward current settlement suggestions.
+  const currentRoundAllExpenses = (expenses as any[]).filter((e: any) => e.settlementBatch == null);
+  const memberStats = computeMemberStats(currentRoundAllExpenses, memberNames);
   const settlements = computeSettlements(memberStats);
+
+  // All batches that have already been closed, sorted ascending (1, 2, 3 …)
+  const allBatches: number[] = Array.from(new Set(
+    (expenses as any[])
+      .map((e: any) => e.settlementBatch)
+      .filter((b: any) => typeof b === 'number' && b > 0) as number[]
+  )).sort((a, b) => a - b);
 
   // ── Member card order ────────────────────────────────────────────────────
   // Owner can reorder; editors see own card first then rest
@@ -522,21 +624,25 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const visibleExpenses = expenses.filter((e: any) =>
     !e.isPrivate || (e.privateOwnerUid && e.privateOwnerUid === googleUid)
   );
+  // Batch filter: current round (settlementBatch == null) or a specific closed batch
+  const batchVisibleExpenses = viewBatch === 'current'
+    ? visibleExpenses.filter((e: any) => e.settlementBatch == null)
+    : visibleExpenses.filter((e: any) => e.settlementBatch === viewBatch);
   // Base: further filter by "與我有關" if selected
   const baseExpenses = expenseView === 'mine'
-    ? visibleExpenses.filter(isMyExpense)
-    : visibleExpenses;
+    ? batchVisibleExpenses.filter(isMyExpense)
+    : batchVisibleExpenses;
 
   const nonSettlementExpenses = baseExpenses.filter((e: any) => e.category !== 'settlement');
 
-  // 團隊總支出: always = non-private, non-settlement (never includes anyone's private expenses)
-  const teamTotalTWD = visibleExpenses
+  // 團隊總支出 — scoped to the currently viewed batch, excluding private and settlements
+  const teamTotalTWD = batchVisibleExpenses
     .filter((e: any) => !e.isPrivate && e.category !== 'settlement')
     .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
 
   // 個人負擔總額 (與我有關 mode): my share of shared expenses + my own private expenses
   const myBurdenTWD = currentUserName
-    ? visibleExpenses
+    ? batchVisibleExpenses
         .filter((e: any) => e.category !== 'settlement' && isMyExpense(e))
         .reduce((s: number, e: any) => {
           if (e.isPrivate) return s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY'));
@@ -639,66 +745,206 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         </div>
       )}
 
-      {/* ── Member Detail Modal ── */}
-      {memberDetailName && (() => {
+      {/* ── Adjustment (補記差額) Modal ── */}
+      {adjustTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 550 }}
+          onClick={ev => { if (ev.target === ev.currentTarget) closeAdjustForm(); }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faPen} style={{ fontSize: 14 }} /> 補記差額</p>
+              <button onClick={closeAdjustForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+            </div>
+            <div style={{ padding: '10px 12px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px dashed ${C.creamDark}`, marginBottom: 14 }}>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 4px', fontWeight: 600 }}>原筆記帳（批次 {adjustTarget.settlementBatch}）</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px' }}>{adjustTarget.description}</p>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
+                {adjustTarget.payer} 付款 · {adjustTarget.currency} {adjustTarget.amount?.toLocaleString()}
+              </p>
+            </div>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 14px', lineHeight: 1.6 }}>
+              原筆已結清，無法直接編輯。輸入差額金額後會在「本輪」新增一筆 <b>補記</b>，付款人／分攤對象／分類與原筆相同。
+              金額可輸入 <b>正數</b>（少記了多少要補給付款者）或 <b>負數</b>（多收了，要退回）。
+            </p>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>差額金額 ({adjustTarget.currency || 'JPY'})</label>
+              <input type="number" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)}
+                placeholder="正數 = 補收；負數 = 退款"
+                style={iStyle} />
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>備註（選填）</label>
+              <input type="text" value={adjustNote} onChange={e => setAdjustNote(e.target.value)}
+                placeholder="例：稅費算錯、少算一人..."
+                style={iStyle} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={closeAdjustForm}
+                style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                取消
+              </button>
+              <button onClick={handleAdjustSave} disabled={adjustSaving || !adjustAmount || !Number(adjustAmount)}
+                style={{ ...btnPrimary(), flex: 2, opacity: (adjustSaving || !adjustAmount || !Number(adjustAmount)) ? 0.6 : 1 }}>
+                {adjustSaving ? '建立中…' : <><FontAwesomeIcon icon={faPen} style={{ marginRight: 6 }} />建立補記</>}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Member Detail Modal — self only; private visible only to owner ── */}
+      {memberDetailName && memberDetailName === currentUserName && (() => {
         const detailName = memberDetailName;
-        const detailExpenses = visibleExpenses.filter((e: any) => {
+        // Shared expenses this member is part of (payer or in splitWith); exclude settlements.
+        const sharedExpenses = visibleExpenses.filter((e: any) => {
           if (e.category === 'settlement') return false;
           if (e.isPrivate) return false;
           const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
           return e.payer === detailName || sw.includes(detailName);
         });
+        // Own private expenses (only accessible here because modal is self-only).
+        const privateExpenses = visibleExpenses.filter((e: any) =>
+          e.isPrivate && e.privateOwnerUid && e.privateOwnerUid === googleUid
+        );
+
+        // Tab selection → which list to show + pie input
+        const tab = detailTab;
+        const tabExpenses =
+          tab === 'shared' ? sharedExpenses :
+          tab === 'private' ? privateExpenses :
+          [...sharedExpenses, ...privateExpenses];
+
+        // Personal share for tab rows
+        const shareFor = (e: any): number => {
+          if (e.isPrivate) return e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
+          return getPersonalShare(e, detailName, memberNames);
+        };
+
+        // Header stat totals (split shared vs private so user has a clear split)
+        const sharedPaidTWD = sharedExpenses
+          .filter((e: any) => e.payer === detailName)
+          .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
+        const privateTotalTWD = privateExpenses
+          .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
+
+        // Category breakdown for the currently selected tab
+        const tabBreakdown = Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => {
+          const total = tabExpenses
+            .filter((e: any) => e.category === key)
+            .reduce((s: number, e: any) => s + shareFor(e), 0);
+          return { key, label: info.label, emoji: info.emoji, value: total };
+        }).filter(d => d.value > 0);
+        const tabTotal = tabBreakdown.reduce((s, d) => s + d.value, 0);
+
         const ms = memberStats.find(m => m.name === detailName);
+
+        const tabBtn = (key: 'all' | 'shared' | 'private', label: React.ReactNode, count: number, tint: string) => (
+          <button key={key} onClick={() => setDetailTab(key)}
+            style={{ flex: 1, padding: '8px 6px', borderRadius: 10, border: `1.5px solid ${tab === key ? tint : C.creamDark}`, background: tab === key ? tint : 'var(--tm-card-bg)', color: tab === key ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>
+            {label} ({count})
+          </button>
+        );
+
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 500 }}
             onClick={ev => { if (ev.target === ev.currentTarget) setMemberDetailName(null); }}>
             <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box' }}>
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
-                <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faChartPie} style={{ fontSize: 14 }} /> {detailName} 的記帳明細</p>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
+                <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faChartPie} style={{ fontSize: 14 }} /> 我的記帳明細</p>
                 <button onClick={() => setMemberDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
               </div>
+
+              {/* Privacy reassurance */}
+              <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 12px', display: 'flex', alignItems: 'center', gap: 5 }}>
+                <FontAwesomeIcon icon={faLock} style={{ fontSize: 9 }} /> 私人花費僅你本人可見
+              </p>
+
+              {/* Header stats — split shared vs private */}
               {ms && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                   <div className="tm-stat-paid-box" style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {ms.paid.toLocaleString()}</p>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>共享花費（付款）</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {sharedPaidTWD.toLocaleString()}</p>
                   </div>
-                  <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ flex: 1, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>{ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: ms.net >= 0 ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
-                      NT$ {Math.abs(ms.net).toLocaleString()}
+                  <div style={{ flex: 1, background: 'var(--tm-note-5)', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人花費
                     </p>
+                    <p className="tm-expense-private-title" style={{ fontSize: 15, fontWeight: 700, color: '#6A2A9A', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
                   </div>
                 </div>
               )}
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', fontWeight: 600 }}>共 {detailExpenses.length} 筆相關支出</p>
+              {ms && (
+                <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ marginBottom: 14, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
+                  <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>本輪 {ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
+                  <p style={{ fontSize: 15, fontWeight: 700, color: ms.net >= 0 ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
+                    {Math.abs(ms.net) > 0 ? `NT$ ${Math.abs(ms.net).toLocaleString()}` : '已結清 ✓'}
+                  </p>
+                </div>
+              )}
+
+              {/* Tabs */}
+              <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
+                {tabBtn('all',     '全部', sharedExpenses.length + privateExpenses.length, C.earth)}
+                {tabBtn('shared',  '共享', sharedExpenses.length,                          C.sage)}
+                {tabBtn('private', <><FontAwesomeIcon icon={faLock} style={{ fontSize: 10 }} />私人</>, privateExpenses.length, '#6A2A9A')}
+              </div>
+
+              {/* Pie + category breakdown for selected tab */}
+              {tabTotal > 0 && (
+                <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14, padding: '10px', borderRadius: 12, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)' }}>
+                  <div style={{ flexShrink: 0 }}>
+                    <PieChart data={tabBreakdown} />
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {tabBreakdown.map(d => {
+                      const pct = Math.round(d.value / tabTotal * 100);
+                      return (
+                        <div key={d.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.bark }}>
+                            <span style={{ width: 8, height: 8, borderRadius: '50%', background: PIE_COLORS[d.key] || '#999' }} />
+                            {d.label}
+                          </span>
+                          <span style={{ color: C.barkLight, fontWeight: 600 }}>NT$ {d.value.toLocaleString()} · {pct}%</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', fontWeight: 600 }}>共 {tabExpenses.length} 筆</p>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {detailExpenses.map((e: any) => {
-                  const share = getPersonalShare(e, detailName, memberNames);
+                {tabExpenses.map((e: any) => {
+                  const share = shareFor(e);
                   const amtTWD = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
                   const isPayer = e.payer === detailName;
                   const cat = EXPENSE_CATEGORY_MAP[e.category] || EXPENSE_CATEGORY_MAP.other;
+                  const isPrivateRow = !!e.isPrivate;
                   return (
-                    <div key={e.id} style={{ background: 'var(--tm-card-bg)', borderRadius: 14, padding: '10px 12px', border: `1px solid ${C.creamDark}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div key={e.id} style={{ background: isPrivateRow ? 'var(--tm-note-5)' : 'var(--tm-card-bg)', borderRadius: 14, padding: '10px 12px', border: `1px solid ${isPrivateRow ? '#D4B0F0' : C.creamDark}`, display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 36, height: 36, borderRadius: 10, background: cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         <FontAwesomeIcon icon={CATEGORY_ICONS[e.category] || CATEGORY_ICONS.other} style={{ fontSize: 14, color: avatarTextColor(cat?.bg), opacity: 0.85 }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description}</p>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: isPrivateRow ? '#6A2A9A' : C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          {isPrivateRow && <FontAwesomeIcon icon={faLock} style={{ fontSize: 10 }} />}
+                          {e.description}
+                        </p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>{e.date || ''}</p>
-                          {isPayer && <span className="tm-payer-badge" style={{ fontSize: 9, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 5, padding: '1px 5px' }}>付款者</span>}
+                          {!isPrivateRow && isPayer && <span className="tm-payer-badge" style={{ fontSize: 9, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 5, padding: '1px 5px' }}>付款者</span>}
+                          {isPrivateRow && <span className="tm-badge-private" style={{ fontSize: 9, fontWeight: 700, background: '#F0E8FF', color: '#6A2A9A', borderRadius: 5, padding: '1px 5px' }}>私人</span>}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: C.earth, margin: '0 0 1px' }}>NT$ {share.toLocaleString()}</p>
-                        <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}</p>
+                        <p style={{ fontSize: 14, fontWeight: 700, color: isPrivateRow ? '#6A2A9A' : C.earth, margin: '0 0 1px' }}>NT$ {share.toLocaleString()}</p>
+                        {!isPrivateRow && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}</p>}
                       </div>
                     </div>
                   );
                 })}
-                {detailExpenses.length === 0 && (
-                  <p style={{ textAlign: 'center', fontSize: 13, color: C.barkLight, padding: '24px 0' }}>此成員目前無相關支出</p>
+                {tabExpenses.length === 0 && (
+                  <p style={{ textAlign: 'center', fontSize: 13, color: C.barkLight, padding: '24px 0' }}>此分類目前沒有記帳</p>
                 )}
               </div>
             </div>
@@ -1008,7 +1254,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 </button>
                 <button onClick={handleSave} disabled={saving || !form.description || !form.amount || (!form.isPrivate && !form.payer)}
                   style={{ ...btnPrimary(form.isPrivate ? '#7A4AAA' : undefined), flex: 2, opacity: saving || !form.description || !form.amount || (!form.isPrivate && !form.payer) ? 0.6 : 1 }}>
-                  {saving ? '儲存中...' : editingId ? '✓ 儲存修改' : (form.isPrivate ? '🔒 新增私人支出' : '✓ 新增')}
+                  {saving ? '儲存中...' : editingId ? <><FontAwesomeIcon icon={faPen} style={{ marginRight: 6 }} />儲存修改</> : form.isPrivate ? <><FontAwesomeIcon icon={faLock} style={{ marginRight: 6 }} />新增私人支出</> : <><FontAwesomeIcon icon={faMoneyBill1} style={{ marginRight: 6 }} />新增</>}
                 </button>
               </div>
             </div>
@@ -1059,12 +1305,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 const displayAmt = Math.abs(ms.net);
                 const isMe = name === currentUserName;
                 return (
-                  <div key={ms.name} onClick={() => setMemberDetailName(ms.name)}
-                    style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, flexShrink: 0, width: 160, scrollSnapAlign: 'start', border: isMe ? `2px solid ${C.sageDark}` : undefined, cursor: 'pointer', userSelect: 'none' }}>
+                  <div key={ms.name}
+                    onClick={() => { if (isMe) { setDetailTab('all'); setMemberDetailName(ms.name); } }}
+                    style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, flexShrink: 0, width: 160, scrollSnapAlign: 'start', border: isMe ? `2px solid ${C.sageDark}` : undefined, cursor: isMe ? 'pointer' : 'default', userSelect: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 1 }}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{ms.name}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
                     </div>
-                    <p style={{ fontSize: 9, color: C.barkLight, margin: '0 0 6px' }}>點擊查看明細 ›</p>
+                    <p style={{ fontSize: 9, color: C.barkLight, margin: '0 0 6px' }}>{isMe ? '點擊查看明細 ›' : '僅自己可查看明細'}</p>
                     <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {ms.paid.toLocaleString()}</p>
                     <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px' }}>
@@ -1148,7 +1395,24 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 </div>
               );
             })}
+            {/* Master "close this round" action — visible only when viewing current round */}
+            {settlementExpanded && !isReadOnly && viewBatch === 'current' && (
+              <button onClick={handleCloseRound} disabled={closingRound}
+                style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: 'none', background: closingRound ? C.creamDark : C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: closingRound ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 4 }}>
+                <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 12 }} />
+                {closingRound ? '封存中…' : '本輪結算完成，封存為批次'}
+              </button>
+            )}
           </div>
+        )}
+
+        {/* Allow owner to close round even when there's no outstanding debt (everyone clean) */}
+        {!isVisitor && !isReadOnly && settlements.length === 0 && viewBatch === 'current' && currentRoundAllExpenses.length > 0 && (
+          <button onClick={handleCloseRound} disabled={closingRound}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: closingRound ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
+            <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} />
+            {closingRound ? '封存中…' : `本輪結算完成，封存 ${currentRoundAllExpenses.length} 筆`}
+          </button>
         )}
 
         {/* ── Category breakdown pie ── */}
@@ -1219,6 +1483,33 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
           </div>
         )}
 
+        {/* ── Batch switcher (only when there IS at least one closed batch) ── */}
+        {!isVisitor && allBatches.length > 0 && (() => {
+          const currentCount = visibleExpenses.filter((e: any) => e.settlementBatch == null).length;
+          const batchBtn = (key: 'current' | number, label: string, count: number) => (
+            <button key={String(key)} onClick={() => setViewBatch(key)}
+              style={{ flexShrink: 0, padding: '6px 14px', borderRadius: 20, border: `1.5px solid ${viewBatch === key ? C.sageDark : C.creamDark}`, background: viewBatch === key ? C.sage : 'var(--tm-card-bg)', color: viewBatch === key ? 'white' : C.bark, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+              {label} ({count})
+            </button>
+          );
+          return (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
+              {batchBtn('current', '本輪', currentCount)}
+              {allBatches.map(n => batchBtn(n, `批次 ${n}`, visibleExpenses.filter((e: any) => e.settlementBatch === n).length))}
+            </div>
+          );
+        })()}
+
+        {/* Closed-batch banner: reminds user the list below is historical */}
+        {!isVisitor && viewBatch !== 'current' && (
+          <div style={{ marginBottom: 10, padding: '10px 12px', borderRadius: 12, background: 'var(--tm-section-bg)', border: `1px dashed ${C.creamDark}`, display: 'flex', alignItems: 'center', gap: 8 }}>
+            <FontAwesomeIcon icon={faLock} style={{ fontSize: 12, color: C.barkLight }} />
+            <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>
+              批次 {viewBatch} 已結清，僅供查閱；如需調整請點卡片上「補記差額」
+            </span>
+          </div>
+        )}
+
         {/* ── Filter / Sort bar (hidden for visitors) ── */}
         {!isVisitor && (
           <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
@@ -1251,8 +1542,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               const hasSubItems = e.subItems && e.subItems.length > 0;
               const isExpanded = expandedExpense === e.id;
               const isPrivateExpense = !!e.isPrivate;
+              const isClosedBatch = typeof e.settlementBatch === 'number' && e.settlementBatch > 0;
+              const isAdjustment = !!e.adjustmentOf;
               return (
-                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined }}>
+                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined, opacity: isClosedBatch ? 0.85 : 1 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
                     {(() => {
@@ -1278,6 +1571,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         ) : !isPrivateExpense && (
                           <span className={e.paymentMethod === 'card' ? 'tm-badge-sky-sm' : 'tm-badge-sage-sm'} style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: e.paymentMethod === 'card' ? '#D8EDF8' : '#EAF3DE', color: e.paymentMethod === 'card' ? '#2A6A9A' : '#4A7A35' }}>
                             {e.paymentMethod === 'card' ? '刷卡' : '現金'}
+                          </span>
+                        )}
+                        {isClosedBatch && (
+                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: C.creamDark, color: C.barkLight, display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />已結清 · 批次 {e.settlementBatch}
+                          </span>
+                        )}
+                        {isAdjustment && (
+                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF2CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <FontAwesomeIcon icon={faPen} style={{ fontSize: 8 }} />補記
                           </span>
                         )}
                       </div>
@@ -1314,7 +1617,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                           {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{e.currency} {e.amount?.toLocaleString()}</p>}
                         </>
                       )}
-                      {!isReadOnly && (
+                      {!isReadOnly && !isClosedBatch && (
                         <div style={{ display: 'flex', gap: 4 }}>
                           {!isSettlement && (
                             <button onClick={() => openEdit(e)}
@@ -1329,6 +1632,14 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                             </button>
                           )}
                         </div>
+                      )}
+                      {/* Past-batch expense: cannot edit directly; can only log a delta adjustment */}
+                      {!isReadOnly && isClosedBatch && !isSettlement && (
+                        <button onClick={() => openAdjustForm(e)}
+                          style={{ padding: '5px 10px', borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 10, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
+                          <FontAwesomeIcon icon={faPen} style={{ fontSize: 9 }} />
+                          補記差額
+                        </button>
                       )}
                     </div>
                   </div>
