@@ -1,6 +1,6 @@
-import { StrictMode } from 'react' // 1. 把這行解除註解（拿掉 //）
+import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import './index.css' // 2. 留一個就好
+import './index.css'
 import App from './App.tsx'
 
 createRoot(document.getElementById('root')!).render(
@@ -8,3 +8,15 @@ createRoot(document.getElementById('root')!).render(
     <App />
   </StrictMode>,
 )
+
+// Fade out and remove the inline splash screen once React has painted its first frame.
+// Double-rAF ensures we're past the first browser paint, avoiding a flash of unstyled content.
+requestAnimationFrame(() => {
+  requestAnimationFrame(() => {
+    const splash = document.getElementById('app-splash')
+    if (splash) {
+      splash.style.opacity = '0'
+      setTimeout(() => splash.remove(), 280)
+    }
+  })
+})
