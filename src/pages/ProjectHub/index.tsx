@@ -10,6 +10,7 @@ import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { db, auth } from '../../config/firebase';
 import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../../utils/universalImporter';
 import { collection, doc, setDoc, addDoc, updateDoc, deleteDoc, arrayUnion, Timestamp, query, where, getDocs } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { GoogleAuthProvider, signInWithPopup, signInAnonymously, signOut, onAuthStateChanged } from 'firebase/auth';
 import type { User } from 'firebase/auth';
 import { C, FONT } from '../../App';
@@ -156,7 +157,9 @@ const DEFAULT_PACKING: string[] = [
 
 // ─────────────────────────────────────────────────────────────────
 interface Props {
-  onEnterProject: (project: StoredProject) => void;
+  // `justJoinedViaKey` signals the App to open the member-bind modal after mount,
+  // so a freshly upgraded editor is immediately prompted to pick a member card.
+  onEnterProject: (project: StoredProject, justJoinedViaKey?: boolean) => void;
   syncedProjects?: StoredProject[];
 }
 
@@ -431,12 +434,16 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
 
     const registerAndEnter = async (tripId: string, project: StoredProject) => {
       if (user.uid) {
-        try { await updateDoc(doc(db, 'trips', tripId), { allowedEditorUids: arrayUnion(user.uid) }); }
-        catch (e) { console.error('Failed to register editor UID:', e); }
+        // Use the addEditor Cloud Function (Admin SDK) instead of a direct
+        // updateDoc — Firestore rules only allow owners to update the trip
+        // doc, so a direct write silently fails for the joining user and
+        // leaves allowedEditorUids out of sync with the local "editor" role.
+        const fnClient = getFunctions(undefined, 'us-central1');
+        await httpsCallable(fnClient, 'addEditor')({ tripId, collaboratorKey: key });
       }
       const editorProject: StoredProject = { ...project, role: 'editor' as TripRole };
       saveProject(editorProject);
-      onEnterProject(editorProject);
+      onEnterProject(editorProject, true);
     };
 
     try {

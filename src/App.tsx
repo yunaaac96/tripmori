@@ -673,10 +673,19 @@ function App() {
     if (tab === '日誌') { markSeen(LS_SEEN_JOURNAL); setNotifications(n => ({ ...n, '日誌': false })); }
   };
 
-  const handleEnterProject = (p: StoredProject) => {
+  const handleEnterProject = (p: StoredProject, justJoinedViaKey?: boolean) => {
     saveProject(p);
     setActiveProject(p.id);
     setActiveProjectState(p);
+    // Fresh editor who joined via collaborator key on the hub: open the
+    // member-bind modal so they can pick/create a card instead of landing in
+    // the project with no member identity. The existing auto-close effect
+    // (showMemberBind + boundMemberId) still guards against reopening for
+    // users who are already bound.
+    if (justJoinedViaKey && p.role === 'editor') {
+      setUpgradeStep('binding');
+      setShowMemberBind(true);
+    }
   };
 
   const handleExitToHub = () => {
