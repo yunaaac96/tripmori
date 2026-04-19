@@ -102,6 +102,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const [formParticipants, setFormParticipants] = useState<string[]>([]);
   const [saving, setSaving]         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [editorDelToast, setEditorDelToast] = useState(false);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [tripPhase, setTripPhase]   = useState<'before' | 'during' | 'after'>('before');
   // Flight-based countdown anchors (fetched from staticFlights)
@@ -467,8 +468,13 @@ export default function SchedulePage({ events, members = [], project, firestore,
     setSaving(false);
   };
 
+  const showEditorDelToast = () => {
+    setEditorDelToast(true);
+    setTimeout(() => setEditorDelToast(false), 3500);
+  };
+
   const handleDelete = async () => {
-    if (!isOwner) return; // only owner can delete events
+    if (!isOwner) return;
     if (!selectedEvent) return;
     try {
       await deleteDoc(doc(db, 'trips', TRIP_ID, 'events', selectedEvent.id));
@@ -1076,7 +1082,12 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 <p style={{ fontSize: 10, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>輸入地址會自動轉為 Google Maps 搜尋連結；未填時依「地點」欄位導入地圖</p>
               </div>
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                {mode === 'edit' && isOwner && <button onClick={() => setShowDeleteConfirm(true)} style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}><FontAwesomeIcon icon={faTrashCan} /></button>}
+                {mode === 'edit' && !isReadOnly && (
+                  <button
+                    onClick={() => isOwner ? setShowDeleteConfirm(true) : showEditorDelToast()}
+                    style={{ padding: '12px 16px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}
+                  ><FontAwesomeIcon icon={faTrashCan} /></button>
+                )}
                 <button onClick={() => setMode('view')} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.title || !form.startTime} style={{ ...btnPrimary(), flex: 2, opacity: saving || !form.title || !form.startTime ? 0.6 : 1 }}>{saving ? '儲存中...' : mode === 'add' ? '✓ 新增' : '✓ 儲存'}</button>
               </div>
@@ -1086,6 +1097,12 @@ export default function SchedulePage({ events, members = [], project, firestore,
       )}
 
       {/* ── Inline Delete Confirm Modal ── */}
+      {editorDelToast && (
+        <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#5A3A3A', color: 'white', borderRadius: 24, padding: '10px 22px', fontSize: 13, fontWeight: 700, zIndex: 500, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', whiteSpace: 'nowrap', fontFamily: FONT }}>
+          如需刪除，請通知行程擁有者
+        </div>
+      )}
+
       {showDeleteConfirm && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 400, padding: 24 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 24, padding: '28px 24px', width: '100%', maxWidth: 320, fontFamily: FONT, textAlign: 'center' }}>

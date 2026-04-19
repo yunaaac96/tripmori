@@ -399,24 +399,20 @@ function App() {
   useFcm(activeProject?.id ?? null, boundMemberId);
 
   // ── PWA install prompt ────────────────────────────────────────────────────
-  // Capture the beforeinstallprompt event so we can show it at the right time.
   const pwaPromptRef = useRef<any>(null);
+  const [pwaInstallAvailable, setPwaInstallAvailable] = useState(false);
   useEffect(() => {
-    const handler = (e: any) => { e.preventDefault(); pwaPromptRef.current = e; };
+    const handler = (e: any) => { e.preventDefault(); pwaPromptRef.current = e; setPwaInstallAvailable(true); };
     window.addEventListener('beforeinstallprompt', handler);
     return () => window.removeEventListener('beforeinstallprompt', handler);
   }, []);
-  // When user has both Google account AND a bound member card, trigger install + notifications
-  useEffect(() => {
-    if (!authUid || !boundMemberId) return;
-    const t = setTimeout(() => {
-      if (pwaPromptRef.current) {
-        pwaPromptRef.current.prompt();
-        pwaPromptRef.current = null;
-      }
-    }, 2500);
-    return () => clearTimeout(t);
-  }, [authUid, boundMemberId]);
+  const triggerPwaInstall = () => {
+    if (pwaPromptRef.current) {
+      pwaPromptRef.current.prompt();
+      pwaPromptRef.current = null;
+      setPwaInstallAvailable(false);
+    }
+  };
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 3 秒以完整播放動畫）
@@ -731,7 +727,7 @@ function App() {
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} />}
+        {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
 
         {/* ── Member card binding modal (shown after key upgrade) ── */}

@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { C, FONT } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash } from '@fortawesome/free-solid-svg-icons';
+import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
@@ -19,7 +19,7 @@ const LS_USER_KEY   = 'tripmori_current_user';
 // Note card color palette for sticky notes
 const NOTE_COLORS = ['var(--tm-note-1)', 'var(--tm-note-2)', 'var(--tm-note-3)', 'var(--tm-note-4)', 'var(--tm-note-5)', 'var(--tm-note-6)'];
 
-export default function MembersPage({ members, memberNotes, project, firestore }: any) {
+export default function MembersPage({ members, memberNotes, project, firestore, pwaInstallAvailable, onPwaInstall }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, updateDoc, collection, doc, isReadOnly } = firestore;
 
   const [showAdd, setShowAdd]           = useState(false);
@@ -428,7 +428,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 {isEdit ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 13 }} /> 編輯成員</> : <><FontAwesomeIcon icon={faPlus} style={{ fontSize: 13 }} /> 新增旅伴</>}
               </p>
               <button onClick={() => { setShowAdd(false); setEditTarget(null); }}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -488,7 +488,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={isEdit ? handleEditSave : handleAdd} disabled={saving || !form.name.trim()}
                   style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: form.name.trim() ? C.earth : C.creamDark, color: 'white', fontWeight: 700, fontSize: 14, cursor: form.name.trim() ? 'pointer' : 'default', fontFamily: FONT, opacity: saving ? 0.7 : 1 }}>
-                  {saving ? '儲存中...' : isEdit ? '✓ 儲存' : '➕ 新增'}
+                  {saving ? '儲存中...' : isEdit ? <><FontAwesomeIcon icon={faCheck} style={{ marginRight: 6 }} />儲存</> : <><FontAwesomeIcon icon={faPlus} style={{ marginRight: 6 }} />新增</>}
                 </button>
               </div>
             </div>
@@ -601,19 +601,19 @@ export default function MembersPage({ members, memberNotes, project, firestore }
       {firestore.role === 'owner' && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 14 }}>📓</span> 備份到 Notion
+            <FontAwesomeIcon icon={faBookmark} style={{ fontSize: 13 }} /> 備份到 Notion
           </p>
           <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px' }}>將行程資料（成員、行程、費用、日誌）匯出一份快照到 Notion 備份資料庫。</p>
           <button
             onClick={handleBackupToNotion}
             disabled={notionBusy}
             style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', background: notionBusy ? C.creamDark : '#2F2F2F', color: 'white', fontWeight: 700, fontSize: 13, cursor: notionBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: notionBusy ? 0.6 : 1 }}>
-            <span style={{ fontSize: 15 }}>📓</span>
+            <FontAwesomeIcon icon={faBookmark} style={{ fontSize: 13 }} />
             {notionBusy ? '備份中…' : '立即備份到 Notion'}
           </button>
           {notionResult && (
             <div className="tm-notion-success" style={{ marginTop: 8, padding: '8px 10px', background: '#E0F0D8', borderRadius: 10 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 4px' }}>✅ 備份成功！</p>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faCheck} /> 備份成功！</p>
               <p style={{ fontSize: 11, color: '#4A7A35', margin: 0 }}>費用總計 NT$ {notionResult.totalTWD.toLocaleString()}</p>
               {notionResult.url && (
                 <a href={notionResult.url} target="_blank" rel="noreferrer"
@@ -624,8 +624,23 @@ export default function MembersPage({ members, memberNotes, project, firestore }
             </div>
           )}
           {notionError && (
-            <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600 }}>❌ {notionError}</p>
+            <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faTriangleExclamation} /> {notionError}</p>
           )}
+        </div>
+      )}
+
+      {/* ── PWA install（顯示條件：瀏覽器支援且尚未安裝）── */}
+      {pwaInstallAvailable && (
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <FontAwesomeIcon icon={faMobileScreen} style={{ fontSize: 13 }} /> 安裝 App
+          </p>
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px' }}>將 TripMori 加入主畫面，享受原生 App 體驗。</p>
+          <button onClick={onPwaInstall}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+            <FontAwesomeIcon icon={faDownload} style={{ fontSize: 13 }} />
+            加入主畫面
+          </button>
         </div>
       )}
 
@@ -635,7 +650,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
           <button onClick={() => setEditorListOpen(v => !v)}
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faPen} style={{ fontSize: 11 }} /> 編輯者名單</span>
-            <span style={{ fontSize: 12, color: C.barkLight }}>{editorListOpen ? '▲' : '▼'}</span>
+            <span style={{ fontSize: 12, color: C.barkLight }}><FontAwesomeIcon icon={editorListOpen ? faChevronUp : faChevronDown} /></span>
           </button>
           {editorListOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 16px 14px' }}>
             {/* Sort editor UIDs by owner-defined member card order */}
@@ -697,7 +712,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
               <button onClick={() => setBindingSummaryOpen(v => !v)}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 帳號綁定總覽</span>
-                <span style={{ fontSize: 12, color: '#4A7A35', opacity: 0.7 }}>{bindingSummaryOpen ? '▲' : '▼'}</span>
+                <span style={{ fontSize: 12, color: '#4A7A35', opacity: 0.7 }}><FontAwesomeIcon icon={bindingSummaryOpen ? faChevronUp : faChevronDown} /></span>
               </button>
               {bindingSummaryOpen && (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 4, padding: '0 12px 12px' }}>
@@ -754,9 +769,9 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                 {firestore.role === 'owner' && !isMyCard && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
                     <button onClick={() => handleMemberReorder(m.id, 'up')} disabled={memberIdx === 0}
-                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === 0 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === 0 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === 0 ? 0.25 : 1 }}>▲</button>
+                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === 0 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === 0 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === 0 ? 0.25 : 1 }}><FontAwesomeIcon icon={faArrowUp} /></button>
                     <button onClick={() => handleMemberReorder(m.id, 'down')} disabled={memberIdx === otherMembers.length - 1}
-                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === otherMembers.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === otherMembers.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === otherMembers.length - 1 ? 0.25 : 1 }}>▼</button>
+                      style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === otherMembers.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === otherMembers.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === otherMembers.length - 1 ? 0.25 : 1 }}><FontAwesomeIcon icon={faArrowDown} /></button>
                   </div>
                 )}
                 {canEdit && (
@@ -811,7 +826,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                   {m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly && (
                     <button onClick={() => handleUnbindGoogle(m.id)}
                       style={{ marginTop: 4, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
-                      ✕ 解除綁定
+                      <FontAwesomeIcon icon={faXmark} style={{ marginRight: 4 }} />解除綁定
                     </button>
                   )}
                 </div>
@@ -849,7 +864,7 @@ export default function MembersPage({ members, memberNotes, project, firestore }
                             {(isOwn || isMyCard) && (
                               <button onClick={() => handleDeleteNote(note.id)}
                                 style={{ position: 'absolute', top: 6, right: 6, width: 18, height: 18, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 9, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>
-                                ✕
+                                <FontAwesomeIcon icon={faXmark} />
                               </button>
                             )}
                           </div>
