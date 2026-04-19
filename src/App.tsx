@@ -411,9 +411,13 @@ function App() {
       (window.navigator as any).standalone === true
     )
   );
-  const isIOS = typeof navigator !== 'undefined'
-    && /iPad|iPhone|iPod/.test(navigator.userAgent)
-    && !(window as any).MSStream;
+  // iPad on iPadOS 13+ reports a desktop UA by default (Macintosh), so sniffing
+  // for "iPad" alone misses it. Fall back to the touch-points trick: a
+  // "Macintosh" UA with >1 touch points is an iPad, not a real Mac.
+  const isIOS = typeof navigator !== 'undefined' && !(window as any).MSStream && (
+    /iPad|iPhone|iPod/.test(navigator.userAgent)
+    || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent))
+  );
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(
     typeof Notification !== 'undefined' ? Notification.permission : 'denied'
   );
