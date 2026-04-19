@@ -85,6 +85,16 @@ export interface Expense {
   category?: string;
   isPrivate?: boolean;
   privateOwnerUid?: string;
+  // ── Settlement batch system ──────────────────────────────────────
+  // null / undefined = expense is in the current (unsettled) round.
+  // A positive integer = expense has been closed into that batch by a
+  // "本輪結算完成" action and is now read-only history.
+  settlementBatch?: number | null;
+  // If this expense is a delta correction (補記差額) for a previously
+  // closed expense, this is the original expense's id. The new expense
+  // lives in the current round (settlementBatch null) so the correction
+  // flows into the next round's balance without touching history.
+  adjustmentOf?: string | null;
 }
 
 export interface MemberStat {
