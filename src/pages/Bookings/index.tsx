@@ -5,7 +5,7 @@ import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getDoc, updateDoc, doc as fsDoc } from 'firebase/firestore';
+import { getDoc, updateDoc, doc as fsDoc, deleteField } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap, faPhone, faQrcode, faArrowRightToBracket, faArrowRightFromBracket, faClock, faRotateLeft, faCalendarDays, faMoneyBill1, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faCheck, faXmark } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
@@ -115,7 +115,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   // DEFAULT_* = fallback for the hardcoded demo trip only
   const [flights, setFlights] = useState<any[] | null>(null);
   const [hotels,  setHotels]  = useState<any[] | null>(null);
-  const [car,     setCar]     = useState<any | null>(null);
+  const [cars,    setCars]    = useState<any[] | null>(null);
   const [staticLoaded, setStaticLoaded] = useState(false);
 
   useEffect(() => {
@@ -126,17 +126,26 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       // 若欄位存在（含空陣列）就用 Firestore 資料，否則視為待更新
       setFlights('staticFlights' in d ? d.staticFlights : null);
       setHotels ('staticHotels'  in d ? d.staticHotels  : null);
-      setCar    ('staticCar'     in d ? d.staticCar     : null);
+      // Backward-compat: old trips store a single `staticCar` object; new trips
+      // store `staticCars` array. Prefer the array; wrap legacy single into
+      // a one-element array on read.
+      if ('staticCars' in d) {
+        setCars(d.staticCars);
+      } else if ('staticCar' in d && d.staticCar) {
+        setCars([d.staticCar]);
+      } else {
+        setCars(null);
+      }
       // 舊版預設行程沿用 hardcoded 資料，並同步寫入 Firestore 供其他頁面（如倒數）讀取
       if (!('staticFlights' in d) && TRIP_ID === '74pfE7RXyEIusEdRV0rZ') {
         setFlights(DEFAULT_FLIGHTS);
         setHotels (DEFAULT_HOTELS);
-        setCar    (DEFAULT_CAR);
+        setCars   ([DEFAULT_CAR]);
         // Write defaults to Firestore so Schedule page can read flight times
         updateDoc(fsDoc(db, 'trips', TRIP_ID), {
           staticFlights: DEFAULT_FLIGHTS,
           staticHotels:  DEFAULT_HOTELS,
-          staticCar:     DEFAULT_CAR,
+          staticCars:    [DEFAULT_CAR],
         }).catch(console.error);
       }
       setStaticLoaded(true);
@@ -210,8 +219,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const openEdit = (type: EditType, idx = 0) => {
     setEditType(type);
     setEditIndex(idx);
-    if (type === 'hotel' && hotels[idx])  { setEditForm({ currency: projCurrency, ...hotels[idx], nameLocal: hotels[idx].nameLocal || hotels[idx].nameJa || '' }); setEditParticipants(hotels[idx].participants || []); }
-    if (type === 'car')    { setEditForm({ carMode: 'rental', currency: projCurrency, ...car }); setEditParticipants(car?.participants || []); }
+    if (type === 'hotel' && hotels?.[idx]) { setEditForm({ currency: projCurrency, ...hotels[idx], nameLocal: hotels[idx].nameLocal || hotels[idx].nameJa || '' }); setEditParticipants(hotels[idx].participants || []); }
+    if (type === 'car'   && cars?.[idx])   { setEditForm({ carMode: 'rental', currency: projCurrency, ...cars[idx] }); setEditParticipants(cars[idx].participants || []); }
   };
 
   // Helpers for hotel/car forms (single editForm)
@@ -247,7 +256,13 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: updated });
         setFlights(updated);
       } else if (editType === 'hotel') {
-        const updated = hotels.map((h: any, i: number) => i === editIndex ? { ...editForm, participants: editParticipants } : h);
+        const cur = hotels || [];
+        const payload = { ...editForm, participants: editParticipants };
+        // Append when editIndex is out of bounds (new-hotel flow); otherwise
+        // replace the existing entry at that index.
+        const updated = editIndex >= cur.length
+          ? [...cur, payload]
+          : cur.map((h: any, i: number) => i === editIndex ? payload : h);
         await updateDoc(doc(db, 'trips', TRIP_ID), { staticHotels: updated });
         setHotels(updated);
         if (editForm.totalCost && Number(editForm.totalCost) > 0) {
@@ -255,9 +270,13 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           setExpensePrompt({ type: 'hotel', name: editForm.name || '住宿', amount: Number(editForm.totalCost), currency: editForm.currency || 'TWD', date: (editForm.checkIn || '').split(/\s+/)[0], participantNames: ptcNames.length ? ptcNames : undefined });
         }
       } else if (editType === 'car') {
-        const updated = { ...editForm, participants: editParticipants };
-        await updateDoc(doc(db, 'trips', TRIP_ID), { staticCar: updated });
-        setCar(updated);
+        const cur = cars || [];
+        const payload = { ...editForm, participants: editParticipants };
+        const updated = editIndex >= cur.length
+          ? [...cur, payload]
+          : cur.map((c: any, i: number) => i === editIndex ? payload : c);
+        await updateDoc(doc(db, 'trips', TRIP_ID), { staticCars: updated, staticCar: deleteField() });
+        setCars(updated);
         if (editForm.totalCost && Number(editForm.totalCost) > 0) {
           const ptcNames = editParticipants.map(id => members.find((m: any) => m.id === id)?.name).filter(Boolean) as string[];
           setExpensePrompt({ type: 'car', name: editForm.company || '租車/包車', amount: Number(editForm.totalCost), currency: editForm.currency || 'JPY', date: (editForm.pickupTime || '').split(/\s+/)[0], participantNames: ptcNames.length ? ptcNames : undefined });
@@ -289,17 +308,25 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     } catch (e) { console.error(e); alert('刪除失敗，請重試'); }
   };
 
-  const handleDeleteCar = async () => {
+  const handleDeleteCar = async (idx: number) => {
     if (!isOwner) { showEditorDelToast(); return; }
-    if (!window.confirm(`確定要刪除「${car?.company || '租車/包車'}」資訊？`)) return;
+    const target = (cars || [])[idx];
+    if (!target) return;
+    if (!window.confirm(`確定要刪除「${target.company || '租車/包車'}」資訊？`)) return;
+    const updated = (cars || []).filter((_: any, i: number) => i !== idx);
     try {
-      await updateDoc(doc(db, 'trips', TRIP_ID), { staticCar: null });
-      setCar(null);
+      await updateDoc(doc(db, 'trips', TRIP_ID), { staticCars: updated, staticCar: deleteField() });
+      setCars(updated);
     } catch (e) { console.error(e); alert('刪除失敗，請重試'); }
   };
 
   // ── Car QR ───────────────────────────────────────────────
-  const [showCarQR, setShowCarQR] = useState(false);
+  const [showCarQRKeys, setShowCarQRKeys] = useState<Set<string>>(new Set());
+  const toggleCarQR = (key: string) => setShowCarQRKeys(prev => {
+    const n = new Set(prev);
+    if (n.has(key)) n.delete(key); else n.add(key);
+    return n;
+  });
   const [carQrErr, setCarQrErr]   = useState(false);
 
   // ── Custom bookings ──────────────────────────────────────
@@ -576,7 +603,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 
         {/* ── 航班 ── */}
         <SectionTitle action={!isReadOnly && flights?.length ? (
-          <button onClick={openFlightEdit} style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, background: 'none', border: `1.5px solid ${C.sageDark}`, borderRadius: 10, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT }}>
+          <button onClick={openFlightEdit} style={sectionAddBtn}>
             ＋ 新增 / 管理
           </button>
         ) : undefined}><FontAwesomeIcon icon={faPlane} style={{ marginRight: 6 }} />航班資訊</SectionTitle>
@@ -586,8 +613,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>航班資訊待更新</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊右上方 <FontAwesomeIcon icon={faPen} style={{ fontSize: 10 }} /> 填入航班資料</p>
             {!isReadOnly && (
-              <button onClick={openFlightEdit}
-                style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+              <button onClick={openFlightEdit} style={emptyStateAddBtn}>
                 ＋ 新增航班
               </button>
             )}
@@ -650,15 +676,20 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         ))}
 
         {/* ── 住宿 ── */}
-        <SectionTitle><FontAwesomeIcon icon={faBed} style={{ marginRight: 6 }} />住宿安排</SectionTitle>
+        <SectionTitle action={!isReadOnly && hotels?.length ? (
+          <button onClick={() => { setEditType('hotel'); setEditIndex((hotels || []).length); setEditForm({ id: `h${Date.now()}`, name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); setEditParticipants([]); }}
+            style={sectionAddBtn}>
+            ＋ 新增
+          </button>
+        ) : undefined}><FontAwesomeIcon icon={faBed} style={{ marginRight: 6 }} />住宿安排</SectionTitle>
         {!staticLoaded ? null : hotels === null || hotels.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px', color: C.sageLight }}><FontAwesomeIcon icon={faBed} /></p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>住宿安排待更新</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 <FontAwesomeIcon icon={faPen} style={{ fontSize: 10 }} /> 填入訂房資訊</p>
             {!isReadOnly && (
-              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); }}
-                style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: C.earth, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); setEditParticipants([]); }}
+                style={emptyStateAddBtn}>
                 ＋ 新增住宿
               </button>
             )}
@@ -761,104 +792,118 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         })}
 
         {/* ── 租車 ── */}
-        <SectionTitle><FontAwesomeIcon icon={faBus} style={{ marginRight: 6 }} />租車/包車資訊</SectionTitle>
-        {!staticLoaded ? null : car === null ? (
+        <SectionTitle action={!isReadOnly && cars?.length ? (
+          <button onClick={() => { setEditType('car'); setEditIndex((cars || []).length); setEditForm({ carMode: 'rental', company: '', carType: '', seats: '', contactInfo: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: projCurrency, confirmCode: '', notes: '' }); setEditParticipants([]); }}
+            style={sectionAddBtn}>
+            ＋ 新增
+          </button>
+        ) : undefined}><FontAwesomeIcon icon={faBus} style={{ marginRight: 6 }} />租車/包車資訊</SectionTitle>
+        {!staticLoaded ? null : cars === null || cars.length === 0 ? (
           <div style={{ ...cardStyle, textAlign: 'center', padding: '24px 16px' }}>
             <p style={{ fontSize: 28, margin: '0 0 8px', color: C.sageLight }}><FontAwesomeIcon icon={faBus} /></p>
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>此行程未安排租車/包車</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>如有租車/包車需求，擁有者可點擊下方按鈕新增</p>
             {!isReadOnly && (
-              <button onClick={() => { setEditType('car'); setEditForm({ carMode: 'rental', company: '', carType: '', seats: '', contactInfo: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: projCurrency, confirmCode: '', notes: '' }); }}
-                style={{ marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: '#FFC107', color: '#333', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+              <button onClick={() => { setEditType('car'); setEditIndex(0); setEditForm({ carMode: 'rental', company: '', carType: '', seats: '', contactInfo: '', pickupLocation: '', pickupTime: '', returnLocation: '', returnTime: '', totalCost: '', currency: projCurrency, confirmCode: '', notes: '' }); setEditParticipants([]); }}
+                style={emptyStateAddBtn}>
                 ＋ 新增租車/包車
               </button>
             )}
           </div>
-        ) : (
-        <div style={cardStyle}>
-          {/* ── Header ── */}
-          <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-            <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#7A5A00' }}>
-              <FontAwesomeIcon icon={faBus} />
-            </div>
-            <div style={{ flex: 1 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>
-                  {car.company}{car.carMode === 'rental' && car.carType ? `　${car.carType}` : ''}{car.carMode === 'charter' && car.seats ? `　${car.seats}` : ''}
-                </p>
-                <span className={car.carMode === 'charter' ? 'tm-badge-sky-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 10, fontWeight: 700, background: car.carMode === 'charter' ? '#D8EDF8' : '#FFF2CC', color: car.carMode === 'charter' ? '#2A6A9A' : '#7A5A00', borderRadius: 6, padding: '2px 7px' }}>
-                  {car.carMode === 'charter' ? '包車' : '租車'}
-                </span>
+        ) : (cars || []).map((car, cIdx) => {
+          const carKey = car.id || `car-${cIdx}`;
+          const qrOpen = showCarQRKeys.has(carKey);
+          return (
+          <div key={carKey} style={cardStyle}>
+            {/* ── Header ── */}
+            <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
+              <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#7A5A00' }}>
+                <FontAwesomeIcon icon={faBus} />
               </div>
-              {!isVisitor && car.confirmCode && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
-              {!isVisitor && car.carMode === 'charter' && car.contactInfo && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}><FontAwesomeIcon icon={faPhone} style={{ fontSize: 10, marginRight: 4 }} />{car.contactInfo}</p>}
-            </div>
-            {!isReadOnly && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
-                <EditBtn onClick={() => openEdit('car')} />
-                <button onClick={handleDeleteCar}
-                  style={{ width: 28, height: 28, borderRadius: 8, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FontAwesomeIcon icon={faTrashCan} />
-                </button>
+              <div style={{ flex: 1 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>
+                    {car.company}{car.carMode === 'rental' && car.carType ? `　${car.carType}` : ''}{car.carMode === 'charter' && car.seats ? `　${car.seats}` : ''}
+                  </p>
+                  <span className={car.carMode === 'charter' ? 'tm-badge-sky-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 10, fontWeight: 700, background: car.carMode === 'charter' ? '#D8EDF8' : '#FFF2CC', color: car.carMode === 'charter' ? '#2A6A9A' : '#7A5A00', borderRadius: 6, padding: '2px 7px' }}>
+                    {car.carMode === 'charter' ? '包車' : '租車'}
+                  </span>
+                </div>
+                {!isVisitor && car.confirmCode && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
+                {!isVisitor && car.carMode === 'charter' && car.contactInfo && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}><FontAwesomeIcon icon={faPhone} style={{ fontSize: 10, marginRight: 4 }} />{car.contactInfo}</p>}
               </div>
-            )}
-          </div>
-          {/* ── Pickup / Return ── */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
-            <div className="tm-booking-pickup" style={{ background: '#EAF8E6', borderRadius: 12, padding: '10px 12px' }}>
-              <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: '0 0 4px' }}><FontAwesomeIcon icon={faCircleDot} style={{ marginRight: 4 }} />{car.carMode === 'charter' ? '出發' : '取車'}</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.pickupLocation}</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.pickupTime}</p>
-            </div>
-            <div className="tm-booking-return" style={{ background: '#FFEBEB', borderRadius: 12, padding: '10px 12px' }}>
-              <p style={{ fontSize: 10, color: '#9A3A3A', fontWeight: 700, margin: '0 0 4px' }}><FontAwesomeIcon icon={faCircleDot} style={{ marginRight: 4 }} />{car.carMode === 'charter' ? '結束' : '還車'}</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.returnLocation || '—'}</p>
-              <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.returnTime || '—'}</p>
-            </div>
-          </div>
-          {/* ── Cost / Lock ── */}
-          {isVisitor ? (
-            <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 14 }}><FontAwesomeIcon icon={faLock} /></span>
-              <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用與訂單詳情僅旅伴可查看</span>
-            </div>
-          ) : car.totalCost ? (
-            <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
-              <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
-                {car.currency === 'TWD' ? 'NT$' : car.currency === 'IDR' ? 'Rp' : '¥'} {Number(car.totalCost).toLocaleString()}
-              </span>
-            </div>
-          ) : null}
-          {/* ── Notes ── */}
-          {car.notes && <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 10 }} /> {car.notes}</p>}
-          {/* ── Participants ── */}
-          <ParticipantAvatars ids={car.participants} />
-          {/* ── QR Code ── */}
-          {!isVisitor && car.qrUrl && (
-            <>
-              <button onClick={() => setShowCarQR(v => !v)}
-                style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${showCarQR ? C.sageDark : C.creamDark}`, background: showCarQR ? C.sage : 'var(--tm-card-bg)', color: showCarQR ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: car.participants?.length ? 8 : 0 }}>
-                <FontAwesomeIcon icon={showCarQR ? faChevronUp : faChevronDown} />
-                {showCarQR ? '收起 QR Code' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />展開{car.carMode === 'charter' ? '包車' : '取車'} QR Code</>}
-              </button>
-              {showCarQR && (
-                <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-                  <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>{car.carMode === 'charter' ? '包車' : '取車報到'} QR Code</p>
-                  <img src={car.qrUrl} alt="QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block', borderRadius: 8 }} />
-                  {car.confirmCode && <p style={{ fontSize: 10, color: C.barkLight, margin: '10px 0 0' }}>{car.confirmCode}　{car.pickupLocation}</p>}
+              {!isReadOnly && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, flexShrink: 0 }}>
+                  <EditBtn onClick={() => openEdit('car', cIdx)} />
+                  <button onClick={() => handleDeleteCar(cIdx)}
+                    style={{ width: 28, height: 28, borderRadius: 8, background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FontAwesomeIcon icon={faTrashCan} />
+                  </button>
                 </div>
               )}
-            </>
-          )}
-        </div>
-        )}
+            </div>
+            {/* ── Pickup / Return ── */}
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 10 }}>
+              <div className="tm-booking-pickup" style={{ background: '#EAF8E6', borderRadius: 12, padding: '10px 12px' }}>
+                <p style={{ fontSize: 10, color: '#4A7A35', fontWeight: 700, margin: '0 0 4px' }}><FontAwesomeIcon icon={faCircleDot} style={{ marginRight: 4 }} />{car.carMode === 'charter' ? '出發' : '取車'}</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.pickupLocation}</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.pickupTime}</p>
+              </div>
+              <div className="tm-booking-return" style={{ background: '#FFEBEB', borderRadius: 12, padding: '10px 12px' }}>
+                <p style={{ fontSize: 10, color: '#9A3A3A', fontWeight: 700, margin: '0 0 4px' }}><FontAwesomeIcon icon={faCircleDot} style={{ marginRight: 4 }} />{car.carMode === 'charter' ? '結束' : '還車'}</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{car.returnLocation || '—'}</p>
+                <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '4px 0 0' }}>{car.returnTime || '—'}</p>
+              </div>
+            </div>
+            {/* ── Cost / Lock ── */}
+            {isVisitor ? (
+              <div className="tm-booking-lock" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 14 }}><FontAwesomeIcon icon={faLock} /></span>
+                <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用與訂單詳情僅旅伴可查看</span>
+              </div>
+            ) : car.totalCost ? (
+              <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
+                <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
+                  {car.currency === 'TWD' ? 'NT$' : car.currency === 'IDR' ? 'Rp' : '¥'} {Number(car.totalCost).toLocaleString()}
+                </span>
+              </div>
+            ) : null}
+            {/* ── Notes (respect line breaks) ── */}
+            {car.notes && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '0 0 10px' }}>
+                <FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 10, color: '#9A3A3A', marginTop: 4, flexShrink: 0 }} />
+                <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{car.notes}</p>
+              </div>
+            )}
+            {/* ── Participants ── */}
+            <ParticipantAvatars ids={car.participants} />
+            {/* ── QR Code ── */}
+            {!isVisitor && car.qrUrl && (
+              <>
+                <button onClick={() => toggleCarQR(carKey)}
+                  style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${qrOpen ? C.sageDark : C.creamDark}`, background: qrOpen ? C.sage : 'var(--tm-card-bg)', color: qrOpen ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: car.participants?.length ? 8 : 0 }}>
+                  <FontAwesomeIcon icon={qrOpen ? faChevronUp : faChevronDown} />
+                  {qrOpen ? '收起 QR Code' : <><FontAwesomeIcon icon={faQrcode} style={{ marginRight: 5 }} />展開{car.carMode === 'charter' ? '包車' : '取車'} QR Code</>}
+                </button>
+                {qrOpen && (
+                  <div style={{ marginTop: 12, padding: 16, background: 'var(--tm-card-bg)', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 12px', fontWeight: 600 }}>{car.carMode === 'charter' ? '包車' : '取車報到'} QR Code</p>
+                    <img src={car.qrUrl} alt="QR Code" style={{ width: 200, height: 200, imageRendering: 'pixelated', display: 'block', borderRadius: 8 }} />
+                    {car.confirmCode && <p style={{ fontSize: 10, color: C.barkLight, margin: '10px 0 0' }}>{car.confirmCode}　{car.pickupLocation}</p>}
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+          );
+        })}
 
         {/* ── 其他預訂（動態）── */}
         <SectionTitle action={
           !isReadOnly && (
             <button onClick={() => { setCustomForm({ ...EMPTY_CUSTOM_FORM, currency: projCurrency }); setShowAdd(true); }}
-              style={{ fontSize: 12, fontWeight: 700, color: 'white', background: C.earth, border: 'none', borderRadius: 10, padding: '5px 12px', cursor: 'pointer', fontFamily: FONT }}>
+              style={sectionAddBtn}>
               ＋ 新增
             </button>
           )
@@ -1355,6 +1400,12 @@ function Field({ label, children, flex = 1 }: { label: string; children: React.R
 
 const lblSt: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#8C7B6E', display: 'block', marginBottom: 6 };
 const inSt: React.CSSProperties  = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-input-bg)', fontSize: 14, color: 'var(--tm-bark)', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
+
+// Shared "+ 新增" button styles — one for section-title right-hand action,
+// one for the big empty-state call-to-action. Both use the sage green family
+// so hotel/car/flight/自訂 all look uniform instead of mixing green/orange/yellow.
+const sectionAddBtn: React.CSSProperties = { fontSize: 11, fontWeight: 700, color: 'var(--tm-sage-dark)', background: 'none', border: '1.5px solid var(--tm-sage-dark)', borderRadius: 10, padding: '4px 10px', cursor: 'pointer', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
+const emptyStateAddBtn: React.CSSProperties = { marginTop: 12, padding: '8px 20px', borderRadius: 12, border: 'none', background: 'var(--tm-sage)', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
 
 function AmountInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   const [focused, setFocused] = useState(false);

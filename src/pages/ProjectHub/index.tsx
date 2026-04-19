@@ -565,7 +565,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
       const tripUpdate: any = {};
       if (parsed.flights.length)  tripUpdate.staticFlights = parsed.flights;
       if (parsed.hotels.length)   tripUpdate.staticHotels  = parsed.hotels;
-      if (parsed.car)             tripUpdate.staticCar      = parsed.car;
+      if (parsed.car)             tripUpdate.staticCars     = [parsed.car];
       if (Object.keys(tripUpdate).length) await updateDoc(tripRef, tripUpdate);
 
       const eventsCol   = collection(db, 'trips', createdProject.id, 'events');
