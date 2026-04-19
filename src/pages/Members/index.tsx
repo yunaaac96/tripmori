@@ -228,6 +228,39 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
     catch (e) { console.error(e); }
   };
 
+  // ── Orphan cleanup: wipe member docs with empty / missing names ──────────
+  // Legacy FCM setDoc bugs could leave behind nameless member documents that
+  // the UI already hides (via the !!m.name filter in App.tsx) but which still
+  // show up in the Firestore console and can confuse the owner. Owner taps the
+  // button and we delete every doc whose name is blank/null in this trip.
+  const [cleanBusy, setCleanBusy]   = useState(false);
+  const [cleanResult, setCleanResult] = useState<number | null>(null);
+  const [cleanError, setCleanError] = useState<string | null>(null);
+  const handleCleanOrphans = async () => {
+    if (firestore.role !== 'owner' || cleanBusy) return;
+    setCleanBusy(true); setCleanResult(null); setCleanError(null);
+    try {
+      const snap = await getDocs(_collection(db, 'trips', TRIP_ID, 'members'));
+      const nameless = snap.docs.filter(d => {
+        const v = (d.data() as any)?.name;
+        return typeof v !== 'string' || v.trim() === '';
+      });
+      if (!nameless.length) {
+        setCleanResult(0);
+        return;
+      }
+      await Promise.all(nameless.map(d =>
+        deleteDoc(_doc(db, 'trips', TRIP_ID, 'members', d.id))
+      ));
+      setCleanResult(nameless.length);
+    } catch (e: any) {
+      console.error('[cleanup] orphan members failed', e);
+      setCleanError(e?.message || '清理失敗，請稍後再試');
+    } finally {
+      setCleanBusy(false);
+    }
+  };
+
   // Last-line-of-defence duplicate check against freshest Firestore data.
   // Mirrors assertNotAlreadyBound in App.tsx: ignores nameless orphan docs
   // (legacy FCM setDoc leftovers) and silently self-heals them so they stop
@@ -686,6 +719,34 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
           )}
           {notionError && (
             <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faTriangleExclamation} /> {notionError}</p>
+          )}
+        </div>
+      )}
+
+      {/* ── 清理幽靈成員資料（Owner only）── */}
+      {firestore.role === 'owner' && (
+        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} /> 清理幽靈成員資料
+          </p>
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', lineHeight: 1.5 }}>
+            掃描並刪除資料庫裡沒有名字的殘留成員紀錄（不會影響現有顯示的成員卡）。
+          </p>
+          <button onClick={handleCleanOrphans} disabled={cleanBusy}
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: cleanBusy ? C.creamDark : 'var(--tm-card-bg)', color: cleanBusy ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: cleanBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cleanBusy ? 0.7 : 1 }}>
+            <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} />
+            {cleanBusy ? '掃描中…' : '立即清理'}
+          </button>
+          {cleanResult !== null && (
+            <p style={{ fontSize: 11, color: cleanResult > 0 ? '#4A7A35' : C.barkLight, marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <FontAwesomeIcon icon={faCheck} />
+              {cleanResult > 0 ? `已清理 ${cleanResult} 筆幽靈資料` : '沒有發現幽靈資料'}
+            </p>
+          )}
+          {cleanError && (
+            <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+              <FontAwesomeIcon icon={faTriangleExclamation} /> {cleanError}
+            </p>
           )}
         </div>
       )}
