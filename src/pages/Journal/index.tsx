@@ -74,7 +74,7 @@ export default function JournalPage({ journals, members, journalComments, firest
   const isEditorUnbound = !isReadOnly && role === 'editor' && googleUid && !members.some((m: any) => m.googleUid === googleUid);
 
   const openForm = () => {
-    setForm({ content: '', date: '', author: currentUser, photos: [] });
+    setForm({ content: '', date: new Date().toISOString().slice(0, 10), author: currentUser, photos: [] });
     setShowForm(true);
   };
 
