@@ -42,8 +42,7 @@ const params_1 = require("firebase-functions/params");
 const client_1 = require("@notionhq/client");
 // ── Notion backup config ───────────────────────────────────────────────────
 const NOTION_API_KEY = (0, params_1.defineSecret)('NOTION_API_KEY');
-const NOTION_DATABASE_ID = 'd8ebd7ff-76c7-4ca7-970c-25c2cb845c26'; // 行程備份紀錄（database）
-const NOTION_DATASOURCE_ID = 'd8ebd7ff-76c7-4ca7-970c-25c2cb845c26'; // same — data source ID for query
+const NOTION_DATABASE_ID = '7f17b1ac-1126-4d54-89ca-51cf6160152c'; // 行程備份紀錄（database）
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
@@ -367,29 +366,34 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
     if (!notionKey)
         throw new https_1.HttpsError('failed-precondition', 'NOTION_API_KEY secret not configured');
     const notion = new client_1.Client({ auth: notionKey });
-    // ── Fetch trip data from Firestore ────────────────────────────────────────
-    const [tripSnap, membersSnap, eventsSnap, expensesSnap, journalsSnap] = await Promise.all([
+    // ── Fetch all trip data from Firestore ────────────────────────────────────
+    const [tripSnap, membersSnap, eventsSnap, expensesSnap, journalsSnap, bookingsSnap] = await Promise.all([
         db.collection('trips').doc(tripId).get(),
         db.collection('trips').doc(tripId).collection('members').get(),
         db.collection('trips').doc(tripId).collection('events').get(),
         db.collection('trips').doc(tripId).collection('expenses').get(),
         db.collection('trips').doc(tripId).collection('journals').get(),
+        db.collection('trips').doc(tripId).collection('bookings').get(),
     ]);
     if (!tripSnap.exists)
         throw new https_1.HttpsError('not-found', 'Trip not found');
-    // Verify caller is owner or editor
     const tripData = tripSnap.data();
     const uid = request.auth.uid;
     const isOwner = tripData.ownerUid === uid;
     const isEditor = (tripData.allowedEditorUids || []).includes(uid);
     if (!isOwner && !isEditor)
         throw new https_1.HttpsError('permission-denied', 'Owner or editor only');
-    // ── Compute aggregates ────────────────────────────────────────────────────
+    // ── Static booking data (stored on trip document) ─────────────────────────
+    const staticFlights = tripData.staticFlights || [];
+    const staticHotels = tripData.staticHotels || [];
+    const staticCar = tripData.staticCar || null;
+    // ── Aggregates ────────────────────────────────────────────────────────────
     const currency = tripData.currency || 'JPY';
-    const memberNames = membersSnap.docs.map(d => d.data().name || '');
+    const memberNames = membersSnap.docs.map(d => d.data().name || '').filter(Boolean);
     const memberCount = membersSnap.size;
     const eventCount = eventsSnap.size;
-    // Total expenses converted to TWD (use stored amountTWD if available)
+    const dateRange = [tripData.startDate, tripData.endDate].filter(Boolean).join(' ～ ') || '—';
+    const backupTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
     const TWD_RATES = { TWD: 1, JPY: 0.22, USD: 32, EUR: 35, KRW: 0.024, CNY: 4.4, HKD: 4.1, MYR: 7.2, THB: 0.9, IDR: 0.002 };
     const totalTWD = expensesSnap.docs.reduce((sum, d) => {
         const e = d.data();
@@ -398,120 +402,256 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
         const amt = Number(e.amountTWD) || Number(e.amount) * (TWD_RATES[e.currency] ?? 1);
         return sum + amt;
     }, 0);
-    const dateRange = [tripData.startDate, tripData.endDate].filter(Boolean).join(' ～ ') || '—';
-    // Build journal summary (最近 5 筆)
-    const journals = journalsSnap.docs
+    // ── Sort collections (no limits — full backup) ────────────────────────────
+    const allEvents = eventsSnap.docs
         .map(d => d.data())
-        .sort((a, b) => (b.date || '').localeCompare(a.date || ''))
-        .slice(0, 5);
-    // Build events summary (最近 10 筆)
-    const events = eventsSnap.docs
-        .map(d => d.data())
-        .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
-        .slice(0, 10);
-    // Build expenses summary (最多 10 筆)
-    const expenses = expensesSnap.docs
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const allExpenses = expensesSnap.docs
         .filter(d => !d.data().isSettlement)
         .map(d => d.data())
-        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
-        .slice(0, 10);
+        .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+    const allJournals = journalsSnap.docs
+        .map(d => d.data())
+        .sort((a, b) => (b.date || '').localeCompare(a.date || ''));
+    const allBookings = bookingsSnap.docs
+        .map(d => d.data())
+        .sort((a, b) => (a.sortOrder ?? 99) - (b.sortOrder ?? 99));
+    // ── Block builder helpers ─────────────────────────────────────────────────
+    const h2 = (text) => ({
+        object: 'block', type: 'heading_2',
+        heading_2: { rich_text: [{ type: 'text', text: { content: text } }] },
+    });
+    const h3 = (text) => ({
+        object: 'block', type: 'heading_3',
+        heading_3: { rich_text: [{ type: 'text', text: { content: text.slice(0, 1900) } }] },
+    });
+    const para = (text) => ({
+        object: 'block', type: 'paragraph',
+        paragraph: { rich_text: [{ type: 'text', text: { content: text } }] },
+    });
+    const bullet = (text) => ({
+        object: 'block', type: 'bulleted_list_item',
+        bulleted_list_item: { rich_text: [{ type: 'text', text: { content: text.slice(0, 1900) } }] },
+    });
+    const divider = () => ({ object: 'block', type: 'divider', divider: {} });
+    // Split long text into multiple paragraph blocks (max 1900 chars each)
+    const textBlocks = (text) => {
+        const out = [];
+        for (let i = 0; i < text.length; i += 1900)
+            out.push(para(text.slice(i, i + 1900)));
+        return out.length ? out : [para('（無）')];
+    };
+    // ── Build all Notion blocks ───────────────────────────────────────────────
+    const blocks = [];
+    // 1. 行程資訊
+    blocks.push(h2('🗂 行程資訊'));
+    blocks.push(para(`名稱：${tripData.title || '—'} ${tripData.emoji || ''}`));
+    blocks.push(para(`日期：${dateRange}`));
+    blocks.push(para(`幣別：${currency}`));
+    blocks.push(para(`說明：${tripData.description || '（無）'}`));
+    blocks.push(para(`備份時間：${backupTime}　｜　Firestore ID：${tripId}`));
+    blocks.push(divider());
+    // 2. 旅伴
+    blocks.push(h2(`👥 旅伴（${memberCount} 人）`));
+    if (memberNames.length) {
+        memberNames.forEach(n => blocks.push(bullet(n)));
+    }
+    else {
+        blocks.push(para('（無成員）'));
+    }
+    blocks.push(divider());
+    // 3. 機票
+    blocks.push(h2(`✈️ 機票（${staticFlights.length} 筆）`));
+    if (staticFlights.length) {
+        staticFlights.forEach(f => {
+            const line = [
+                f.direction, f.airline, f.flightNo,
+                `| ${f.date || '—'}`,
+                `| ${f.dep?.airport || ''}(${f.dep?.time || ''}) → ${f.arr?.airport || ''}(${f.arr?.time || ''})`,
+                f.costPerPerson ? `| 每人 ${f.costPerPerson}` : '',
+                f.notes ? `| 備註：${f.notes}` : '',
+            ].filter(Boolean).join(' ');
+            blocks.push(bullet(line));
+        });
+    }
+    else {
+        blocks.push(para('（無機票資料）'));
+    }
+    blocks.push(divider());
+    // 4. 住宿
+    blocks.push(h2(`🏨 住宿（${staticHotels.length} 筆）`));
+    if (staticHotels.length) {
+        staticHotels.forEach(h => {
+            blocks.push(h3(h.name || '未命名飯店'));
+            blocks.push(para(`入住：${h.checkIn || '—'}　退房：${h.checkOut || '—'}`));
+            blocks.push(para(`房型：${h.roomType || '—'}　費用：${h.totalCost || '—'} ${h.currency || ''}`));
+            if (h.confirmCode)
+                blocks.push(para(`確認碼：${h.confirmCode}${h.pin ? `　PIN：${h.pin}` : ''}`));
+            if (h.notes)
+                blocks.push(...textBlocks(`備註：${h.notes}`));
+        });
+    }
+    else {
+        blocks.push(para('（無住宿資料）'));
+    }
+    blocks.push(divider());
+    // 5. 租車
+    blocks.push(h2('🚗 租車'));
+    if (staticCar) {
+        blocks.push(para(`${staticCar.company || ''} ${staticCar.carType || ''}`));
+        blocks.push(para(`取車：${staticCar.pickupLocation || '—'}　${staticCar.pickupTime || ''}`));
+        blocks.push(para(`還車：${staticCar.returnLocation || '—'}　${staticCar.returnTime || ''}`));
+        blocks.push(para(`費用：${staticCar.totalCost || '—'} ${staticCar.currency || ''}　確認碼：${staticCar.confirmCode || '—'}`));
+        if (staticCar.notes)
+            blocks.push(...textBlocks(`備註：${staticCar.notes}`));
+    }
+    else {
+        blocks.push(para('（無租車資料）'));
+    }
+    blocks.push(divider());
+    // 6. 自訂預定
+    blocks.push(h2(`📋 自訂預定（${allBookings.length} 筆）`));
+    if (allBookings.length) {
+        allBookings.forEach(b => {
+            const line = [
+                b.name || '未命名',
+                b.date ? `| ${b.date}${b.time ? ' ' + b.time : ''}` : '',
+                b.cost ? `| ${b.cost} ${b.currency || ''}` : '',
+                b.confirmCode ? `| 確認碼：${b.confirmCode}` : '',
+                b.notes ? `| 備註：${String(b.notes).slice(0, 150)}` : '',
+            ].filter(Boolean).join(' ');
+            blocks.push(bullet(line));
+        });
+    }
+    else {
+        blocks.push(para('（無自訂預定）'));
+    }
+    blocks.push(divider());
+    // 7. 行程活動（全部，依日期分組）
+    blocks.push(h2(`📅 行程活動（共 ${allEvents.length} 筆）`));
+    if (allEvents.length) {
+        const byDate = {};
+        allEvents.forEach(e => {
+            const d = e.date || '—';
+            if (!byDate[d])
+                byDate[d] = [];
+            byDate[d].push(e);
+        });
+        Object.entries(byDate).forEach(([date, evs]) => {
+            blocks.push(h3(date));
+            evs.forEach(e => {
+                const line = [
+                    e.startTime || '',
+                    e.name || '—',
+                    e.location ? `| 地點：${e.location}` : '',
+                    e.category ? `| ${e.category}` : '',
+                    e.notes ? `| ${String(e.notes).slice(0, 120)}` : '',
+                ].filter(Boolean).join(' ');
+                blocks.push(bullet(line));
+            });
+        });
+    }
+    else {
+        blocks.push(para('（尚無行程活動）'));
+    }
+    blocks.push(divider());
+    // 8. 費用（全部）
+    blocks.push(h2(`💰 費用（共 ${allExpenses.length} 筆　合計 ≈ NT$ ${Math.round(totalTWD).toLocaleString()}）`));
+    if (allExpenses.length) {
+        allExpenses.forEach(e => {
+            const twdPart = e.amountTWD ? ` ≈ NT$${Math.round(Number(e.amountTWD))}` : '';
+            const splitPart = Array.isArray(e.splitWith) && e.splitWith.length
+                ? `（${e.splitWith.join('、')}）` : '';
+            const line = [
+                e.date || '—',
+                `| ${e.description || '—'}`,
+                `| ${e.amount} ${e.currency || ''}${twdPart}`,
+                `| 付款：${e.paidBy || '—'}${splitPart}`,
+                e.notes ? `| ${String(e.notes).slice(0, 80)}` : '',
+            ].filter(Boolean).join(' ');
+            blocks.push(bullet(line));
+        });
+    }
+    else {
+        blocks.push(para('（尚無費用記錄）'));
+    }
+    blocks.push(divider());
+    // 9. 日誌（全部，完整內文）
+    blocks.push(h2(`📖 日誌（共 ${allJournals.length} 篇）`));
+    if (allJournals.length) {
+        allJournals.forEach(j => {
+            blocks.push(h3(`${j.date || '—'} — ${j.title || '（無標題）'}`));
+            if (j.body)
+                blocks.push(...textBlocks(j.body));
+            else
+                blocks.push(para('（無內文）'));
+        });
+    }
+    else {
+        blocks.push(para('（尚無日誌）'));
+    }
     // ── Mark previous backups of same trip as 舊版 ────────────────────────────
     try {
         const existing = await notion.dataSources.query({
-            dataSourceId: NOTION_DATASOURCE_ID,
-            filter: {
-                property: 'Firestore ID',
-                rich_text: { equals: tripId },
-            },
+            dataSourceId: NOTION_DATABASE_ID,
+            filter: { property: 'Firestore ID', rich_text: { equals: tripId } },
         });
-        for (const page of existing.results ?? []) {
+        for (const pg of existing.results ?? []) {
             await notion.pages.update({
-                page_id: page.id,
+                page_id: pg.id,
                 properties: { '狀態': { select: { name: '舊版' } } },
             });
         }
     }
-    catch (_) {
-        // Non-fatal: marking old backups failed, continue
+    catch (err) {
+        console.warn('Non-fatal: marking old backups failed:', err?.message ?? err);
     }
-    // ── Build Notion page content ─────────────────────────────────────────────
-    const memberList = memberNames.length ? memberNames.map(n => `- ${n}`).join('\n') : '（無成員）';
-    const eventLines = events.length
-        ? events.map(e => `| ${e.date || '—'} | ${e.name || '—'} | ${e.startTime || ''} | ${e.location || ''} |`).join('\n')
-        : '| — | 尚無行程 | | |';
-    const expenseLines = expenses.length
-        ? expenses.map(e => `| ${e.date || '—'} | ${e.description || '—'} | ${e.amount} ${e.currency} | ${e.paidBy || '—'} |`).join('\n')
-        : '| — | 尚無費用 | | |';
-    const journalLines = journals.length
-        ? journals.map(j => `### ${j.date || '—'} — ${j.title || '（無標題）'}\n${(j.body || '').slice(0, 200)}${(j.body || '').length > 200 ? '…' : ''}`).join('\n\n')
-        : '（尚無日誌）';
-    const backupTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
-    const pageContent = `## 🗂 行程資訊
-- **名稱**：${tripData.title || '—'} ${tripData.emoji || ''}
-- **日期**：${dateRange}
-- **幣別**：${currency}
-- **說明**：${tripData.description || '（無）'}
-
----
-
-## 👥 旅伴（${memberCount} 人）
-${memberList}
-
----
-
-## 📅 行程摘要（最近 ${events.length} 筆）
-| 日期 | 活動名稱 | 時間 | 地點 |
-|------|----------|------|------|
-${eventLines}
-
----
-
-## 💰 費用摘要（最近 ${expenses.length} 筆）
-| 日期 | 說明 | 金額 | 付款人 |
-|------|------|------|--------|
-${expenseLines}
-
-> 合計 ≈ NT$ ${Math.round(totalTWD).toLocaleString()}
-
----
-
-## 📖 日誌（最近 ${journals.length} 篇）
-${journalLines}
-
----
-
-*備份時間：${backupTime}　|　Firestore ID：\`${tripId}\`*`;
-    // ── Create Notion page in database ────────────────────────────────────────
-    const page = await notion.pages.create({
-        parent: { database_id: NOTION_DATABASE_ID },
-        properties: {
-            '行程名稱': { title: [{ text: { content: `${tripData.emoji || '✈️'} ${tripData.title || '未命名行程'}` } }] },
-            'Firestore ID': { rich_text: [{ text: { content: tripId } }] },
-            '行程日期': { rich_text: [{ text: { content: dateRange } }] },
-            '成員數': { number: memberCount },
-            '活動數': { number: eventCount },
-            '費用總計 TWD': { number: Math.round(totalTWD) },
-            '幣別': { rich_text: [{ text: { content: currency } }] },
-            '狀態': { select: { name: '最新' } },
-        },
-        children: [
-            {
-                object: 'block',
-                type: 'paragraph',
-                paragraph: {
-                    rich_text: [{ type: 'text', text: { content: pageContent } }],
-                },
+    // ── Create Notion page (first 95 blocks) ─────────────────────────────────
+    const BATCH = 95;
+    let page;
+    try {
+        page = await notion.pages.create({
+            parent: { database_id: NOTION_DATABASE_ID },
+            properties: {
+                '行程名稱': { title: [{ text: { content: `${tripData.emoji || '✈️'} ${tripData.title || '未命名行程'}` } }] },
+                'Firestore ID': { rich_text: [{ text: { content: tripId } }] },
+                '行程日期': { rich_text: [{ text: { content: dateRange } }] },
+                '成員數': { number: memberCount },
+                '活動數': { number: eventCount },
+                '費用總計 TWD': { number: Math.round(totalTWD) },
+                '幣別': { rich_text: [{ text: { content: currency } }] },
+                '狀態': { select: { name: '最新' } },
             },
-        ],
-    });
+            children: blocks.slice(0, BATCH),
+        });
+    }
+    catch (err) {
+        const detail = JSON.stringify(err?.body ?? err?.message ?? String(err));
+        console.error('Notion pages.create error:', detail);
+        throw new https_1.HttpsError('internal', `Notion error: ${err?.message ?? detail}`);
+    }
+    // ── Append remaining blocks in batches of 95 ─────────────────────────────
+    for (let i = BATCH; i < blocks.length; i += BATCH) {
+        try {
+            await notion.blocks.children.append({
+                block_id: page.id,
+                children: blocks.slice(i, i + BATCH),
+            });
+        }
+        catch (err) {
+            console.error(`Notion append error at block ${i}:`, err?.message ?? err);
+            break; // partial backup beats no backup
+        }
+    }
     return {
         success: true,
         notionPageId: page.id,
         notionUrl: page.url || '',
         memberCount,
         eventCount,
-        expenseCount: expenses.length,
+        expenseCount: allExpenses.length,
         totalTWD: Math.round(totalTWD),
+        blockCount: blocks.length,
     };
 });
 //# sourceMappingURL=index.js.map
