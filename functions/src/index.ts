@@ -7,7 +7,7 @@ import { Client as NotionClient } from '@notionhq/client';
 
 // ── Notion backup config ───────────────────────────────────────────────────
 const NOTION_API_KEY        = defineSecret('NOTION_API_KEY');
-const NOTION_DATABASE_ID    = 'd8ebd7ff-76c7-4ca7-970c-25c2cb845c26'; // 行程備份紀錄（database）
+const NOTION_DATABASE_ID    = '7f17b1ac-1126-4d54-89ca-51cf6160152c'; // 行程備份紀錄（database）
 
 admin.initializeApp();
 const db = admin.firestore();
