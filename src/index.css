@@ -334,6 +334,15 @@
   .tm-note-board > p { color: #D8CDB8 !important; }
   .tm-note-board textarea::placeholder { color: #998B78 !important; }
 
+  /* Member 留言 toggle — expanded state. Inline uses sageLight bg +
+   * sageDark text, but in dark mode both are bright greens → text
+   * disappears on bg. Use deep sage bg + soft sage text instead. */
+  .tm-note-board-toggle-active {
+    background: #2A4A30 !important;
+    border-color: #5A8A60 !important;
+  }
+  .tm-note-board-toggle-active span { color: #A8E0B0 !important; }
+
   /* ProjectHub sign-in area — dark mode readable contrast */
   .tm-signin-tip {
     background: #3A2C00 !important;

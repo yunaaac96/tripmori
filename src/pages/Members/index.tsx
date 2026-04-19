@@ -901,6 +901,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                 </div>
                 {/* Board toggle */}
                 <button onClick={() => setExpandedBoard(isExpanded ? null : m.id)}
+                  className={isExpanded ? 'tm-note-board-toggle-active' : undefined}
                   style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 10px', borderRadius: 12, border: `1.5px solid ${isExpanded ? C.sageDark : C.creamDark}`, background: isExpanded ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
                   <span style={{ fontSize: 13, color: isExpanded ? C.sageDark : C.barkLight }}><FontAwesomeIcon icon={faNoteSticky} /></span>
                   <span style={{ fontSize: 9, fontWeight: 700, color: isExpanded ? C.sageDark : C.barkLight }}>

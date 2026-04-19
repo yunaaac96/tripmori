@@ -165,10 +165,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const [expensePrompt, setExpensePrompt] = useState<{ type: string; name: string; amount: number; currency: string; date: string; participantNames?: string[] } | null>(null);
   const [expenseSaving, setExpenseSaving] = useState(false);
 
-  // All-flights form (manage structure: add / remove flights)
-  const [allFlightsForm, setAllFlightsForm] = useState<any[]>([]);
-
-  // Single-flight edit (per-card ✏️ — includes participants)
+  // Single-flight edit modal (per-card ✏️ for existing, section ＋新增 for new)
   const [editFlightIdx,         setEditFlightIdx]         = useState<number | null>(null);
   const [singleFlightForm,      setSingleFlightForm]      = useState<any>({});
   const [singleFlightParticipants, setSingleFlightParticipants] = useState<string[]>([]);
@@ -182,14 +179,17 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     date: '', notes: '', costPerPerson: '',
   });
 
-  // Section-level: manage all flights (add / remove) — does NOT touch participants
+  // Section-level: open the single-flight modal in "add new" mode.
+  // (Each existing flight has its own per-card ✏️ for edit/delete, so the
+  // older batch manage modal is no longer needed.)
   const openFlightEdit = () => {
-    const src = flights?.length ? flights.map((f: any) => ({ ...f })) : [BLANK_FLIGHT('去程', 0)];
-    setAllFlightsForm(src);
-    setEditType('flight');
+    const idx = (flights || []).length;
+    setSingleFlightForm(BLANK_FLIGHT(idx === 0 ? '去程' : '回程', idx));
+    setSingleFlightParticipants([]);
+    setEditFlightIdx(idx); // idx >= flights.length → save appends
   };
 
-  // Per-card: edit a single flight including its own participants
+  // Per-card: edit a single existing flight including its own participants
   const openSingleFlightEdit = (idx: number) => {
     const f = (flights || [])[idx];
     if (!f) return;
@@ -206,9 +206,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     if (!updateDoc || !db || !TRIP_ID || editFlightIdx === null) return;
     setStaticSaving(true);
     try {
-      const updated = (flights || []).map((f: any, i: number) =>
-        i === editFlightIdx ? { ...singleFlightForm, participants: singleFlightParticipants } : f
-      );
+      const curr = flights || [];
+      const payload = { ...singleFlightForm, participants: singleFlightParticipants };
+      const updated = editFlightIdx >= curr.length
+        ? [...curr, payload]
+        : curr.map((f: any, i: number) => i === editFlightIdx ? payload : f);
       await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: updated });
       setFlights(updated);
       setEditFlightIdx(null);
@@ -229,12 +231,6 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const setArr = (key: string, val: string) => setEditForm((p: any) => ({ ...p, arr: { ...p.arr, [key]: val } }));
 
   // Helpers for all-flights form
-  const setFF  = (idx: number, key: string, val: any) =>
-    setAllFlightsForm(prev => prev.map((f, i) => i === idx ? { ...f, [key]: val } : f));
-  const setFDep = (idx: number, key: string, val: string) =>
-    setAllFlightsForm(prev => prev.map((f, i) => i === idx ? { ...f, dep: { ...f.dep, [key]: val } } : f));
-  const setFArr = (idx: number, key: string, val: string) =>
-    setAllFlightsForm(prev => prev.map((f, i) => i === idx ? { ...f, arr: { ...f.arr, [key]: val } } : f));
 
   // ── Date+time helpers ────────────────────────────────────
   const splitDT = (val: string) => {
@@ -247,15 +243,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     if (!updateDoc || !doc || !db || !TRIP_ID) return;
     setStaticSaving(true);
     try {
-      if (editType === 'flight') {
-        // Preserve each flight's existing participants (managed per-card via openSingleFlightEdit)
-        const existing = flights || [];
-        const updated = allFlightsForm.map((f: any, i: number) => ({
-          ...f, participants: existing[i]?.participants || f.participants || [],
-        }));
-        await updateDoc(doc(db, 'trips', TRIP_ID), { staticFlights: updated });
-        setFlights(updated);
-      } else if (editType === 'hotel') {
+      if (editType === 'hotel') {
         const cur = hotels || [];
         const payload = { ...editForm, participants: editParticipants };
         // Append when editIndex is out of bounds (new-hotel flow); otherwise
@@ -604,7 +592,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         {/* ── 航班 ── */}
         <SectionTitle action={!isReadOnly && flights?.length ? (
           <button onClick={openFlightEdit} style={sectionAddBtn}>
-            ＋ 新增 / 管理
+            ＋ 新增
           </button>
         ) : undefined}><FontAwesomeIcon icon={faPlane} style={{ marginRight: 6 }} />航班資訊</SectionTitle>
         {!staticLoaded ? null : flights === null || flights.length === 0 ? (
@@ -1030,68 +1018,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
-                {editType === 'flight' ? '編輯航班' : editType === 'hotel' ? '編輯住宿' : '編輯租車/包車'}
+                {editType === 'hotel' ? '編輯住宿' : '編輯租車/包車'}
               </p>
               <button onClick={() => setEditType(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-
-              {/* ── Flight form ── */}
-              {editType === 'flight' && (<>
-                <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px', lineHeight: 1.6 }}>
-                  <FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10, marginRight: 4 }} />
-                  同行團員如搭不同航班或有轉乘，請分別新增航班卡片
-                </p>
-                {allFlightsForm.map((f, idx) => (
-                  <div key={idx} style={{ border: `1.5px solid ${C.creamDark}`, borderRadius: 16, padding: '14px 12px', marginBottom: 4, background: 'var(--tm-card-bg)' }}>
-                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, gap: 8 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, flexShrink: 0 }}>方向</span>
-                        {/* Segmented control: one pill with two halves, only one highlighted */}
-                        <div style={{ display: 'inline-flex', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, overflow: 'hidden', background: 'var(--tm-input-bg)' }}>
-                          {(['去程', '回程'] as const).map(dir => {
-                            const sel = f.direction === dir;
-                            return (
-                              <button key={dir} onClick={() => setFF(idx, 'direction', dir)}
-                                style={{ padding: '5px 14px', border: 'none', background: sel ? C.sage : 'transparent', color: sel ? 'white' : C.barkLight, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                                {dir === '去程' ? <><FontAwesomeIcon icon={faPlane} style={{ marginRight: 4 }} />去程</> : <><FontAwesomeIcon icon={faRotateLeft} style={{ marginRight: 4 }} />回程</>}
-                              </button>
-                            );
-                          })}
-                        </div>
-                      </div>
-                      {allFlightsForm.length > 1 && (
-                        <button onClick={() => setAllFlightsForm(prev => prev.filter((_, i) => i !== idx))}
-                          style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 14, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: FONT, flexShrink: 0 }}>−</button>
-                      )}
-                    </div>
-                    <Row>
-                      <Field label="日期" flex={1.5}><input style={inSt} type="date" value={f.date || ''} onChange={e => setFF(idx, 'date', e.target.value)} /></Field>
-                      <Field label="航空公司" flex={0.9}><input style={inSt} value={f.airline || ''} onChange={e => setFF(idx, 'airline', e.target.value)} /></Field>
-                      <Field label="航班號" flex={0.7}><input style={inSt} value={f.flightNo || ''} onChange={e => setFF(idx, 'flightNo', e.target.value)} /></Field>
-                    </Row>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '6px 0 4px' }}>出發</p>
-                    <Row>
-                      <Field label="機場代碼" flex={0.5}><input style={inSt} value={f.dep?.airport || ''} onChange={e => setFDep(idx, 'airport', e.target.value)} /></Field>
-                      <Field label="機場名稱"><input style={inSt} value={f.dep?.name || ''} onChange={e => setFDep(idx, 'name', e.target.value)} /></Field>
-                      <Field label="時間" flex={1.5}><input style={inSt} type="time" value={f.dep?.time || ''} onChange={e => setFDep(idx, 'time', e.target.value)} /></Field>
-                    </Row>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '6px 0 4px' }}>抵達</p>
-                    <Row>
-                      <Field label="機場代碼" flex={0.5}><input style={inSt} value={f.arr?.airport || ''} onChange={e => setFArr(idx, 'airport', e.target.value)} /></Field>
-                      <Field label="機場名稱"><input style={inSt} value={f.arr?.name || ''} onChange={e => setFArr(idx, 'name', e.target.value)} /></Field>
-                      <Field label="時間" flex={1.5}><input style={inSt} type="time" value={f.arr?.time || ''} onChange={e => setFArr(idx, 'time', e.target.value)} /></Field>
-                    </Row>
-                    <Field label="每人票價（NT$，選填）"><input style={inSt} type="number" value={f.costPerPerson || ''} onChange={e => setFF(idx, 'costPerPerson', e.target.value)} /></Field>
-                    <Field label="備註"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={f.notes || ''} onChange={e => setFF(idx, 'notes', e.target.value)} /></Field>
-                  </div>
-                ))}
-                <button onClick={() => setAllFlightsForm(prev => [...prev, BLANK_FLIGHT('回程', prev.length)])}
-                  style={{ width: '100%', padding: '10px', borderRadius: 12, border: `1.5px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                  ＋ 新增航班
-                </button>
-              </>)}
 
               {/* ── Hotel form ── */}
               {editType === 'hotel' && (<>
@@ -1235,13 +1167,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         </div>
       )}
 
-      {/* ── 單航班編輯 modal ── */}
-      {editFlightIdx !== null && (
+      {/* ── 單航班編輯 / 新增 modal ── */}
+      {editFlightIdx !== null && (() => {
+        const isNewFlight = editFlightIdx >= (flights || []).length;
+        return (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
           onClick={e => { if (e.target === e.currentTarget) setEditFlightIdx(null); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '92vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><FontAwesomeIcon icon={faPlane} style={{ fontSize: 14 }} />編輯航班</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 8 }}><FontAwesomeIcon icon={faPlane} style={{ fontSize: 14 }} />{isNewFlight ? '新增航班' : '編輯航班'}</p>
               <button onClick={() => setEditFlightIdx(null)} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
@@ -1281,10 +1215,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={singleFlightForm.notes || ''} onChange={e => setSF('notes', e.target.value)} /></Field>
               <ParticipantSelector value={singleFlightParticipants} onChange={setSingleFlightParticipants} />
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
-                <button onClick={() => { setEditFlightIdx(null); handleDeleteFlight(editFlightIdx!); }}
-                  style={{ padding: '12px 14px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                  <FontAwesomeIcon icon={faTrashCan} />
-                </button>
+                {!isNewFlight && (
+                  <button onClick={() => { setEditFlightIdx(null); handleDeleteFlight(editFlightIdx!); }}
+                    style={{ padding: '12px 14px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                    <FontAwesomeIcon icon={faTrashCan} />
+                  </button>
+                )}
                 <button onClick={() => setEditFlightIdx(null)}
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSingleFlightSave} disabled={staticSaving}
@@ -1295,7 +1231,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             </div>
           </div>
         </div>
-      )}
+        );
+      })()}
 
       {/* ── 新增自訂預訂底部面板 ── */}
       {showAdd && (
