@@ -77,7 +77,7 @@ export interface Expense {
   payer: string;
   amount: number;
   currency?: string;
-  amountTWD?: number;
+  amountTWD?: number;                   // effective TWD at record time (rate × amount × card fee)
   splitWith?: string[];
   splitMode?: 'equal' | 'weighted' | 'amount';
   percentages?: Record<string, number>;
@@ -85,17 +85,66 @@ export interface Expense {
   category?: string;
   isPrivate?: boolean;
   privateOwnerUid?: string;
-  // ── Settlement batch system ──────────────────────────────────────
-  // null / undefined = expense is in the current (unsettled) round.
-  // A positive integer = expense has been closed into that batch by a
-  // "本輪結算完成" action and is now read-only history.
+  // ── Cross-currency / settlement helpers ─────────────────────────────
+  // Per-expense FX rate override entered by the user at record time. Takes
+  // priority over the trip-level rate; when absent we fall back to
+  // trip.exchangeRate (if currency matches trip) → CURRENCY_TO_TWD table.
+  exchangeRate?: number;
+  // Foreign-card fee %. Only meaningful when paymentMethod === 'card' AND
+  // currency !== 'TWD'. Default 1.5%. Captured into amountTWD at record time.
+  cardFeePercent?: number;
+  // Post-statement actual TWD (for credit-card expenses whose true settled
+  // amount only surfaces later). Present = takes precedence over amountTWD.
+  actualTWD?: number;
+  // "等卡單" flag — expense excluded from memberStats / settlement
+  // suggestions until cleared (usually auto-cleared when actualTWD fills).
+  awaitCardStatement?: boolean;
+  // Legacy (batch feature, removed) — kept so we can still strip it off
+  // existing docs via deleteField() without TS complaints.
   settlementBatch?: number | null;
-  // If this expense is a delta correction (補記差額) for a previously
-  // closed expense, this is the original expense's id. The new expense
-  // lives in the current round (settlementBatch null) so the correction
-  // flows into the next round's balance without touching history.
   adjustmentOf?: string | null;
 }
+
+// ── Resolve effective TWD ────────────────────────────────────────────────────
+// Priority: actualTWD (post-statement truth) > stored amountTWD (value we
+// wrote when the expense was created) > fallback compute via CURRENCY_TO_TWD.
+export const effectiveTWD = (e: Expense): number => {
+  if (e.actualTWD != null) return e.actualTWD;
+  if (e.amountTWD != null) return e.amountTWD;
+  return toTWDCalc(e.amount || 0, e.currency || 'JPY');
+};
+
+// ── Compute TWD amount for a NEW / edited expense at save time ──────────────
+// Uses per-expense FX rate if entered, else trip-level rate (only when
+// currencies match), else the hardcoded table. Applies card fee % when
+// payment method is card and currency is not TWD.
+export const computeAmountTWD = (
+  amount: number,
+  currency: string,
+  opts: {
+    exchangeRate?: number | null;         // per-expense override
+    tripCurrency?: string | null;
+    tripRate?: number | null;             // trip-wide rate for its primary currency
+    paymentMethod?: 'cash' | 'card';
+    cardFeePercent?: number | null;
+  } = {}
+): number => {
+  const { exchangeRate, tripCurrency, tripRate, paymentMethod, cardFeePercent } = opts;
+  let rate: number;
+  if (exchangeRate && exchangeRate > 0) {
+    rate = exchangeRate;
+  } else if (tripRate && tripRate > 0 && tripCurrency && tripCurrency === currency) {
+    rate = tripRate;
+  } else {
+    rate = CURRENCY_TO_TWD[currency] ?? 1;
+  }
+  let twd = amount * rate;
+  if (paymentMethod === 'card' && currency !== 'TWD') {
+    const fee = cardFeePercent != null ? cardFeePercent : 1.5;
+    twd = twd * (1 + fee / 100);
+  }
+  return Math.round(twd);
+};
 
 export interface MemberStat {
   name: string;
@@ -119,7 +168,7 @@ export const getPersonalShare = (
   if (e.isPrivate) return 0;
   const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
   if (!sw.includes(name)) return 0;
-  const eAmt = e.amountTWD ?? toTWDCalc(e.amount ?? 0, e.currency ?? 'JPY');
+  const eAmt = effectiveTWD(e);
   if (e.splitMode === 'weighted' && e.percentages?.[name] != null) {
     return Math.ceil(eAmt * e.percentages[name] / 100);
   }
@@ -145,27 +194,31 @@ export const computeMemberStats = (
   expenses: Expense[],
   memberNames: string[],
 ): MemberStat[] => {
+  // Exclude expenses that are waiting on a credit-card statement — the real
+  // TWD isn't known yet, so counting them would inflate / misstate balances.
+  const active = expenses.filter(e => !e.awaitCardStatement);
+
   // Settlements received: payer=A, splitWith=[B] means B received money from A
   const settlementsReceivedByName: Record<string, number> = {};
-  expenses.forEach(e => {
+  active.forEach(e => {
     if (e.isPrivate || e.category !== 'settlement') return;
     const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : [];
-    const eAmt = e.amountTWD ?? toTWDCalc(e.amount ?? 0, e.currency ?? 'JPY');
+    const eAmt = effectiveTWD(e);
     sw.forEach(n => {
       settlementsReceivedByName[n] = (settlementsReceivedByName[n] || 0) + eAmt;
     });
   });
 
   return memberNames.map(name => {
-    const paid = expenses
+    const paid = active
       .filter(e => !e.isPrivate && e.payer === name)
-      .reduce((s, e) => s + (e.amountTWD ?? toTWDCalc(e.amount ?? 0, e.currency ?? 'JPY')), 0);
+      .reduce((s, e) => s + effectiveTWD(e), 0);
 
-    const owed = expenses.reduce((s, e) => {
+    const owed = active.reduce((s, e) => {
       if (e.isPrivate) return s;
       const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
       if (!sw.includes(name)) return s;
-      const eAmt = e.amountTWD ?? toTWDCalc(e.amount ?? 0, e.currency ?? 'JPY');
+      const eAmt = effectiveTWD(e);
       if (e.splitMode === 'weighted' && e.percentages && Object.keys(e.percentages).length > 0) {
         const pct = e.percentages[name] ?? Math.floor(100 / sw.length);
         return s + Math.ceil(eAmt * pct / 100);

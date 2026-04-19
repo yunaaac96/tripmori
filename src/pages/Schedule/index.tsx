@@ -218,7 +218,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
 
   // Trip meta edit (owner only)
   const [editingMeta, setEditingMeta] = useState(false);
-  const [metaForm, setMetaForm] = useState({ title: '', emoji: '', startDate: '', endDate: '', description: '', currency: '' });
+  const [metaForm, setMetaForm] = useState({ title: '', emoji: '', startDate: '', endDate: '', description: '', currency: '', exchangeRate: '' });
   const [savingMeta, setSavingMeta]   = useState(false);
 
   // Bulk import (owner only) — universal format
@@ -499,6 +499,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
         endDate:     d.endDate     || project?.endDate     || '',
         description: d.description || project?.description || '',
         currency:    d.currency    || 'JPY',
+        exchangeRate: d.exchangeRate != null ? String(d.exchangeRate) : '',
       });
     } catch {
       setMetaForm({
@@ -508,6 +509,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
         endDate:     project?.endDate     || '',
         description: project?.description || '',
         currency:    'JPY',
+        exchangeRate: project?.exchangeRate != null ? String(project.exchangeRate) : '',
       });
     }
     setEditingMeta(true);
@@ -517,6 +519,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
     if (!isOwner) return;
     setSavingMeta(true);
     try {
+      const parsedRate = metaForm.exchangeRate.trim() ? parseFloat(metaForm.exchangeRate) : null;
+      const exchangeRate = parsedRate != null && parsedRate > 0 ? parsedRate : null;
       await updateDoc(doc(db, 'trips', TRIP_ID), {
         title:       metaForm.title.trim() || project?.title,
         emoji:       metaForm.emoji.trim() || project?.emoji,
@@ -524,6 +528,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
         endDate:     metaForm.endDate || metaForm.startDate,
         description: metaForm.description.trim(),
         currency:    metaForm.currency,
+        exchangeRate,
       });
       if (onProjectUpdate && project) {
         onProjectUpdate({
@@ -534,6 +539,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
           endDate:     metaForm.endDate || metaForm.startDate,
           description: metaForm.description.trim(),
           currency:    metaForm.currency,
+          exchangeRate,
         });
       }
       setEditingMeta(false);
@@ -900,6 +906,20 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>主要幣值</label>
                 <CurrencySearch value={metaForm.currency} onChange={code => setMeta('currency', code)} />
               </div>
+              {metaForm.currency && metaForm.currency !== 'TWD' && (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
+                    參考匯率（1 {metaForm.currency} = __ TWD）
+                  </label>
+                  <input style={inputStyle} type="number" step="0.0001" inputMode="decimal"
+                    placeholder="例：0.22 ／ 留空使用系統預設"
+                    value={metaForm.exchangeRate}
+                    onChange={e => setMeta('exchangeRate', e.target.value)} />
+                  <p style={{ fontSize: 10, color: C.barkLight, margin: '4px 0 0', lineHeight: 1.5 }}>
+                    此匯率會套用到所有以「{metaForm.currency}」記帳的支出（新增時可覆寫）。調整後只影響未來記帳，已存在的支出保留原換算金額。
+                  </p>
+                </div>
+              )}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button onClick={() => setEditingMeta(false)} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSaveMeta} disabled={savingMeta} style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: savingMeta ? 0.6 : 1 }}>{savingMeta ? '儲存中...' : '✓ 儲存'}</button>
