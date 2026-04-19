@@ -102,9 +102,14 @@ function PieChart({ data }: { data: { key: string; value: number; label: string 
   });
 
   const strokeColor = dark ? '#1C1A17' : 'white';
+  // Single-slice edge case: SVG arc with coincident start/end points collapses
+  // to an invisible sliver. Render a plain filled circle instead.
+  const onlyOne = slices.length === 1;
   return (
     <svg viewBox="0 0 160 160" style={{ width: 130, height: 130, flexShrink: 0 }}>
-      {slices.map(s => (
+      {onlyOne ? (
+        <circle cx={cx} cy={cy} r={r} fill={PIE_COLORS[slices[0].key] || (dark ? '#505050' : '#C8C8C8')} stroke={strokeColor} strokeWidth={1.5} />
+      ) : slices.map(s => (
         <path key={s.key} d={s.path} fill={PIE_COLORS[s.key] || (dark ? '#505050' : '#C8C8C8')} stroke={strokeColor} strokeWidth={1.5} />
       ))}
     </svg>
