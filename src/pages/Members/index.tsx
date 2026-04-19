@@ -7,7 +7,7 @@ import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
-import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc, deleteField } from 'firebase/firestore';
+import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc, deleteField, query, where, getDocs, collection as _collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { makeCollabKey, saveProject } from '../ProjectHub/index';
 
@@ -227,8 +227,40 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
     catch (e) { console.error(e); }
   };
 
+  // Last-line-of-defence duplicate check against freshest Firestore data.
+  // Mirrors assertNotAlreadyBound in App.tsx: ignores nameless orphan docs
+  // (legacy FCM setDoc leftovers) and silently self-heals them so they stop
+  // blocking future bind attempts.
+  const hasName = (v: any) => typeof v === 'string' && v.trim() !== '';
+  const assertNotAlreadyBound = async (uid: string): Promise<{ bound: boolean; name?: string }> => {
+    const localHit = (members as any[]).find(m => m.googleUid === uid && hasName(m.name));
+    if (localHit) return { bound: true, name: localHit.name };
+    try {
+      const snap = await getDocs(query(_collection(db, 'trips', TRIP_ID, 'members'), where('googleUid', '==', uid)));
+      const named = snap.docs.find(d => hasName((d.data() as any).name));
+      const nameless = snap.docs.filter(d => !hasName((d.data() as any).name));
+      if (nameless.length) {
+        Promise.allSettled(
+          nameless.map(d =>
+            updateDoc(doc(db, 'trips', TRIP_ID, 'members', d.id), {
+              googleUid: deleteField(),
+              googleEmail: deleteField(),
+            })
+          )
+        ).catch(() => {});
+      }
+      if (named) return { bound: true, name: (named.data() as any).name };
+    } catch (e) { console.warn('[bind] duplicate check failed', e); }
+    return { bound: false };
+  };
+
   const handleBindGoogle = async (memberId: string) => {
     if (!googleUid) return;
+    const dup = await assertNotAlreadyBound(googleUid);
+    if (dup.bound) {
+      alert(`此 Google 帳號已經綁定「${dup.name}」，一個帳號只能綁一張成員卡。請先解除原綁定。`);
+      return;
+    }
     try {
       await updateDoc(doc(db, 'trips', TRIP_ID, 'members', memberId), { googleUid, googleEmail: googleEmail || '' });
     } catch (e) { console.error(e); }
@@ -350,14 +382,18 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
       setAllowedEditorUids(prev => prev.filter(u => u !== uid));
       setEditorInfo(prev => { const n = { ...prev }; delete n[uid]; return n; });
 
-      // 2. Unbind the member card that was bound to this uid
-      const boundMember = members.find((m: any) => m.googleUid === uid);
-      if (boundMember) {
-        await _updateDoc(_doc(db, 'trips', TRIP_ID, 'members', boundMember.id), {
-          googleUid: deleteField(),
-          googleEmail: deleteField(),
-        });
-      }
+      // 2. Unbind ALL member docs carrying this uid. Queries Firestore directly
+      //    instead of local state so nameless orphan docs (filtered out of UI)
+      //    are also cleared — prevents residue after repeated bind/demote cycles.
+      const dupSnap = await getDocs(query(_collection(db, 'trips', TRIP_ID, 'members'), where('googleUid', '==', uid)));
+      await Promise.all(
+        dupSnap.docs.map(d =>
+          _updateDoc(_doc(db, 'trips', TRIP_ID, 'members', d.id), {
+            googleUid: deleteField(),
+            googleEmail: deleteField(),
+          })
+        )
+      );
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 

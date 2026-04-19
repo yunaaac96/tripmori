@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
-import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion } from 'firebase/firestore';
+import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion, deleteField } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -749,14 +749,30 @@ function App() {
 
   // Re-check the "one Google account ↔ one member card" rule against the
   // freshest Firestore data (not the React state snapshot) right before a
-  // write. Also checks the local `members` snapshot for fast bail-out.
+  // write. Nameless member docs (legacy orphans from stale FCM setDoc) are
+  // NOT real cards — they're filtered out of the UI list, so they must not
+  // block binding either. We silently self-heal them by clearing their
+  // googleUid, so the "undefined" alert stops reappearing on future attempts.
+  const hasName = (v: any) => typeof v === 'string' && v.trim() !== '';
   const assertNotAlreadyBound = async (uid: string, tripId: string): Promise<{ bound: boolean; name?: string }> => {
-    const localHit = members.find((m: any) => m.googleUid === uid);
+    const localHit = members.find((m: any) => m.googleUid === uid && hasName(m.name));
     if (localHit) return { bound: true, name: localHit.name };
     try {
       const snap = await getDocs(query(collection(db, 'trips', tripId, 'members'), where('googleUid', '==', uid)));
-      if (!snap.empty) {
-        const d = snap.docs[0].data() as any;
+      const named = snap.docs.find(d => hasName((d.data() as any).name));
+      const nameless = snap.docs.filter(d => !hasName((d.data() as any).name));
+      if (nameless.length) {
+        Promise.allSettled(
+          nameless.map(d =>
+            updateDoc(doc(db, 'trips', tripId, 'members', d.id), {
+              googleUid: deleteField(),
+              googleEmail: deleteField(),
+            })
+          )
+        ).catch(() => {});
+      }
+      if (named) {
+        const d = named.data() as any;
         return { bound: true, name: d.name };
       }
     } catch (e) { console.warn('[bind] duplicate check failed', e); }
