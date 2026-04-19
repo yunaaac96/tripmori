@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { C, FONT, cardStyle, inputStyle, btnPrimary } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage } from '@fortawesome/free-solid-svg-icons';
+import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage, faXmark, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -18,6 +18,19 @@ export default function JournalPage({ journals, members, journalComments, firest
   const [saving, setSaving]    = useState(false);
   const [uploading, setUploading] = useState(false);
   const [form, setForm]        = useState({ content: '', date: '', author: '', photos: [] as string[] });
+  const [lightbox, setLightbox] = useState<{ photos: string[]; idx: number } | null>(null);
+
+  // Lightbox keyboard navigation: Esc closes, ←/→ swap photos.
+  useEffect(() => {
+    if (!lightbox) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setLightbox(null);
+      else if (e.key === 'ArrowLeft') setLightbox(lb => lb && { ...lb, idx: (lb.idx - 1 + lb.photos.length) % lb.photos.length });
+      else if (e.key === 'ArrowRight') setLightbox(lb => lb && { ...lb, idx: (lb.idx + 1) % lb.photos.length });
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [lightbox]);
   const fileRef    = useRef<HTMLInputElement>(null);
   const contentRef = useRef<HTMLTextAreaElement>(null);
 
@@ -304,7 +317,8 @@ export default function JournalPage({ journals, members, journalComments, firest
                   <div className="tm-hscroll" style={{ display: 'flex', gap: 8, marginTop: 10, overflowX: 'auto', flexWrap: 'nowrap', paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
                     {form.photos.map((url, idx) => (
                       <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
-                        <img src={url} alt="" style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, display: 'block' }} />
+                        <img src={url} alt="" onClick={() => setLightbox({ photos: form.photos, idx })}
+                          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, display: 'block', cursor: 'pointer' }} />
                         <button onClick={() => removePhoto(idx)}
                           style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
                       </div>
@@ -392,7 +406,8 @@ export default function JournalPage({ journals, members, journalComments, firest
                     {j.photos?.length > 0 && (
                       <div className="tm-hscroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap', marginBottom: 8, paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
                         {j.photos.map((url: string, i: number) => (
-                          <img key={i} src={url} alt="" style={{ width: 110, height: 110, objectFit: 'cover', borderRadius: 12, flexShrink: 0 }} />
+                          <img key={i} src={url} alt="" onClick={() => setLightbox({ photos: j.photos, idx: i })}
+                            style={{ width: 110, height: 110, objectFit: 'cover', borderRadius: 12, flexShrink: 0, cursor: 'pointer' }} />
                         ))}
                       </div>
                     )}
@@ -541,6 +556,38 @@ export default function JournalPage({ journals, members, journalComments, firest
           </div>
         )}
       </div>
+
+      {/* ── Photo lightbox ── */}
+      {lightbox && (
+        <div onClick={() => setLightbox(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
+          <img src={lightbox.photos[lightbox.idx]} alt=""
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, display: 'block' }} />
+          <button onClick={e => { e.stopPropagation(); setLightbox(null); }}
+            aria-label="關閉"
+            style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 16px)', right: 16, width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <FontAwesomeIcon icon={faXmark} />
+          </button>
+          {lightbox.photos.length > 1 && (
+            <>
+              <button onClick={e => { e.stopPropagation(); setLightbox(lb => lb && { ...lb, idx: (lb.idx - 1 + lb.photos.length) % lb.photos.length }); }}
+                aria-label="上一張"
+                style={{ position: 'absolute', left: 8, top: '50%', transform: 'translateY(-50%)', width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FontAwesomeIcon icon={faChevronLeft} />
+              </button>
+              <button onClick={e => { e.stopPropagation(); setLightbox(lb => lb && { ...lb, idx: (lb.idx + 1) % lb.photos.length }); }}
+                aria-label="下一張"
+                style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 16, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <FontAwesomeIcon icon={faChevronRight} />
+              </button>
+              <p style={{ position: 'absolute', bottom: 'calc(env(safe-area-inset-bottom, 0px) + 16px)', left: '50%', transform: 'translateX(-50%)', color: 'white', fontSize: 13, margin: 0, background: 'rgba(0,0,0,0.45)', padding: '4px 10px', borderRadius: 12 }}>
+                {lightbox.idx + 1} / {lightbox.photos.length}
+              </p>
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 }
