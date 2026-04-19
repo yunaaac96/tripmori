@@ -12,7 +12,7 @@ const LS_USER_KEY  = 'tripmori_current_user';
 const MAX_PHOTOS   = 5;
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '🥹', '👍', '🎉'];
 
-export default function JournalPage({ journals, members, journalComments, firestore, currentUserName: propCurrentUser }: any) {
+export default function JournalPage({ journals, members, journalComments, firestore, project, currentUserName: propCurrentUser }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving]    = useState(false);
@@ -32,6 +32,18 @@ export default function JournalPage({ journals, members, journalComments, firest
   const [mentionMenuFor, setMentionMenuFor] = useState<string | null>(null);
 
   const memberNames: string[] = members.length > 0 ? members.map((m: any) => m.name) : [];
+  // @mention dropdown: current user first, then project.memberOrder
+  const sortedMemberNames = [...memberNames].sort((a, b) => {
+    if (a === currentUser) return -1;
+    if (b === currentUser) return 1;
+    const order: string[] = project?.memberOrder || [];
+    const ai = order.indexOf(a);
+    const bi = order.indexOf(b);
+    if (ai !== -1 && bi !== -1) return ai - bi;
+    if (ai !== -1) return -1;
+    if (bi !== -1) return 1;
+    return 0;
+  });
   const set = (key: string, val: any) => setForm(p => ({ ...p, [key]: val }));
 
   useEffect(() => {
@@ -479,9 +491,9 @@ export default function JournalPage({ journals, members, journalComments, firest
                       ) : (googleUid && currentUser) ? (
                         <div style={{ position: 'relative' }}>
                           {/* @mention dropdown */}
-                          {mentionMenuFor === j.id && memberNames.length > 0 && (
+                          {mentionMenuFor === j.id && sortedMemberNames.length > 0 && (
                             <div style={{ position: 'absolute', bottom: '100%', left: 0, marginBottom: 4, background: 'var(--tm-card-bg)', borderRadius: 12, border: `1.5px solid var(--tm-cream-dark)`, boxShadow: '0 4px 16px rgba(0,0,0,0.15)', zIndex: 50, overflow: 'hidden', minWidth: 140 }}>
-                              {memberNames.map(name => (
+                              {sortedMemberNames.map(name => (
                                 <button key={name} onClick={() => insertMention(j.id, name)}
                                   style={{ width: '100%', padding: '9px 14px', border: 'none', background: 'transparent', textAlign: 'left', fontSize: 14, fontFamily: FONT, color: 'var(--tm-bark)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 8 }}
                                   onMouseOver={e => (e.currentTarget.style.background = 'var(--tm-input-bg)')}

@@ -103,6 +103,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const [saving, setSaving]         = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editorDelToast, setEditorDelToast] = useState(false);
+  const [participantPopover, setParticipantPopover] = useState<string[] | null>(null);
   const [countdown, setCountdown]   = useState({ d: 0, h: 0, m: 0, s: 0 });
   const [tripPhase, setTripPhase]   = useState<'before' | 'during' | 'after'>('before');
   // Flight-based countdown anchors (fetched from staticFlights)
@@ -778,7 +779,24 @@ export default function SchedulePage({ events, members = [], project, firestore,
   };
 
   return (
-    <div style={{ fontFamily: FONT }}>
+    <div style={{ fontFamily: FONT }} onClick={() => participantPopover && setParticipantPopover(null)}>
+
+      {/* ── Participant name popover (event card avatar click) ── */}
+      {participantPopover && (
+        <div style={{ position: 'fixed', inset: 0, zIndex: 500 }} onClick={() => setParticipantPopover(null)}>
+          <div style={{ position: 'fixed', bottom: 80, left: '50%', transform: 'translateX(-50%)', background: 'var(--tm-sheet-bg)', borderRadius: 16, padding: '14px 20px', boxShadow: '0 4px 24px rgba(0,0,0,0.18)', maxWidth: 320, width: 'calc(100% - 48px)', zIndex: 501 }}
+            onClick={e => e.stopPropagation()}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', display: 'flex', alignItems: 'center', gap: 5 }}>
+              <FontAwesomeIcon icon={faPersonWalking} style={{ fontSize: 11 }} /> 參與人員
+            </p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+              {participantPopover.map(name => (
+                <span key={name} style={{ fontSize: 13, fontWeight: 600, color: C.bark, background: C.cream, borderRadius: 10, padding: '4px 12px' }}>{name}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* ── Bulk Import Modal (owner only) ── */}
       {showBulkImport && (
@@ -1049,7 +1067,19 @@ export default function SchedulePage({ events, members = [], project, firestore,
                       參與人 <span style={{ fontWeight: 400, opacity: 0.7 }}>(選填)</span>
                     </label>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {[...members].sort((a: any, b: any) => { if (a.id === myMember?.id) return -1; if (b.id === myMember?.id) return 1; return 0; }).map((m: any) => {
+                      {[...members].sort((a: any, b: any) => {
+                        // 1. Current user always first
+                        if (a.id === myMember?.id) return -1;
+                        if (b.id === myMember?.id) return 1;
+                        // 2. Rest follows project.memberOrder
+                        const order: string[] = project?.memberOrder || [];
+                        const ai = order.indexOf(a.name);
+                        const bi = order.indexOf(b.name);
+                        if (ai !== -1 && bi !== -1) return ai - bi;
+                        if (ai !== -1) return -1;
+                        if (bi !== -1) return 1;
+                        return 0;
+                      }).map((m: any) => {
                         const sel = formParticipants.includes(m.id);
                         // Owner can toggle all; editor can only toggle their own bound member card
                         const canToggle = isOwner || myMember?.id === m.id;
@@ -1310,14 +1340,16 @@ export default function SchedulePage({ events, members = [], project, firestore,
                           <FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 10 }} />查看地圖
                         </a>
                       )}
-                      {!isReadOnly && event.participants?.length > 0 && (() => {
+                      {event.participants?.length > 0 && (() => {
                         const ptcMembers = (event.participants as string[])
                           .map((id: string) => members.find((m: any) => m.id === id))
                           .filter(Boolean);
                         return ptcMembers.length > 0 ? (
-                          <div style={{ display: 'flex', gap: -4, marginTop: 6, flexWrap: 'wrap' }}>
+                          <div
+                            style={{ display: 'flex', gap: -4, marginTop: 6, flexWrap: 'wrap', cursor: 'pointer' }}
+                            onClick={e => { e.stopPropagation(); setParticipantPopover(prev => prev ? null : ptcMembers.map((m: any) => m.name)); }}>
                             {ptcMembers.map((m: any, i: number) => (
-                              <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
+                              <div key={m.id} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
                                 {m.avatarUrl
                                   ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   : <span style={{ fontSize: 10, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}

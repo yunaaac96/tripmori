@@ -725,7 +725,7 @@ function App() {
         {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
+        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={project} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
@@ -745,7 +745,17 @@ function App() {
                 <div style={{ marginBottom: 16 }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 10px' }}>選擇已有的成員卡</p>
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {members.filter((m: any) => !m.googleUid).map((m: any) => (
+                    {members.filter((m: any) => !m.googleUid)
+                      .sort((a: any, b: any) => {
+                        const order: string[] = project?.memberOrder || [];
+                        const ai = order.indexOf(a.name);
+                        const bi = order.indexOf(b.name);
+                        if (ai !== -1 && bi !== -1) return ai - bi;
+                        if (ai !== -1) return -1;
+                        if (bi !== -1) return 1;
+                        return 0;
+                      })
+                      .map((m: any) => (
                       <button key={m.id} onClick={() => handleBindMemberCard(m.id)} disabled={bindingMember}
                         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', width: '100%', opacity: bindingMember ? 0.6 : 1 }}>
                         <div style={{ width: 36, height: 36, borderRadius: '50%', background: m.color || '#E0D9C8', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>
