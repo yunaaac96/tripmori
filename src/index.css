@@ -275,6 +275,29 @@
    * CTA buttons while leaving the vars alone for small icons / accents. */
   .tm-btn-solid-earth { background: #6A4528 !important; color: #F0DFCE !important; }
   .tm-btn-solid-sage  { background: #4A6A52 !important; color: #E8F0E2 !important; }
+  /* Soft "destructive" buttons (#FAE0E0 pale pink + #9A3A3A dark red in
+   * light mode) — keep the pink/red family, just dim the pastel bg so it
+   * doesn't float as a bright pink island, and lift the text to stay readable.
+   * Attribute selector catches every inline-styled instance across pages
+   * without needing to tag each button individually. Browsers serialise
+   * inline hex colours as rgb(...) in the style attribute, so match on that. */
+  .tm-btn-delete-soft,
+  [style*="rgb(250, 224, 224)"] {
+    background: #3A1618 !important;
+  }
+  [style*="rgb(250, 224, 224)"][style*="rgb(154, 58, 58)"] {
+    color: #E89A9E !important;
+  }
+  /* Info-box sky family (Schedule 交通模式 hint and similar) — light blue
+   * bg + dark blue text → deep navy bg + soft sky text. */
+  .tm-info-box-sky { background: #0E2030 !important; border-color: #3A6A9A !important; color: #7AB0E0 !important; }
+  /* Booking-type chips / icons — keep each hue family but darken in dark mode.
+   * Light mode inline bg/color from BOOKING_TYPES still wins. */
+  .tm-booking-type-activity  { background: #162A12 !important; color: #88CC72 !important; }
+  .tm-booking-type-transport { background: #0C1E30 !important; color: #78AACC !important; }
+  .tm-booking-type-show      { background: #1A0E30 !important; color: #C090F0 !important; }
+  .tm-booking-type-ferry     { background: #0C2430 !important; color: #70C0B0 !important; }
+  .tm-booking-type-other     { background: #1E1E1E !important; color: #B0B0B0 !important; }
   /* Pale-green "status confirmed" bars (已登入 Google, 推播通知已開啟) stay
    * as bright pastel islands in dark mode; swap to a muted deep sage. */
   .tm-status-success { background: #1F2E1F !important; border-color: #3A5438 !important; }

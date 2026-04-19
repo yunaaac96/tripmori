@@ -840,20 +840,6 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                       style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === otherMembers.length - 1 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === otherMembers.length - 1 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === otherMembers.length - 1 ? 0.25 : 1 }}><FontAwesomeIcon icon={faArrowDown} /></button>
                   </div>
                 )}
-                {canEdit && (
-                  <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', gap: 4 }}>
-                    {firestore.role === 'owner' && (
-                      <button onClick={() => handleDeleteMember(m.id, m.name)}
-                        style={{ width: 26, height: 26, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                        <FontAwesomeIcon icon={faTrashCan} />
-                      </button>
-                    )}
-                    <button onClick={() => openEdit(m)}
-                      style={{ width: 26, height: 26, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight }}>
-                      <FontAwesomeIcon icon={faPen} />
-                    </button>
-                  </div>
-                )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
                   <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: avatarTextColor(m.color), border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>
                     {m.avatarUrl
@@ -881,7 +867,16 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                       <FontAwesomeIcon icon={faEnvelope} style={{ fontSize: 9 }} /> {m.googleEmail}
                     </p>
                   )}
-                  <p style={{ fontSize: 12, color: C.barkLight, margin: '3px 0 0' }}>{m.role || '旅伴'}</p>
+                  <div style={{ margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span style={{ fontSize: 12, color: C.barkLight }}>{m.role || '旅伴'}</span>
+                    {canEdit && (
+                      <button onClick={() => openEdit(m)}
+                        title="編輯身份 / 角色"
+                        style={{ width: 22, height: 22, borderRadius: 6, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight, flexShrink: 0 }}>
+                        <FontAwesomeIcon icon={faPen} style={{ fontSize: 9 }} />
+                      </button>
+                    )}
+                  </div>
                   {canBind && (
                     <button onClick={() => handleBindGoogle(m.id)}
                       style={{ marginTop: 5, fontSize: 11, fontWeight: 700, color: '#4A7A35', background: '#E0F0D8', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
@@ -890,9 +885,17 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                   )}
                   {/* 解除綁定：owner 可解除任何人，本人可解除自己 */}
                   {m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly && (
-                    <button onClick={() => handleUnbindGoogle(m.id)}
+                    <button onClick={() => handleUnbindGoogle(m.id)} className="tm-btn-delete-soft"
                       style={{ marginTop: 4, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
                       <FontAwesomeIcon icon={faXmark} style={{ marginRight: 4 }} />解除綁定
+                    </button>
+                  )}
+                  {/* Owner-only 刪除成員 — moved from the top-right absolute overlay
+                      so it doesn't overlap the 留言 button on the right column. */}
+                  {firestore.role === 'owner' && canEdit && !isMyCard && (
+                    <button onClick={() => handleDeleteMember(m.id, m.name)} className="tm-btn-delete-soft"
+                      style={{ marginTop: 4, marginLeft: m.googleUid ? 6 : 0, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                      <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 4 }} />刪除成員
                     </button>
                   )}
                 </div>
