@@ -73,14 +73,27 @@ export default function SplashScreen() {
           boxSizing: 'border-box',
         }}
       >
-        {/* LOGO */}
-        <div className="tm-splash-logo" style={{ marginBottom: 28 }}>
+        {/* LOGO — 固定奶油底圓角方塊，確保任何背景（含深色模式）下品牌色都不會被吃掉 */}
+        <div
+          className="tm-splash-logo"
+          style={{
+            marginBottom: 28,
+            width: 140,
+            height: 140,
+            borderRadius: 32,
+            background: '#F7F4EB',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 8px 32px rgba(0,0,0,0.18), 0 2px 8px rgba(0,0,0,0.10)',
+          }}
+        >
           <img
             src="/favicon.png"
             alt="TripMori"
             style={{
-              width: 140,
-              height: 140,
+              width: 112,
+              height: 112,
               display: 'block',
             }}
           />
