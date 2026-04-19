@@ -83,8 +83,15 @@ async function mono(size) {
   return sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
 }
 
-async function transparent(size) {
-  return sharp(SOFT_SRC).resize(size, size, { fit: 'contain', background: TRANS }).png().toBuffer();
+async function transparent(size, coverage = STD_COVERAGE) {
+  const inner = Math.round(size * coverage);
+  const iconBuf = await sharp(SOFT_SRC)
+    .resize(inner, inner, { fit: 'contain', background: TRANS })
+    .toBuffer();
+  return sharp({ create: { width: size, height: size, channels: 4, background: TRANS } })
+    .composite([{ input: iconBuf, gravity: 'center' }])
+    .png()
+    .toBuffer();
 }
 
 // Standard icons use 60% coverage (≈20% inner padding per side) applied to the
