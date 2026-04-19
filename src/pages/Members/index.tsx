@@ -228,14 +228,20 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
     catch (e) { console.error(e); }
   };
 
-  // ── Orphan cleanup: wipe member docs with empty / missing names ──────────
-  // Legacy FCM setDoc bugs could leave behind nameless member documents that
-  // the UI already hides (via the !!m.name filter in App.tsx) but which still
-  // show up in the Firestore console and can confuse the owner. Owner taps the
-  // button and we delete every doc whose name is blank/null in this trip.
-  const [cleanBusy, setCleanBusy]   = useState(false);
-  const [cleanResult, setCleanResult] = useState<number | null>(null);
-  const [cleanError, setCleanError] = useState<string | null>(null);
+  // ── Data cleanup: drop orphan member docs and any references to them ───
+  // Two modes:
+  // 1) "清理無名資料" — delete member docs whose name is blank/null
+  //    (legacy FCM setDoc leftovers that the UI already hides).
+  // 2) "依名稱強制清除" — member has a name and leaks into events /
+  //    expenses / lists / bookings but its card never shows on the
+  //    Members page. Owner types the exact name and we delete the member
+  //    docs AND every reference across the trip (participants, payer,
+  //    splitWith, assignedTo, memberOrder).
+  const [cleanBusy, setCleanBusy]     = useState(false);
+  const [cleanResult, setCleanResult] = useState<string | null>(null);
+  const [cleanError, setCleanError]   = useState<string | null>(null);
+  const [targetName, setTargetName]   = useState('');
+
   const handleCleanOrphans = async () => {
     if (firestore.role !== 'owner' || cleanBusy) return;
     setCleanBusy(true); setCleanResult(null); setCleanError(null);
@@ -246,15 +252,113 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
         return typeof v !== 'string' || v.trim() === '';
       });
       if (!nameless.length) {
-        setCleanResult(0);
+        setCleanResult('沒有發現無名資料');
         return;
       }
       await Promise.all(nameless.map(d =>
         deleteDoc(_doc(db, 'trips', TRIP_ID, 'members', d.id))
       ));
-      setCleanResult(nameless.length);
+      setCleanResult(`已清理 ${nameless.length} 筆無名資料`);
     } catch (e: any) {
       console.error('[cleanup] orphan members failed', e);
+      setCleanError(e?.message || '清理失敗，請稍後再試');
+    } finally {
+      setCleanBusy(false);
+    }
+  };
+
+  const handleDeleteByName = async () => {
+    const name = targetName.trim();
+    if (firestore.role !== 'owner' || !name || cleanBusy) return;
+    if (!window.confirm(`確定要刪除成員「${name}」並清除所有相關引用？此操作無法復原。`)) return;
+    setCleanBusy(true); setCleanResult(null); setCleanError(null);
+    try {
+      // 1. Find member docs matching this name (could be 0, 1, or duplicates)
+      const mSnap = await getDocs(_collection(db, 'trips', TRIP_ID, 'members'));
+      const targets = mSnap.docs.filter(d => (d.data() as any)?.name === name);
+      const targetIds = new Set(targets.map(d => d.id));
+
+      let eventsCleared = 0, expensesCleared = 0, listsCleared = 0, bookingsCleared = 0;
+
+      // 2. events.participants — array of member IDs
+      if (targetIds.size > 0) {
+        const eSnap = await getDocs(_collection(db, 'trips', TRIP_ID, 'events'));
+        for (const d of eSnap.docs) {
+          const parts: string[] = (d.data() as any).participants || [];
+          const filtered = parts.filter(id => !targetIds.has(id));
+          if (filtered.length !== parts.length) {
+            await _updateDoc(_doc(db, 'trips', TRIP_ID, 'events', d.id), { participants: filtered });
+            eventsCleared++;
+          }
+        }
+      }
+
+      // 3. expenses.payer (name) + expenses.splitWith (array of names)
+      const expSnap = await getDocs(_collection(db, 'trips', TRIP_ID, 'expenses'));
+      for (const d of expSnap.docs) {
+        const data = d.data() as any;
+        const updates: any = {};
+        if (data.payer === name) updates.payer = '';
+        if (Array.isArray(data.splitWith) && data.splitWith.includes(name)) {
+          updates.splitWith = data.splitWith.filter((n: string) => n !== name);
+        }
+        if (Object.keys(updates).length) {
+          await _updateDoc(_doc(db, 'trips', TRIP_ID, 'expenses', d.id), updates);
+          expensesCleared++;
+        }
+      }
+
+      // 4. lists.assignedTo (name) — fall back to 'all' so item remains usable
+      const lSnap = await getDocs(_collection(db, 'trips', TRIP_ID, 'lists'));
+      for (const d of lSnap.docs) {
+        const data = d.data() as any;
+        if (data.assignedTo === name) {
+          await _updateDoc(_doc(db, 'trips', TRIP_ID, 'lists', d.id), { assignedTo: 'all' });
+          listsCleared++;
+        }
+      }
+
+      // 5. bookings.participants — custom-booking collection (member IDs)
+      if (targetIds.size > 0) {
+        const bSnap = await getDocs(_collection(db, 'trips', TRIP_ID, 'bookings'));
+        for (const d of bSnap.docs) {
+          const parts: string[] = (d.data() as any).participants || [];
+          const filtered = parts.filter(id => !targetIds.has(id));
+          if (filtered.length !== parts.length) {
+            await _updateDoc(_doc(db, 'trips', TRIP_ID, 'bookings', d.id), { participants: filtered });
+            bookingsCleared++;
+          }
+        }
+      }
+
+      // 6. trip.memberOrder — remove the name
+      const tripRef = _doc(db, 'trips', TRIP_ID);
+      const tripSnap = await getDoc(tripRef);
+      if (tripSnap.exists()) {
+        const order: string[] = (tripSnap.data() as any).memberOrder || [];
+        if (order.includes(name)) {
+          await _updateDoc(tripRef, { memberOrder: order.filter(n => n !== name) });
+        }
+      }
+
+      // 7. finally delete the member docs themselves
+      await Promise.all(targets.map(d => deleteDoc(_doc(db, 'trips', TRIP_ID, 'members', d.id))));
+
+      const parts = [
+        targets.length > 0 ? `${targets.length} 張成員卡` : null,
+        eventsCleared   > 0 ? `${eventsCleared} 筆行程` : null,
+        expensesCleared > 0 ? `${expensesCleared} 筆費用` : null,
+        listsCleared    > 0 ? `${listsCleared} 筆待辦` : null,
+        bookingsCleared > 0 ? `${bookingsCleared} 筆預訂` : null,
+      ].filter(Boolean);
+      setCleanResult(
+        parts.length > 0
+          ? `已清除「${name}」：${parts.join('、')}`
+          : `找不到與「${name}」相關的資料`
+      );
+      setTargetName('');
+    } catch (e: any) {
+      console.error('[cleanup] delete by name failed', e);
       setCleanError(e?.message || '清理失敗，請稍後再試');
     } finally {
       setCleanBusy(false);
@@ -729,18 +833,37 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
           <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
             <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} /> 清理幽靈成員資料
           </p>
-          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', lineHeight: 1.5 }}>
-            掃描並刪除資料庫裡沒有名字的殘留成員紀錄（不會影響現有顯示的成員卡）。
+
+          {/* Mode 1: nameless cleanup */}
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 8px', lineHeight: 1.5 }}>
+            掃描並刪除資料庫裡沒有名字的殘留成員紀錄。
           </p>
           <button onClick={handleCleanOrphans} disabled={cleanBusy}
-            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: cleanBusy ? C.creamDark : 'var(--tm-card-bg)', color: cleanBusy ? 'white' : C.bark, fontWeight: 700, fontSize: 13, cursor: cleanBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cleanBusy ? 0.7 : 1 }}>
+            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, fontSize: 13, cursor: cleanBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cleanBusy ? 0.6 : 1 }}>
             <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} />
-            {cleanBusy ? '掃描中…' : '立即清理'}
+            {cleanBusy ? '處理中…' : '清理無名資料'}
           </button>
-          {cleanResult !== null && (
-            <p style={{ fontSize: 11, color: cleanResult > 0 ? '#4A7A35' : C.barkLight, marginTop: 8, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+
+          {/* Mode 2: delete by name + remove all references */}
+          <div style={{ borderTop: `1px solid ${C.creamDark}`, marginTop: 14, paddingTop: 12 }}>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 8px', lineHeight: 1.5 }}>
+              若有成員在各頁面看得到但成員卡消失，輸入名稱強制刪除並清除所有引用（行程、費用、待辦、預訂）。
+            </p>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <input value={targetName} onChange={e => setTargetName(e.target.value)}
+                placeholder="要刪除的成員名稱（例：A）"
+                style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-input-bg)', fontSize: 14, color: 'var(--tm-bark)', outline: 'none', fontFamily: FONT }} />
+              <button onClick={handleDeleteByName} disabled={cleanBusy || !targetName.trim()}
+                style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: '#9A3A3A', color: 'white', fontWeight: 700, fontSize: 13, cursor: (cleanBusy || !targetName.trim()) ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0, opacity: (cleanBusy || !targetName.trim()) ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                強制刪除
+              </button>
+            </div>
+          </div>
+
+          {cleanResult && (
+            <p style={{ fontSize: 11, color: '#4A7A35', marginTop: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, lineHeight: 1.5 }}>
               <FontAwesomeIcon icon={faCheck} />
-              {cleanResult > 0 ? `已清理 ${cleanResult} 筆幽靈資料` : '沒有發現幽靈資料'}
+              {cleanResult}
             </p>
           )}
           {cleanError && (
