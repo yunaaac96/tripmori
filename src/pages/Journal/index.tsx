@@ -324,7 +324,7 @@ export default function JournalPage({ journals, members, journalComments, firest
         </div>
       )}
 
-      <PageHeader title="旅行日誌" subtitle="記錄美好時刻 📸" emoji={<FontAwesomeIcon icon={faBook} />} color={C.blush} />
+      <PageHeader title="旅行日誌" subtitle="記錄美好時刻 📸" emoji={<FontAwesomeIcon icon={faBook} />} color={C.blush} className="tm-hero-page-blush" />
 
       <div style={{ padding: '12px 16px 80px' }}>
 
@@ -340,7 +340,7 @@ export default function JournalPage({ journals, members, journalComments, firest
 
         {/* 需要 Google 登入才能新增日誌 */}
         {!isReadOnly && !isEditorUnbound && googleUid && (
-          <button onClick={openForm} style={{ ...btnPrimary(C.earth), width: '100%', marginBottom: 16 }}>
+          <button onClick={openForm} className="tm-btn-solid-earth" style={{ ...btnPrimary(C.earth), width: '100%', marginBottom: 16 }}>
             ＋ 新增日誌
           </button>
         )}

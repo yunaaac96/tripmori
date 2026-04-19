@@ -853,7 +853,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 430, padding: '0 0 40px' }}>
         {/* Hero */}
-        <div style={{ background: 'linear-gradient(150deg, #EDF5F4 0%, #F5EDE6 100%)', padding: '44px 24px 32px', textAlign: 'center', borderBottom: '1px solid #E0D9CF' }}>
+        <div className="tm-hero-welcome" style={{ background: 'linear-gradient(150deg, #EDF5F4 0%, #F5EDE6 100%)', padding: '44px 24px 32px', textAlign: 'center', borderBottom: '1px solid #E0D9CF' }}>
           <img src="/logo.png" alt="TripMori" style={{ width: '72%', maxWidth: 260, display: 'block', margin: '0 auto 12px' }} />
           <p style={{ fontSize: 13, color: '#8B7565', margin: 0, fontFamily: FONT, fontWeight: 600, letterSpacing: 0.3 }}>你的旅行規劃小幫手</p>
         </div>
@@ -862,7 +862,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
 
           {/* Google sign-in / user status */}
           {googleUser ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 16, background: '#E0F0D8', marginBottom: 20, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
+            <div className="tm-status-success" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '12px 16px', borderRadius: 16, background: '#E0F0D8', marginBottom: 20, border: '1.5px solid #C2E0B4', boxShadow: C.shadowSm }}>
               {googleUser.photoURL && (
                 <img src={googleUser.photoURL} alt="" style={{ width: 36, height: 36, borderRadius: '50%', border: '2px solid #A0CC88', flexShrink: 0 }} />
               )}

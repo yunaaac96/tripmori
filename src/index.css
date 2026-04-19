@@ -256,6 +256,30 @@
   .tm-badge-private  { background: #2A1030 !important; color: #C090F0 !important; }
   .tm-expense-private-title { color: #C090F0 !important; }
 
+  /* Hero / page-header gradients — desaturated deep tones in dark mode so
+   * each section keeps its colour identity without glaring as a bright
+   * island on the dark page. Light-mode leaves inline styles untouched. */
+  .tm-hero-page-sage  { background: #2A3A2A !important; }
+  .tm-hero-page-sky   { background: #1E3A52 !important; }
+  .tm-hero-page-blush { background: #4A2830 !important; }
+  .tm-hero-page-earth { background: #3A2820 !important; }
+  .tm-hero-flight-card { background: linear-gradient(135deg, #1F2E1F, #2A3A2A) !important; }
+  .tm-hero-countdown   { background: #3E2F0C !important; }
+  .tm-hero-countdown span { color: #EDE4D8 !important; }
+  .tm-hero-weather-card { background: linear-gradient(135deg, #1C2838, #1E2A1C) !important; }
+  .tm-hero-weather-card p { color: #C0DCBF !important; }
+  .tm-hero-welcome { background: linear-gradient(150deg, #1A2821 0%, #2A1F14 100%) !important; }
+
+  /* CTA buttons that used C.earth / C.sage solid background — in dark mode
+   * those var values stay bright and pop too much; desaturate the specific
+   * CTA buttons while leaving the vars alone for small icons / accents. */
+  .tm-btn-solid-earth { background: #6A4528 !important; color: #F0DFCE !important; }
+  .tm-btn-solid-sage  { background: #4A6A52 !important; color: #E8F0E2 !important; }
+  /* Pale-green "status confirmed" bars (已登入 Google, 推播通知已開啟) stay
+   * as bright pastel islands in dark mode; swap to a muted deep sage. */
+  .tm-status-success { background: #1F2E1F !important; border-color: #3A5438 !important; }
+  .tm-status-success p, .tm-status-success span { color: #A8D48C !important; }
+
   /* ProjectHub sign-in area — dark mode readable contrast */
   .tm-signin-tip {
     background: #3A2C00 !important;

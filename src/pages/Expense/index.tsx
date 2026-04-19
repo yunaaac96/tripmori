@@ -1017,7 +1017,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       )}
 
       {/* ── Page header ── */}
-      <PageHeader title="旅行記帳" subtitle="支出記錄・分帳結算" emoji={<FontAwesomeIcon icon={faMoneyBill1} />} color={C.sage}>
+      <PageHeader title="旅行記帳" subtitle="支出記錄・分帳結算" emoji={<FontAwesomeIcon icon={faMoneyBill1} />} color={C.sage} className="tm-hero-page-sage">
         {!isVisitor && (
           <div style={{ marginTop: 12, background: 'rgba(255,255,255,0.2)', borderRadius: 14, padding: '12px 14px' }}>
             <p style={{ fontSize: 11, color: 'rgba(255,255,255,0.8)', margin: '0 0 2px' }}>
@@ -1205,7 +1205,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         {/* ── Action buttons ── */}
         {!isReadOnly && (
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-            <button onClick={() => setShowForm(true)} style={{ ...btnPrimary(C.earth), flex: 1 }}>
+            <button onClick={() => setShowForm(true)} className="tm-btn-solid-earth" style={{ ...btnPrimary(C.earth), flex: 1 }}>
               ＋ 新增支出
             </button>
           </div>

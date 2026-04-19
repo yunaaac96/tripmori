@@ -591,7 +591,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         </div>
       )}
 
-      <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji={<FontAwesomeIcon icon={faPlane} />} color={C.sky} />
+      <PageHeader title="旅行預訂" subtitle="機票・住宿・租車・票券" emoji={<FontAwesomeIcon icon={faPlane} />} color={C.sky} className="tm-hero-page-sky" />
 
       {editorDelToast && (
         <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#5A3A3A', color: 'white', borderRadius: 24, padding: '10px 22px', fontSize: 13, fontWeight: 700, zIndex: 500, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', whiteSpace: 'nowrap', fontFamily: FONT }}>
@@ -620,7 +620,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           </div>
         ) : (flights || []).map((f, idx) => (
           <div key={f.id || idx} style={{ borderRadius: 24, overflow: 'hidden', boxShadow: C.shadow, marginBottom: 14 }}>
-            <div style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 16px', position: 'relative' }}>
+            <div className="tm-hero-flight-card" style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 16px', position: 'relative' }}>
               {/* Per-card ✏️ — edit only (delete moved inside edit form) */}
               {!isReadOnly && (
                 <div style={{ position: 'absolute', top: 12, right: 12 }}>
@@ -1372,12 +1372,21 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             </p>
             {expensePrompt.participantNames && expensePrompt.participantNames.length > 0 ? (
               <div className="tm-badge-sage-sm" style={{ background: '#EAF3DE', borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
-                <p style={{ fontSize: 11, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 10 }} /> 將自動分帳給：<strong>{expensePrompt.participantNames.join('、')}</strong></p>
-                <p className="tm-amber-text" style={{ fontSize: 11, color: '#9A6800', margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10 }} /> 請記得至記帳填寫付款人</p>
+                <p style={{ fontSize: 11, margin: '0 0 4px', lineHeight: 1.6 }}>
+                  <FontAwesomeIcon icon={faSquareCheck} style={{ fontSize: 10, marginRight: 4 }} />
+                  將自動分帳給：<strong>{expensePrompt.participantNames.join('、')}</strong>
+                </p>
+                <p className="tm-amber-text" style={{ fontSize: 11, color: '#9A6800', margin: 0, lineHeight: 1.6 }}>
+                  <FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 10, marginRight: 4 }} />
+                  請記得至記帳填寫付款人
+                </p>
               </div>
             ) : (
               <div className="tm-badge-amber-sm" style={{ background: '#FFF2CC', borderRadius: 10, padding: '8px 12px', marginBottom: 16, textAlign: 'center' }}>
-                <p style={{ fontSize: 11, margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 10 }} /> 尚未設定參與人，新增後請至記帳確認分帳對象</p>
+                <p style={{ fontSize: 11, margin: 0, lineHeight: 1.6 }}>
+                  <FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 10, marginRight: 4 }} />
+                  尚未設定參與人，新增後請至記帳確認分帳對象
+                </p>
               </div>
             )}
             <div style={{ display: 'flex', gap: 10 }}>

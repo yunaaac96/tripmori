@@ -1194,7 +1194,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
         </div>
       )}
 
-      <PageHeader title={project?.title || '行程'} subtitle={project?.description || undefined} emoji={project?.emoji || '✈️'} color={C.sage}>
+      <PageHeader title={project?.title || '行程'} subtitle={project?.description || undefined} emoji={project?.emoji || '✈️'} color={C.sage} className="tm-hero-page-sage">
         {firestore.role === 'owner' && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
             <button onClick={openMetaEdit} style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
@@ -1206,7 +1206,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
           </div>
         )}
         {tripPhase !== 'during' && (
-          <div style={{ marginTop: 14, background: tripPhase === 'after' ? '#E8F5E2' : C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
+          <div className={tripPhase === 'after' ? '' : 'tm-hero-countdown'} style={{ marginTop: 14, background: tripPhase === 'after' ? '#E8F5E2' : C.honey, borderRadius: 18, padding: '12px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', boxShadow: C.shadowSm }}>
             {tripPhase === 'after' ? (
               <>
                 <span style={{ fontWeight: 700, fontSize: 12, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faPlane} />旅程已結束</span>
@@ -1261,7 +1261,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
 
         {/* Weather card + add button */}
         <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-          <div onClick={handleWeatherTap} style={{ flex: 1, background: 'linear-gradient(135deg,#D0E8F5,#E8F4E8)', borderRadius: 18, padding: '10px 14px', boxShadow: C.shadowSm, cursor: isOwner ? 'pointer' : 'default', userSelect: 'none' }}>
+          <div className="tm-hero-weather-card" onClick={handleWeatherTap} style={{ flex: 1, background: 'linear-gradient(135deg,#D0E8F5,#E8F4E8)', borderRadius: 18, padding: '10px 14px', boxShadow: C.shadowSm, cursor: isOwner ? 'pointer' : 'default', userSelect: 'none' }}>
             {currentWeather ? (
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{currentWeather.emoji}</span>
@@ -1286,7 +1286,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
             )}
           </div>
           {!isReadOnly && (
-            <button onClick={openAdd}
+            <button onClick={openAdd} className="tm-btn-solid-earth"
               style={{ flexShrink: 0, width: 56, height: 56, borderRadius: 18, background: C.earth, border: 'none', color: 'white', fontSize: 26, cursor: 'pointer', boxShadow: C.shadow, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               ＋
             </button>
