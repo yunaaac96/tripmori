@@ -98,7 +98,7 @@ async function transparent(size, coverage = STD_COVERAGE) {
 // already-trimmed source. Because the compass mark is visually heavy (solid
 // ring + letters + filled needle), it needs more breathing room than lighter
 // icons (Fitdays "F", Reminders dots) to read at the same perceived weight.
-const STD_COVERAGE = 0.60;
+const STD_COVERAGE = 0.68;
 
 // ── 180 — apple-touch-icon default (cream bg) + transparent variant ───────────
 await sharp(await onBg(180, CREAM, STD_COVERAGE)).toFile(join(ICONS_DIR, 'icon-180.png'));
