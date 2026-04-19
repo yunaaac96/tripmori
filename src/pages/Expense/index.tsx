@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
+import { avatarTextColor } from '../../utils/helpers';
 import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
@@ -660,7 +661,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                   <div className="tm-stat-paid-box" style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
                     <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {ms.paid.toLocaleString()}</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {ms.paid.toLocaleString()}</p>
                   </div>
                   <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ flex: 1, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
                     <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>{ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
@@ -680,7 +681,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   return (
                     <div key={e.id} style={{ background: 'var(--tm-card-bg)', borderRadius: 14, padding: '10px 12px', border: `1px solid ${C.creamDark}`, display: 'flex', alignItems: 'center', gap: 10 }}>
                       <div style={{ width: 36, height: 36, borderRadius: 10, background: cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <FontAwesomeIcon icon={CATEGORY_ICONS[e.category] || CATEGORY_ICONS.other} style={{ fontSize: 14, color: C.bark, opacity: 0.75 }} />
+                        <FontAwesomeIcon icon={CATEGORY_ICONS[e.category] || CATEGORY_ICONS.other} style={{ fontSize: 14, color: avatarTextColor(cat?.bg), opacity: 0.85 }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
                         <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description}</p>
@@ -1254,9 +1255,14 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
-                    <div style={{ width: 40, height: 40, borderRadius: 12, background: isSettlement ? '#EAF3DE' : cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                      <FontAwesomeIcon icon={CATEGORY_ICONS[isSettlement ? 'settlement' : (e.category || 'other')] || CATEGORY_ICONS.other} style={{ fontSize: 16, color: C.bark, opacity: 0.75 }} />
-                    </div>
+                    {(() => {
+                      const tileBg = isSettlement ? '#EAF3DE' : cat?.bg;
+                      return (
+                        <div style={{ width: 40, height: 40, borderRadius: 12, background: tileBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <FontAwesomeIcon icon={CATEGORY_ICONS[isSettlement ? 'settlement' : (e.category || 'other')] || CATEGORY_ICONS.other} style={{ fontSize: 16, color: avatarTextColor(tileBg), opacity: 0.85 }} />
+                        </div>
+                      );
+                    })()}
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>

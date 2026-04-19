@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import { C, FONT } from '../../App';
+import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
@@ -613,7 +614,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
           const Av = ({ m }: { m: any }) => m.avatarUrl
             ? <img src={m.avatarUrl} alt={m.name} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
             : <div style={{ width: 20, height: 20, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>
+                <span style={{ fontSize: 9, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
               </div>;
 
           return (
@@ -696,7 +697,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                   return m.avatarUrl
                     ? <img src={m.avatarUrl} alt={m.name} style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
                     : <div style={{ width: 16, height: 16, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <span style={{ fontSize: 8, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>
+                        <span style={{ fontSize: 8, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
                       </div>;
                 };
 

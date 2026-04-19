@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { auth } from '../../config/firebase';
 import { C, FONT, cardStyle, ExpandableNotes } from '../../App';
+import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -75,7 +76,7 @@ const BOOKING_TYPES: Record<string, { emoji: string; label: string; bg: string; 
   transport: { emoji: '🚌', label: '交通票券', bg: '#D8EDF8', color: '#2A6A9A' },
   show:      { emoji: '🎭', label: '表演/票券', bg: '#F0E8FF', color: '#6A3A9A' },
   ferry:     { emoji: '🛥', label: '船票/渡輪', bg: '#E0F4F8', color: '#2A7A8A' },
-  other:     { emoji: '📦', label: '其他',      bg: '#F0F0F0', color: '#6A6A6A' },
+  other:     { emoji: '📦', label: '其他',      bg: '#F0F0F0', color: '#3A3A3A' },
 };
 
 const EMPTY_CUSTOM_FORM = {
@@ -463,7 +464,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         {ptc.map((m: any, i: number) => (
           <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
             {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ fontSize: 10, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+              : <span style={{ fontSize: 10, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
           </div>
         ))}
       </div>
@@ -488,7 +489,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.2, transition: 'opacity 0.15s' }}>
                 <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                    : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
                 </div>
                 <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center' as const, lineHeight: 1.2, wordBreak: 'break-all' as const }}>{m.name}</span>
               </button>
@@ -986,7 +987,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               {/* ── Flight form ── */}
               {editType === 'flight' && (<>
                 {allFlightsForm.map((f, idx) => (
-                  <div key={idx} style={{ border: `1.5px solid ${C.creamDark}`, borderRadius: 16, padding: '14px 12px', marginBottom: 4 }}>
+                  <div key={idx} style={{ border: `1.5px solid ${C.creamDark}`, borderRadius: 16, padding: '14px 12px', marginBottom: 4, background: 'var(--tm-card-bg)' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10 }}>
                       <div style={{ display: 'flex', gap: 6 }}>
                         {(['去程', '回程'] as const).map(dir => (

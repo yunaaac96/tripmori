@@ -5,6 +5,7 @@ import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../.
 import CurrencySearch from '../../components/CurrencySearch';
 import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary, ExpandableNotes } from '../../App';
+import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTree, faUtensils, faPalette, faBus, faBed, faEllipsis, faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faClipboardList, faLocationDot, faPlane, faCar, faTicket, faCalendarDays, faThumbtack, faPersonWalking, faClock, faRocket } from '@fortawesome/free-solid-svg-icons';
@@ -1091,7 +1092,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
                             <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                               {m.avatarUrl
                                 ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                : <span style={{ fontSize: 16, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                                : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
                             </div>
                             <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-all' }}>{m.name}</span>
                           </button>

@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { C, FONT } from '../../App';
+import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen } from '@fortawesome/free-solid-svg-icons';
@@ -791,7 +792,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                         : null;
                     return (
                       <div key={m.id} className={rowClass} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, padding: '6px 10px' }}>
-                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: '#333', flexShrink: 0, overflow: 'hidden' }}>
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: avatarTextColor(m.color), flexShrink: 0, overflow: 'hidden' }}>
                           {m.avatarUrl
                             ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             : m.name?.[0]?.toUpperCase()
@@ -853,7 +854,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                   </div>
                 )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: C.bark, border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>
+                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: avatarTextColor(m.color), border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>
                     {m.avatarUrl
                       ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : m.name?.[0]?.toUpperCase()
