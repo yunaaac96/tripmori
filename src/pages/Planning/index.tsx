@@ -686,7 +686,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
               // ── Packing：三分區渲染 ──────────────────────────────────
               if (s.id === 'packing') {
                 const viewItems = isReadOnly ? visitorPackingItems : packingForTab;
-                const vGlobal   = isReadOnly ? visitorPackingItems : packingGlobal;
+                const vGlobal   = isReadOnly ? visitorPackingItems.filter((i: any) => !(i.checked ?? false)) : packingGlobal;
                 const vPersonal = isReadOnly ? [] : packingPersonal;
                 const vAssigned = isReadOnly ? [] : packingAssigned;
 

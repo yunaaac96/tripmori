@@ -586,16 +586,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         ) : (flights || []).map((f, idx) => (
           <div key={f.id || idx} style={{ borderRadius: 24, overflow: 'hidden', boxShadow: C.shadow, marginBottom: 14 }}>
             <div style={{ background: `linear-gradient(135deg, ${C.sageDark}, ${C.sage})`, padding: '16px 20px 16px', position: 'relative' }}>
-              {/* Per-card ✏️🗑️ — edit / delete */}
+              {/* Per-card ✏️ — edit only (delete moved inside edit form) */}
               {!isReadOnly && (
-                <div style={{ position: 'absolute', top: 12, right: 12, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <div style={{ position: 'absolute', top: 12, right: 12 }}>
                   <button onClick={() => openSingleFlightEdit(idx)}
                     style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,255,255,0.25)', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                     <FontAwesomeIcon icon={faPen} />
-                  </button>
-                  <button onClick={() => handleDeleteFlight(idx)}
-                    style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: 'rgba(255,100,100,0.35)', color: 'white', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                    <FontAwesomeIcon icon={faTrashCan} />
                   </button>
                 </div>
               )}
@@ -1226,6 +1222,10 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={singleFlightForm.notes || ''} onChange={e => setSF('notes', e.target.value)} /></Field>
               <ParticipantSelector value={singleFlightParticipants} onChange={setSingleFlightParticipants} />
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
+                <button onClick={() => { setEditFlightIdx(null); handleDeleteFlight(editFlightIdx!); }}
+                  style={{ padding: '12px 14px', borderRadius: 12, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <FontAwesomeIcon icon={faTrashCan} />
+                </button>
                 <button onClick={() => setEditFlightIdx(null)}
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSingleFlightSave} disabled={staticSaving}

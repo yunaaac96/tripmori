@@ -725,7 +725,7 @@ function App() {
         {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={project} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
+        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={activeProject} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
@@ -747,7 +747,7 @@ function App() {
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {members.filter((m: any) => !m.googleUid)
                       .sort((a: any, b: any) => {
-                        const order: string[] = project?.memberOrder || [];
+                        const order: string[] = activeProject?.memberOrder || [];
                         const ai = order.indexOf(a.name);
                         const bi = order.indexOf(b.name);
                         if (ai !== -1 && bi !== -1) return ai - bi;
