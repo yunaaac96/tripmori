@@ -256,6 +256,14 @@
   .tm-badge-private  { background: #2A1030 !important; color: #C090F0 !important; }
   .tm-expense-private-title { color: #C090F0 !important; }
 
+  /* ProjectHub sign-in area — dark mode readable contrast */
+  .tm-signin-tip {
+    background: #3A2C00 !important;
+    border-color: #6A4A00 !important;
+    color: #E8C86A !important;
+  }
+  .tm-signin-btn-text { color: #7AB0F0 !important; }
+
   /* Member-color elements — inset dark overlay preserves hue, keeps text readable */
   /* Works by layering a translucent black on top without affecting child text */
   .tm-filter-tab-active  { box-shadow: inset 0 0 0 1000px rgba(0,0,0,0.48) !important; }
@@ -284,6 +292,14 @@
 /* Role badges — light mode */
 .tm-badge-owner  { background: #4A7A35; color: #fff; }
 .tm-badge-editor { background: #9A6800; color: #fff; }
+
+/* ProjectHub sign-in area — light mode defaults */
+.tm-signin-tip {
+  background: #FFF8E1;
+  border: 1px solid #F0D080;
+  color: #6B5E3A;
+}
+.tm-signin-btn-text { color: #1C3461; }
 
 /* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
 .tm-hscroll {
