@@ -25,9 +25,34 @@ const CREAM     = { r: 247, g: 244, b: 235, alpha: 1 };   // #F7F4EB
 const DARK_BG   = { r: 28,  g: 26,  b: 23,  alpha: 1 };   // #1C1A17
 const TRANS     = { r: 0,   g: 0,   b: 0,   alpha: 0 };
 
+// Brand palette (matches src/index.css light-mode tokens) — remap the saturated
+// forest green & gold-amber in brand-icon.png to the softer Japanese-style
+// website colours so the installed app icon visually matches the app.
+const GREEN_SRC = [64, 96, 80];    // #406050 forest green in source
+const AMBER_SRC = [208, 160, 96];  // #D0A060 gold-amber in source
+const GREEN_DST = [143, 175, 126]; // #8FAF7E --tm-sage
+const AMBER_DST = [196, 149, 106]; // #C4956A --tm-earth
+
+// Pre-process the source once: remap dominant brand colours to website palette.
+async function softenedSource() {
+  const { data, info } = await sharp(SRC).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const out = Buffer.alloc(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
+    if (a < 10) { out[i+3] = 0; continue; }
+    const dGreen = Math.abs(r - GREEN_SRC[0]) + Math.abs(g - GREEN_SRC[1]) + Math.abs(b - GREEN_SRC[2]);
+    const dAmber = Math.abs(r - AMBER_SRC[0]) + Math.abs(g - AMBER_SRC[1]) + Math.abs(b - AMBER_SRC[2]);
+    const [nr, ng, nb] = dGreen <= dAmber ? GREEN_DST : AMBER_DST;
+    out[i] = nr; out[i + 1] = ng; out[i + 2] = nb; out[i + 3] = a;
+  }
+  return sharp(out, { raw: { width: info.width, height: info.height, channels: 4 } }).png().toBuffer();
+}
+
+const SOFT_SRC = await softenedSource();
+
 async function onBg(size, bg, coverage = 1.0) {
   const inner = Math.round(size * coverage);
-  const iconBuf = await sharp(SRC)
+  const iconBuf = await sharp(SOFT_SRC)
     .resize(inner, inner, { fit: 'contain', background: TRANS })
     .toBuffer();
 
@@ -39,7 +64,7 @@ async function onBg(size, bg, coverage = 1.0) {
 
 async function mono(size) {
   // Turn any non-transparent pixel into solid black; keep alpha as-is.
-  const { data, info } = await sharp(SRC)
+  const { data, info } = await sharp(SOFT_SRC)
     .resize(size, size, { fit: 'contain', background: TRANS })
     .ensureAlpha()
     .raw()
@@ -54,24 +79,29 @@ async function mono(size) {
 }
 
 async function transparent(size) {
-  return sharp(SRC).resize(size, size, { fit: 'contain', background: TRANS }).png().toBuffer();
+  return sharp(SOFT_SRC).resize(size, size, { fit: 'contain', background: TRANS }).png().toBuffer();
 }
 
+// Standard icons use ~88% coverage (≈12% inner padding) to match iOS app-icon
+// visual rhythm — without this the compass sits flush against the rounded
+// square edge and reads larger than neighbouring apps.
+const STD_COVERAGE = 0.88;
+
 // ── 180 — apple-touch-icon default (cream bg) + transparent variant ───────────
-await sharp(await onBg(180, CREAM)).toFile(join(ICONS_DIR, 'icon-180.png'));
+await sharp(await onBg(180, CREAM, STD_COVERAGE)).toFile(join(ICONS_DIR, 'icon-180.png'));
 console.log('icon-180.png');
 await sharp(await transparent(180)).toFile(join(ICONS_DIR, 'icon-180-transparent.png'));
 console.log('icon-180-transparent.png');
 
 // ── 192 / 512 — light (cream) ─────────────────────────────────────────────────
 for (const size of [192, 512]) {
-  await sharp(await onBg(size, CREAM)).toFile(join(ICONS_DIR, `icon-${size}-light.png`));
+  await sharp(await onBg(size, CREAM, STD_COVERAGE)).toFile(join(ICONS_DIR, `icon-${size}-light.png`));
   console.log(`icon-${size}-light.png`);
 }
 
 // ── 192 / 512 — dark (warm charcoal, no recolour needed: mark is already mid-tone) ─
 for (const size of [192, 512]) {
-  await sharp(await onBg(size, DARK_BG)).toFile(join(ICONS_DIR, `icon-${size}-dark.png`));
+  await sharp(await onBg(size, DARK_BG, STD_COVERAGE)).toFile(join(ICONS_DIR, `icon-${size}-dark.png`));
   console.log(`icon-${size}-dark.png`);
 }
 
