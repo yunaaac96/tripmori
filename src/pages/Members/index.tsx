@@ -795,85 +795,6 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
         </div>
       )}
 
-      {/* ── Notion backup（Owner only）── */}
-      {firestore.role === 'owner' && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FontAwesomeIcon icon={faBookmark} style={{ fontSize: 13 }} /> 備份到 Notion
-          </p>
-          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px' }}>將行程資料（成員、行程、費用、日誌）匯出一份快照到 Notion 備份資料庫。</p>
-          <button
-            onClick={handleBackupToNotion}
-            disabled={notionBusy}
-            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', background: notionBusy ? C.creamDark : '#2F2F2F', color: 'white', fontWeight: 700, fontSize: 13, cursor: notionBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: notionBusy ? 0.6 : 1 }}>
-            <FontAwesomeIcon icon={faBookmark} style={{ fontSize: 13 }} />
-            {notionBusy ? '備份中…' : '立即備份到 Notion'}
-          </button>
-          {notionResult && (
-            <div className="tm-notion-success" style={{ marginTop: 8, padding: '8px 10px', background: '#E0F0D8', borderRadius: 10 }}>
-              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faCheck} /> 備份成功！</p>
-              <p style={{ fontSize: 11, color: '#4A7A35', margin: 0 }}>費用總計 NT$ {notionResult.totalTWD.toLocaleString()}</p>
-              {notionResult.url && (
-                <a href={notionResult.url} target="_blank" rel="noreferrer"
-                  style={{ fontSize: 11, color: '#2A6A9A', display: 'block', marginTop: 4, textDecoration: 'underline' }}>
-                  在 Notion 中查看 →
-                </a>
-              )}
-            </div>
-          )}
-          {notionError && (
-            <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faTriangleExclamation} /> {notionError}</p>
-          )}
-        </div>
-      )}
-
-      {/* ── 清理幽靈成員資料（Owner only）── */}
-      {firestore.role === 'owner' && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} /> 清理幽靈成員資料
-          </p>
-
-          {/* Mode 1: nameless cleanup */}
-          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 8px', lineHeight: 1.5 }}>
-            掃描並刪除資料庫裡沒有名字的殘留成員紀錄。
-          </p>
-          <button onClick={handleCleanOrphans} disabled={cleanBusy}
-            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, fontSize: 13, cursor: cleanBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cleanBusy ? 0.6 : 1 }}>
-            <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} />
-            {cleanBusy ? '處理中…' : '清理無名資料'}
-          </button>
-
-          {/* Mode 2: delete by name + remove all references */}
-          <div style={{ borderTop: `1px solid ${C.creamDark}`, marginTop: 14, paddingTop: 12 }}>
-            <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 8px', lineHeight: 1.5 }}>
-              若有成員在各頁面看得到但成員卡消失，輸入名稱強制刪除並清除所有引用（行程、費用、待辦、預訂）。
-            </p>
-            <div style={{ display: 'flex', gap: 8 }}>
-              <input value={targetName} onChange={e => setTargetName(e.target.value)}
-                placeholder="要刪除的成員名稱（例：A）"
-                style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-input-bg)', fontSize: 14, color: 'var(--tm-bark)', outline: 'none', fontFamily: FONT }} />
-              <button onClick={handleDeleteByName} disabled={cleanBusy || !targetName.trim()}
-                style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: '#9A3A3A', color: 'white', fontWeight: 700, fontSize: 13, cursor: (cleanBusy || !targetName.trim()) ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0, opacity: (cleanBusy || !targetName.trim()) ? 0.5 : 1, whiteSpace: 'nowrap' }}>
-                強制刪除
-              </button>
-            </div>
-          </div>
-
-          {cleanResult && (
-            <p style={{ fontSize: 11, color: '#4A7A35', marginTop: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, lineHeight: 1.5 }}>
-              <FontAwesomeIcon icon={faCheck} />
-              {cleanResult}
-            </p>
-          )}
-          {cleanError && (
-            <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-              <FontAwesomeIcon icon={faTriangleExclamation} /> {cleanError}
-            </p>
-          )}
-        </div>
-      )}
-
       {/* ── PWA install（顯示條件：瀏覽器支援且尚未安裝）── */}
       {pwaInstallAvailable && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
@@ -1174,6 +1095,86 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
           </div>
         )}
           </>
+        )}
+
+        {/* ── Notion backup（Owner only）— moved to bottom of page so the
+            administrative actions sit below the member cards ── */}
+        {firestore.role === 'owner' && (
+          <div style={{ marginTop: 12, background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FontAwesomeIcon icon={faBookmark} style={{ fontSize: 13 }} /> 備份到 Notion
+            </p>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px' }}>將行程資料（成員、行程、費用、日誌）匯出一份快照到 Notion 備份資料庫。</p>
+            <button
+              onClick={handleBackupToNotion}
+              disabled={notionBusy}
+              style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', background: notionBusy ? C.creamDark : '#2F2F2F', color: 'white', fontWeight: 700, fontSize: 13, cursor: notionBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: notionBusy ? 0.6 : 1 }}>
+              <FontAwesomeIcon icon={faBookmark} style={{ fontSize: 13 }} />
+              {notionBusy ? '備份中…' : '立即備份到 Notion'}
+            </button>
+            {notionResult && (
+              <div className="tm-notion-success" style={{ marginTop: 8, padding: '8px 10px', background: '#E0F0D8', borderRadius: 10 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faCheck} /> 備份成功！</p>
+                <p style={{ fontSize: 11, color: '#4A7A35', margin: 0 }}>費用總計 NT$ {notionResult.totalTWD.toLocaleString()}</p>
+                {notionResult.url && (
+                  <a href={notionResult.url} target="_blank" rel="noreferrer"
+                    style={{ fontSize: 11, color: '#2A6A9A', display: 'block', marginTop: 4, textDecoration: 'underline' }}>
+                    在 Notion 中查看 →
+                  </a>
+                )}
+              </div>
+            )}
+            {notionError && (
+              <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faTriangleExclamation} /> {notionError}</p>
+            )}
+          </div>
+        )}
+
+        {/* ── 清理幽靈成員資料（Owner only）— bottom of page ── */}
+        {firestore.role === 'owner' && (
+          <div style={{ marginTop: 12, background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} /> 清理幽靈成員資料
+            </p>
+
+            {/* Mode 1: nameless cleanup */}
+            <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 8px', lineHeight: 1.5 }}>
+              掃描並刪除資料庫裡沒有名字的殘留成員紀錄。
+            </p>
+            <button onClick={handleCleanOrphans} disabled={cleanBusy}
+              style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, fontSize: 13, cursor: cleanBusy ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: cleanBusy ? 0.6 : 1 }}>
+              <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 12 }} />
+              {cleanBusy ? '處理中…' : '清理無名資料'}
+            </button>
+
+            {/* Mode 2: delete by name + remove all references */}
+            <div style={{ borderTop: `1px solid ${C.creamDark}`, marginTop: 14, paddingTop: 12 }}>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 8px', lineHeight: 1.5 }}>
+                若有成員在各頁面看得到但成員卡消失，輸入名稱強制刪除並清除所有引用（行程、費用、待辦、預訂）。
+              </p>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input value={targetName} onChange={e => setTargetName(e.target.value)}
+                  placeholder="要刪除的成員名稱（例：A）"
+                  style={{ flex: 1, minWidth: 0, boxSizing: 'border-box', padding: '10px 12px', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-input-bg)', fontSize: 14, color: 'var(--tm-bark)', outline: 'none', fontFamily: FONT }} />
+                <button onClick={handleDeleteByName} disabled={cleanBusy || !targetName.trim()}
+                  style={{ padding: '10px 14px', borderRadius: 10, border: 'none', background: '#9A3A3A', color: 'white', fontWeight: 700, fontSize: 13, cursor: (cleanBusy || !targetName.trim()) ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0, opacity: (cleanBusy || !targetName.trim()) ? 0.5 : 1, whiteSpace: 'nowrap' }}>
+                  強制刪除
+                </button>
+              </div>
+            </div>
+
+            {cleanResult && (
+              <p style={{ fontSize: 11, color: '#4A7A35', marginTop: 10, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5, lineHeight: 1.5 }}>
+                <FontAwesomeIcon icon={faCheck} />
+                {cleanResult}
+              </p>
+            )}
+            {cleanError && (
+              <p style={{ fontSize: 11, color: '#9A3A3A', marginTop: 6, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
+                <FontAwesomeIcon icon={faTriangleExclamation} /> {cleanError}
+              </p>
+            )}
+          </div>
         )}
       </div>
     </div>
