@@ -869,13 +869,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </span>
               </div>
             ) : null}
-            {/* ── Notes (respect line breaks) ── */}
-            {car.notes && (
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 6, margin: '0 0 10px' }}>
-                <FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 10, color: '#9A3A3A', marginTop: 4, flexShrink: 0 }} />
-                <p style={{ fontSize: 11, color: '#9A3A3A', fontWeight: 600, margin: 0, whiteSpace: 'pre-wrap', lineHeight: 1.6 }}>{car.notes}</p>
-              </div>
-            )}
+            {/* ── Notes: auto-collapse when long, same pattern as flights / hotels / 其他預訂 ── */}
+            {car.notes && <ExpandableNotes notes={car.notes} color={C.barkLight} margin="0 0 10px" />}
             {/* ── Participants ── */}
             <ParticipantAvatars ids={car.participants} />
             {/* ── QR Code ── */}
