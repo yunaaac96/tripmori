@@ -561,6 +561,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
         subtitle={headerSubtitle}
         emoji={<FontAwesomeIcon icon={faUsers} />}
         color={C.earth}
+        className="tm-hero-page-earth"
       />
 
       {/* Copy toast */}
@@ -696,7 +697,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
             <FontAwesomeIcon icon={faMobileScreen} style={{ fontSize: 13 }} /> 安裝 App
           </p>
           <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px' }}>將 TripMori 加入主畫面，享受原生 App 體驗。</p>
-          <button onClick={onPwaInstall}
+          <button onClick={onPwaInstall} className="tm-btn-solid-sage"
             style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
             <FontAwesomeIcon icon={faDownload} style={{ fontSize: 13 }} />
             加入主畫面

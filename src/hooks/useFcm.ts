@@ -34,8 +34,14 @@ export async function enableFcmForMember(tripId: string, memberId: string): Prom
         { fcmTokens: arrayUnion(token) }
       );
     }
-  } catch (err) {
-    console.warn('[FCM] getToken failed:', err);
+  } catch (err: any) {
+    // Silently skip "not-found" — the member doc was deleted between bind
+    // time and this token refresh. The next bind will re-register the token,
+    // so the warning is just noise. Real errors (network, permission, etc.)
+    // still log.
+    if (err?.code !== 'not-found' && !/No document to update/.test(String(err?.message))) {
+      console.warn('[FCM] getToken failed:', err);
+    }
   }
   return permission;
 }

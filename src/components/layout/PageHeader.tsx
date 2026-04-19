@@ -7,12 +7,15 @@ interface Props {
   subtitleAction?: ReactNode;
   emoji?: ReactNode;
   color: string;
+  // Optional class — lets dark-mode CSS override the inline `color` prop
+  // for a desaturated / deep-tone variant via an `!important` rule.
+  className?: string;
   children?: ReactNode;
 }
 
-export default function PageHeader({ title, subtitle, subtitleAction, emoji, color, children }: Props) {
+export default function PageHeader({ title, subtitle, subtitleAction, emoji, color, className, children }: Props) {
   return (
-    <div style={{
+    <div className={className} style={{
       background: color,
       padding: '52px 16px 20px',
       borderRadius: '0 0 28px 28px',
