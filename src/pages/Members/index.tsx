@@ -854,7 +854,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                   </div>
                 )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 700, color: avatarTextColor(m.color), border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>
+                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: avatarTextColor(m.color), border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>
                     {m.avatarUrl
                       ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : m.name?.[0]?.toUpperCase()
