@@ -8,7 +8,6 @@ import { Client as NotionClient } from '@notionhq/client';
 // ── Notion backup config ───────────────────────────────────────────────────
 const NOTION_API_KEY        = defineSecret('NOTION_API_KEY');
 const NOTION_DATABASE_ID    = 'd8ebd7ff-76c7-4ca7-970c-25c2cb845c26'; // 行程備份紀錄（database）
-const NOTION_DATASOURCE_ID  = 'd8ebd7ff-76c7-4ca7-970c-25c2cb845c26'; // same — data source ID for query
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -467,13 +466,17 @@ export const backupTripToNotion = onCall(
     const expenses = expensesSnap.docs
       .filter(d => !d.data().isSettlement)
       .map(d => d.data())
-      .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''))
+      .sort((a, b) => {
+        const aMs = a.createdAt?.toMillis?.() ?? 0;
+        const bMs = b.createdAt?.toMillis?.() ?? 0;
+        return bMs - aMs;
+      })
       .slice(0, 10);
 
     // ── Mark previous backups of same trip as 舊版 ────────────────────────────
     try {
       const existing = await notion.dataSources.query({
-        dataSourceId: NOTION_DATASOURCE_ID,
+        dataSourceId: NOTION_DATABASE_ID,
         filter: {
           property: 'Firestore ID',
           rich_text: { equals: tripId },
@@ -485,8 +488,8 @@ export const backupTripToNotion = onCall(
           properties: { '狀態': { select: { name: '舊版' } } },
         } as any);
       }
-    } catch (_) {
-      // Non-fatal: marking old backups failed, continue
+    } catch (err: any) {
+      console.warn('Non-fatal: marking old backups failed:', err?.message ?? err);
     }
 
     // ── Build Notion page content ─────────────────────────────────────────────
@@ -542,34 +545,48 @@ ${journalLines}
 
 *備份時間：${backupTime}　|　Firestore ID：\`${tripId}\`*`;
 
+    // ── Split long content into ≤1800-char paragraph blocks ──────────────────
+    function splitIntoBlocks(text: string): any[] {
+      const chunks: string[] = [];
+      let i = 0;
+      while (i < text.length) {
+        chunks.push(text.slice(i, i + 1800));
+        i += 1800;
+      }
+      return chunks.map(chunk => ({
+        object: 'block',
+        type: 'paragraph',
+        paragraph: { rich_text: [{ type: 'text', text: { content: chunk } }] },
+      }));
+    }
+
     // ── Create Notion page in database ────────────────────────────────────────
-    const page = await notion.pages.create({
-      parent:     { database_id: NOTION_DATABASE_ID },
-      properties: {
-        '行程名稱':      { title:     [{ text: { content: `${tripData.emoji || '✈️'} ${tripData.title || '未命名行程'}` } }] },
-        'Firestore ID': { rich_text: [{ text: { content: tripId } }] },
-        '行程日期':      { rich_text: [{ text: { content: dateRange } }] },
-        '成員數':        { number:    memberCount },
-        '活動數':        { number:    eventCount },
-        '費用總計 TWD':  { number:    Math.round(totalTWD) },
-        '幣別':          { rich_text: [{ text: { content: currency } }] },
-        '狀態':          { select:    { name: '最新' } },
-      },
-      children: [
-        {
-          object: 'block',
-          type:   'paragraph',
-          paragraph: {
-            rich_text: [{ type: 'text', text: { content: pageContent } }],
-          },
+    let page: any;
+    try {
+      page = await notion.pages.create({
+        parent:     { database_id: NOTION_DATABASE_ID },
+        properties: {
+          '行程名稱':      { title:     [{ text: { content: `${tripData.emoji || '✈️'} ${tripData.title || '未命名行程'}` } }] },
+          'Firestore ID': { rich_text: [{ text: { content: tripId } }] },
+          '行程日期':      { rich_text: [{ text: { content: dateRange } }] },
+          '成員數':        { number:    memberCount },
+          '活動數':        { number:    eventCount },
+          '費用總計 TWD':  { number:    Math.round(totalTWD) },
+          '幣別':          { rich_text: [{ text: { content: currency } }] },
+          '狀態':          { select:    { name: '最新' } },
         },
-      ],
-    });
+        children: splitIntoBlocks(pageContent),
+      });
+    } catch (err: any) {
+      const detail = JSON.stringify(err?.body ?? err?.message ?? String(err));
+      console.error('Notion pages.create error:', detail);
+      throw new HttpsError('internal', `Notion error: ${err?.message ?? detail}`);
+    }
 
     return {
       success:      true,
       notionPageId: page.id,
-      notionUrl:    (page as any).url || '',
+      notionUrl:    page.url || '',
       memberCount,
       eventCount,
       expenseCount: expenses.length,
