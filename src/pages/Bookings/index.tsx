@@ -479,7 +479,20 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           參與人 <span style={{ fontWeight: 400, opacity: 0.7 }}>(選填)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
-          {[...members].sort((a: any, b: any) => { if (a.id === myMember?.id) return -1; if (b.id === myMember?.id) return 1; return 0; }).map((m: any) => {
+          {(() => {
+            // Use the trip's memberOrder (set on the Members page) as the
+            // canonical sort, then pin the current user's card to the front.
+            const order: string[] = project?.memberOrder || [];
+            const indexOf = (m: any) => {
+              const i = order.indexOf(m.name);
+              return i === -1 ? order.length : i;
+            };
+            return [...members].sort((a: any, b: any) => {
+              if (a.id === myMember?.id) return -1;
+              if (b.id === myMember?.id) return 1;
+              return indexOf(a) - indexOf(b);
+            });
+          })().map((m: any) => {
             const sel = value.includes(m.id);
             const canToggle = isOwner || myMember?.id === m.id;
             return (
@@ -1009,15 +1022,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                     </Row>
                     <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '6px 0 4px' }}>出發</p>
                     <Row>
-                      <Field label="機場代碼"><input style={inSt} value={f.dep?.airport || ''} onChange={e => setFDep(idx, 'airport', e.target.value)} /></Field>
-                      <Field label="機場名稱"><input style={inSt} value={f.dep?.name || ''} onChange={e => setFDep(idx, 'name', e.target.value)} /></Field>
-                      <Field label="時間"><input style={inSt} type="time" value={f.dep?.time || ''} onChange={e => setFDep(idx, 'time', e.target.value)} /></Field>
+                      <Field label="機場代碼" flex={0.7}><input style={inSt} value={f.dep?.airport || ''} onChange={e => setFDep(idx, 'airport', e.target.value)} /></Field>
+                      <Field label="機場名稱" flex={1.15}><input style={inSt} value={f.dep?.name || ''} onChange={e => setFDep(idx, 'name', e.target.value)} /></Field>
+                      <Field label="時間" flex={1.15}><input style={inSt} type="time" value={f.dep?.time || ''} onChange={e => setFDep(idx, 'time', e.target.value)} /></Field>
                     </Row>
                     <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '6px 0 4px' }}>抵達</p>
                     <Row>
-                      <Field label="機場代碼"><input style={inSt} value={f.arr?.airport || ''} onChange={e => setFArr(idx, 'airport', e.target.value)} /></Field>
-                      <Field label="機場名稱"><input style={inSt} value={f.arr?.name || ''} onChange={e => setFArr(idx, 'name', e.target.value)} /></Field>
-                      <Field label="時間"><input style={inSt} type="time" value={f.arr?.time || ''} onChange={e => setFArr(idx, 'time', e.target.value)} /></Field>
+                      <Field label="機場代碼" flex={0.7}><input style={inSt} value={f.arr?.airport || ''} onChange={e => setFArr(idx, 'airport', e.target.value)} /></Field>
+                      <Field label="機場名稱" flex={1.15}><input style={inSt} value={f.arr?.name || ''} onChange={e => setFArr(idx, 'name', e.target.value)} /></Field>
+                      <Field label="時間" flex={1.15}><input style={inSt} type="time" value={f.arr?.time || ''} onChange={e => setFArr(idx, 'time', e.target.value)} /></Field>
                     </Row>
                     <Field label="每人票價（NT$，選填）"><input style={inSt} type="number" value={f.costPerPerson || ''} onChange={e => setFF(idx, 'costPerPerson', e.target.value)} /></Field>
                     <Field label="備註"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={f.notes || ''} onChange={e => setFF(idx, 'notes', e.target.value)} /></Field>
@@ -1209,15 +1222,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               </Row>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '2px 0 0' }}>出發</p>
               <Row>
-                <Field label="機場代碼"><input style={inSt} value={singleFlightForm.dep?.airport || ''} onChange={e => setSFDep('airport', e.target.value)} /></Field>
-                <Field label="機場名稱"><input style={inSt} value={singleFlightForm.dep?.name || ''} onChange={e => setSFDep('name', e.target.value)} /></Field>
-                <Field label="時間"><input style={inSt} type="time" value={singleFlightForm.dep?.time || ''} onChange={e => setSFDep('time', e.target.value)} /></Field>
+                <Field label="機場代碼" flex={0.7}><input style={inSt} value={singleFlightForm.dep?.airport || ''} onChange={e => setSFDep('airport', e.target.value)} /></Field>
+                <Field label="機場名稱" flex={1.15}><input style={inSt} value={singleFlightForm.dep?.name || ''} onChange={e => setSFDep('name', e.target.value)} /></Field>
+                <Field label="時間" flex={1.15}><input style={inSt} type="time" value={singleFlightForm.dep?.time || ''} onChange={e => setSFDep('time', e.target.value)} /></Field>
               </Row>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '2px 0 0' }}>抵達</p>
               <Row>
-                <Field label="機場代碼"><input style={inSt} value={singleFlightForm.arr?.airport || ''} onChange={e => setSFArr('airport', e.target.value)} /></Field>
-                <Field label="機場名稱"><input style={inSt} value={singleFlightForm.arr?.name || ''} onChange={e => setSFArr('name', e.target.value)} /></Field>
-                <Field label="時間"><input style={inSt} type="time" value={singleFlightForm.arr?.time || ''} onChange={e => setSFArr('time', e.target.value)} /></Field>
+                <Field label="機場代碼" flex={0.7}><input style={inSt} value={singleFlightForm.arr?.airport || ''} onChange={e => setSFArr('airport', e.target.value)} /></Field>
+                <Field label="機場名稱" flex={1.15}><input style={inSt} value={singleFlightForm.arr?.name || ''} onChange={e => setSFArr('name', e.target.value)} /></Field>
+                <Field label="時間" flex={1.15}><input style={inSt} type="time" value={singleFlightForm.arr?.time || ''} onChange={e => setSFArr('time', e.target.value)} /></Field>
               </Row>
               <Field label="每人票價（選填）"><input style={inSt} type="number" value={singleFlightForm.costPerPerson || ''} onChange={e => setSF('costPerPerson', e.target.value)} /></Field>
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={singleFlightForm.notes || ''} onChange={e => setSF('notes', e.target.value)} /></Field>
@@ -1348,9 +1361,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 function Row({ children }: { children: React.ReactNode }) {
   return <div style={{ display: 'flex', gap: 8 }}>{children}</div>;
 }
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children, flex = 1 }: { label: string; children: React.ReactNode; flex?: number }) {
   return (
-    <div style={{ flex: 1, minWidth: 0 }}>
+    <div style={{ flex, minWidth: 0 }}>
       <label style={lblSt}>{label}</label>
       {children}
     </div>
