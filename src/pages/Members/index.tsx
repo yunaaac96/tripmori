@@ -911,7 +911,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
 
               {/* Note board */}
               {isExpanded && (
-                <div style={{ background: NOTE_COLORS[colorIdx], borderRadius: '0 0 20px 20px', padding: '14px 16px 16px', boxShadow: C.shadow }}>
+                <div className="tm-note-board" style={{ background: NOTE_COLORS[colorIdx], borderRadius: '0 0 20px 20px', padding: '14px 16px 16px', boxShadow: C.shadow }}>
                   {/* Existing notes */}
                   {notes.length === 0 ? (
                     <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 12px', textAlign: 'center', fontStyle: 'italic' }}>還沒有留言，快來貼上第一張便條紙！</p>

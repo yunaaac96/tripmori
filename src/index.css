@@ -302,6 +302,13 @@
   .tm-status-success { background: #1F2E1F !important; border-color: #3A5438 !important; }
   .tm-status-success p, .tm-status-success span { color: #A8D48C !important; }
 
+  /* Member note board — when expanded in dark mode the board bg is a
+   * deep note colour (from --tm-note-*), but the "還沒有留言" hint uses
+   * C.barkLight which collapses to ~3:1 on that bg. Lift the hint + its
+   * placeholder text inside the note board scope only. */
+  .tm-note-board > p { color: #D8CDB8 !important; }
+  .tm-note-board textarea::placeholder { color: #998B78 !important; }
+
   /* ProjectHub sign-in area — dark mode readable contrast */
   .tm-signin-tip {
     background: #3A2C00 !important;
