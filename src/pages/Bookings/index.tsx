@@ -228,11 +228,6 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setAllFlightsForm(prev => prev.map((f, i) => i === idx ? { ...f, arr: { ...f.arr, [key]: val } } : f));
 
   // ── Date+time helpers ────────────────────────────────────
-  const TIME_OPTIONS = Array.from({ length: 48 }, (_, i) => {
-    const h = String(Math.floor(i / 2)).padStart(2, '0');
-    const m = i % 2 === 0 ? '00' : '30';
-    return `${h}:${m}`;
-  });
   const splitDT = (val: string) => {
     const parts = (val || '').trim().split(/\s+/);
     return { date: parts[0] || '', time: parts[1] || '' };
@@ -1016,9 +1011,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                       )}
                     </div>
                     <Row>
-                      <Field label="日期"><input style={inSt} type="date" value={f.date || ''} onChange={e => setFF(idx, 'date', e.target.value)} /></Field>
+                      <Field label="日期" flex={1.3}><input style={inSt} type="date" value={f.date || ''} onChange={e => setFF(idx, 'date', e.target.value)} /></Field>
                       <Field label="航空公司"><input style={inSt} value={f.airline || ''} onChange={e => setFF(idx, 'airline', e.target.value)} /></Field>
-                      <Field label="航班號"><input style={inSt} value={f.flightNo || ''} onChange={e => setFF(idx, 'flightNo', e.target.value)} /></Field>
+                      <Field label="航班號" flex={0.8}><input style={inSt} value={f.flightNo || ''} onChange={e => setFF(idx, 'flightNo', e.target.value)} /></Field>
                     </Row>
                     <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '6px 0 4px' }}>出發</p>
                     <Row>
@@ -1047,20 +1042,12 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 <Field label="飯店名稱 *"><input style={inSt} value={editForm.name || ''} onChange={e => setF('name', e.target.value)} /></Field>
                 <Field label="原文名稱（選填）"><input style={inSt} value={editForm.nameLocal || ''} onChange={e => setF('nameLocal', e.target.value)} /></Field>
                 <Row>
-                  <Field label="Check-in 日期"><input style={inSt} type="date" value={splitDT(editForm.checkIn).date} onChange={e => setF('checkIn', joinDT(e.target.value, splitDT(editForm.checkIn).time || '14:00'))} /></Field>
-                  <Field label="時間">
-                    <select style={selSt} value={splitDT(editForm.checkIn).time || '14:00'} onChange={e => setF('checkIn', joinDT(splitDT(editForm.checkIn).date, e.target.value))}>
-                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </Field>
+                  <Field label="Check-in 日期" flex={1.3}><input style={inSt} type="date" value={splitDT(editForm.checkIn).date} onChange={e => setF('checkIn', joinDT(e.target.value, splitDT(editForm.checkIn).time || '14:00'))} /></Field>
+                  <Field label="時間"><input style={inSt} type="time" value={splitDT(editForm.checkIn).time || '14:00'} onChange={e => setF('checkIn', joinDT(splitDT(editForm.checkIn).date, e.target.value))} /></Field>
                 </Row>
                 <Row>
-                  <Field label="Check-out 日期"><input style={inSt} type="date" value={splitDT(editForm.checkOut).date} onChange={e => setF('checkOut', joinDT(e.target.value, splitDT(editForm.checkOut).time || '11:00'))} /></Field>
-                  <Field label="時間">
-                    <select style={selSt} value={splitDT(editForm.checkOut).time || '11:00'} onChange={e => setF('checkOut', joinDT(splitDT(editForm.checkOut).date, e.target.value))}>
-                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                  </Field>
+                  <Field label="Check-out 日期" flex={1.3}><input style={inSt} type="date" value={splitDT(editForm.checkOut).date} onChange={e => setF('checkOut', joinDT(e.target.value, splitDT(editForm.checkOut).time || '11:00'))} /></Field>
+                  <Field label="時間"><input style={inSt} type="time" value={splitDT(editForm.checkOut).time || '11:00'} onChange={e => setF('checkOut', joinDT(splitDT(editForm.checkOut).date, e.target.value))} /></Field>
                 </Row>
                 <Field label="訂單編號 *"><input style={inSt} value={editForm.confirmCode || ''} onChange={e => setF('confirmCode', e.target.value)} /></Field>
                 <div>
@@ -1122,13 +1109,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <input style={inSt} value={editForm.pickupLocation || ''} onChange={e => setF('pickupLocation', e.target.value)} />
                 </Field>
                 <Row>
-                  <Field label={(editForm.carMode || 'rental') === 'charter' ? '出發日期' : '取車日期'}>
+                  <Field label={(editForm.carMode || 'rental') === 'charter' ? '出發日期' : '取車日期'} flex={1.3}>
                     <input style={inSt} type="date" value={splitDT(editForm.pickupTime).date} onChange={e => setF('pickupTime', joinDT(e.target.value, splitDT(editForm.pickupTime).time || '09:00'))} />
                   </Field>
                   <Field label="時間">
-                    <select style={selSt} value={splitDT(editForm.pickupTime).time || '09:00'} onChange={e => setF('pickupTime', joinDT(splitDT(editForm.pickupTime).date, e.target.value))}>
-                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    <input style={inSt} type="time" value={splitDT(editForm.pickupTime).time || '09:00'} onChange={e => setF('pickupTime', joinDT(splitDT(editForm.pickupTime).date, e.target.value))} />
                   </Field>
                 </Row>
 
@@ -1137,13 +1122,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <input style={inSt} value={editForm.returnLocation || ''} onChange={e => setF('returnLocation', e.target.value)} />
                 </Field>
                 <Row>
-                  <Field label={(editForm.carMode || 'rental') === 'charter' ? '結束日期（選填）' : '還車日期'}>
+                  <Field label={(editForm.carMode || 'rental') === 'charter' ? '結束日期（選填）' : '還車日期'} flex={1.3}>
                     <input style={inSt} type="date" value={splitDT(editForm.returnTime).date} onChange={e => setF('returnTime', joinDT(e.target.value, splitDT(editForm.returnTime).time || '18:00'))} />
                   </Field>
                   <Field label="時間">
-                    <select style={selSt} value={splitDT(editForm.returnTime).time || '18:00'} onChange={e => setF('returnTime', joinDT(splitDT(editForm.returnTime).date, e.target.value))}>
-                      {TIME_OPTIONS.map(t => <option key={t} value={t}>{t}</option>)}
-                    </select>
+                    <input style={inSt} type="time" value={splitDT(editForm.returnTime).time || '18:00'} onChange={e => setF('returnTime', joinDT(splitDT(editForm.returnTime).date, e.target.value))} />
                   </Field>
                 </Row>
 
@@ -1216,9 +1199,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 ))}
               </div>
               <Row>
-                <Field label="日期"><input style={inSt} type="date" value={singleFlightForm.date || ''} onChange={e => setSF('date', e.target.value)} /></Field>
+                <Field label="日期" flex={1.3}><input style={inSt} type="date" value={singleFlightForm.date || ''} onChange={e => setSF('date', e.target.value)} /></Field>
                 <Field label="航空公司"><input style={inSt} value={singleFlightForm.airline || ''} onChange={e => setSF('airline', e.target.value)} /></Field>
-                <Field label="航班號"><input style={inSt} value={singleFlightForm.flightNo || ''} onChange={e => setSF('flightNo', e.target.value)} /></Field>
+                <Field label="航班號" flex={0.8}><input style={inSt} value={singleFlightForm.flightNo || ''} onChange={e => setSF('flightNo', e.target.value)} /></Field>
               </Row>
               <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '2px 0 0' }}>出發</p>
               <Row>
@@ -1264,11 +1247,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
               <div>
                 <label style={lblSt}>類型</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 }}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                   {Object.entries(BOOKING_TYPES).map(([key, info]) => (
                     <button key={key} onClick={() => setC('type', key)}
-                      style={{ padding: '9px 10px', borderRadius: 12, border: `2px solid ${customForm.type === key ? info.color : '#E0D9C8'}`, background: customForm.type === key ? info.bg : 'var(--tm-card-bg)', color: info.color, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <FontAwesomeIcon icon={BOOKING_TYPE_ICONS[key] || faEllipsis} style={{ fontSize: 12 }} /> {info.label}
+                      style={{ padding: '9px 6px', borderRadius: 12, border: `2px solid ${customForm.type === key ? info.color : '#E0D9C8'}`, background: customForm.type === key ? info.bg : 'var(--tm-card-bg)', color: info.color, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 0 }}>
+                      <FontAwesomeIcon icon={BOOKING_TYPE_ICONS[key] || faEllipsis} style={{ fontSize: 11 }} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.label}</span>
                     </button>
                   ))}
                 </div>
@@ -1372,7 +1355,6 @@ function Field({ label, children, flex = 1 }: { label: string; children: React.R
 
 const lblSt: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#8C7B6E', display: 'block', marginBottom: 6 };
 const inSt: React.CSSProperties  = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-input-bg)', fontSize: 14, color: 'var(--tm-bark)', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
-const selSt: React.CSSProperties = { ...inSt, padding: '11px 8px' };
 
 function AmountInput({ value, onChange, placeholder }: { value: string; onChange: (v: string) => void; placeholder?: string }) {
   const [focused, setFocused] = useState(false);
