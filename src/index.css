@@ -388,6 +388,27 @@
 }
 .tm-signin-btn-text { color: #1C3461; }
 
+/* iOS Safari's native <input type="date"|"time"|"datetime-local"> has an
+ * intrinsic (content-derived) width that ignores the author's width:100% and
+ * overflows narrow containers — e.g. the Journal "新增日誌" modal on iPhone.
+ * Neutralise the appearance so the input behaves like a regular text input,
+ * and pin max-width:100% + box-sizing so it can't exceed its parent.
+ * Tapping still opens the native picker because the input type is unchanged. */
+input[type="date"],
+input[type="time"],
+input[type="datetime-local"] {
+  -webkit-appearance: none;
+  appearance: none;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+}
+input[type="date"]::-webkit-date-and-time-value,
+input[type="time"]::-webkit-date-and-time-value,
+input[type="datetime-local"]::-webkit-date-and-time-value {
+  text-align: left;
+}
+
 /* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
 .tm-hscroll {
   -ms-overflow-style: none;
