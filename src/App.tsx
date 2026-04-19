@@ -500,7 +500,40 @@ function App() {
     setOnboardingStep('none');
   };
 
-  const dismissOnboarding = () => setOnboardingStep('none');
+  const dismissOnboarding = () => {
+    // Remember which step the user dismissed so we don't nag on every open,
+    // but keep per-step keys so they can still be nudged about the other step
+    // later (e.g. dismissed install → eventually installed by themselves →
+    // we still want to offer notifications).
+    try {
+      if (onboardingStep === 'install')       localStorage.setItem('tripmori_dismissed_install', '1');
+      if (onboardingStep === 'notifications') localStorage.setItem('tripmori_dismissed_notifications', '1');
+    } catch {}
+    setOnboardingStep('none');
+  };
+
+  // Show the banner on any app open (not only right after binding) for members
+  // who are already editor/owner but haven't installed or enabled notifications.
+  // Fires only once per mount; the install/notifications prompts themselves
+  // still require a user click (see handleInstallClick / handleEnableNotifications),
+  // so this useEffect does NOT auto-popup the install window.
+  const mountBannerFiredRef = useRef(false);
+  useEffect(() => {
+    if (mountBannerFiredRef.current) return;
+    if (!boundMemberId || !activeProject) return;
+    if (activeProject.role === 'visitor') return;
+    const wantsInstall = !isStandalone && (pwaInstallAvailable || isIOS);
+    const installDismissed = typeof localStorage !== 'undefined' && localStorage.getItem('tripmori_dismissed_install') === '1';
+    const wantsNotif = typeof Notification !== 'undefined' && Notification.permission === 'default';
+    const notifDismissed = typeof localStorage !== 'undefined' && localStorage.getItem('tripmori_dismissed_notifications') === '1';
+    if (wantsInstall && !installDismissed) {
+      mountBannerFiredRef.current = true;
+      setOnboardingStep('install');
+    } else if (wantsNotif && !notifDismissed) {
+      mountBannerFiredRef.current = true;
+      setOnboardingStep('notifications');
+    }
+  }, [boundMemberId, activeProject?.id, activeProject?.role, pwaInstallAvailable, isIOS, isStandalone]);
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 5 秒：動畫 ~2.7s + 停留 ~2.3s）
