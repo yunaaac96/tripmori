@@ -16,14 +16,6 @@ createRoot(document.getElementById('root')!).render(
   </StrictMode>,
 )
 
-// Fade out and remove the inline splash screen once React has painted its first frame.
-// Double-rAF ensures we're past the first browser paint, avoiding a flash of unstyled content.
-requestAnimationFrame(() => {
-  requestAnimationFrame(() => {
-    const splash = document.getElementById('app-splash')
-    if (splash) {
-      splash.style.opacity = '0'
-      setTimeout(() => splash.remove(), 280)
-    }
-  })
-})
+// Inline #app-splash fade-out is now triggered from inside <SplashScreen />
+// (useEffect after first paint), so we know React's splash is visible before
+// the inline one starts fading — no gap, no flash.

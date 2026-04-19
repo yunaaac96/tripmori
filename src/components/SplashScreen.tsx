@@ -3,21 +3,38 @@
  * 顯示 TripMori LOGO + 品牌名稱 + 載入動畫
  */
 
+import { useEffect } from 'react';
+
 const FONT = "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif";
 
 export default function SplashScreen() {
+  // Fade out the inline #app-splash (drawn in index.html before React boots)
+  // once our React splash has painted. Running this here — rather than in
+  // main.tsx — guarantees the handoff happens AFTER React's splash is on
+  // screen, so there's no gap/flash in between.
+  useEffect(() => {
+    const splash = document.getElementById('app-splash');
+    if (!splash) return;
+    const raf = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        splash.style.opacity = '0';
+        setTimeout(() => splash.remove(), 280);
+      });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   return (
     <>
       <style>{`
         @keyframes tm-logo-pop {
-          /* Keep opacity 1 throughout — the inline #app-splash in index.html
-           * has already drawn a static logo on the first paint, so starting
-           * the React version at opacity 0 created a flash when the inline
-           * splash faded out (React logo was still mid-fade-in). Animate
-           * only the scale / translate so the handoff is invisible. */
-          0%   { opacity: 1; transform: scale(0.88) translateY(6px); }
-          60%  { opacity: 1; transform: scale(1.04) translateY(-2px); }
-          100% { opacity: 1; transform: scale(1) translateY(0); }
+          /* Start at scale(1) translateY(0) — identical to the inline
+           * #app-splash's static logo — so the handoff is visually seamless.
+           * The 0→25% hold gives the inline splash time to fade out before
+           * our pop begins, preventing any mid-fade scale jump. */
+          0%, 25%   { opacity: 1; transform: scale(1) translateY(0); }
+          65%       { opacity: 1; transform: scale(1.04) translateY(-2px); }
+          100%      { opacity: 1; transform: scale(1) translateY(0); }
         }
         @keyframes tm-fade-up {
           0%   { opacity: 0; transform: translateY(14px); }
