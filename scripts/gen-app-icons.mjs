@@ -33,9 +33,14 @@ const AMBER_SRC = [208, 160, 96];  // #D0A060 gold-amber in source
 const GREEN_DST = [143, 175, 126]; // #8FAF7E --tm-sage
 const AMBER_DST = [196, 149, 106]; // #C4956A --tm-earth
 
-// Pre-process the source once: remap dominant brand colours to website palette.
+// Pre-process the source once:
+//   1. Trim the source's own transparent padding so the mark fills the canvas
+//      edge-to-edge (coverage settings below then produce consistent padding
+//      regardless of how much breathing room the source PNG has).
+//   2. Remap dominant brand colours to website palette.
 async function softenedSource() {
-  const { data, info } = await sharp(SRC).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const trimmed = await sharp(SRC).trim().toBuffer();
+  const { data, info } = await sharp(trimmed).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   const out = Buffer.alloc(data.length);
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i], g = data[i + 1], b = data[i + 2], a = data[i + 3];
@@ -82,10 +87,10 @@ async function transparent(size) {
   return sharp(SOFT_SRC).resize(size, size, { fit: 'contain', background: TRANS }).png().toBuffer();
 }
 
-// Standard icons use ~88% coverage (≈12% inner padding) to match iOS app-icon
-// visual rhythm — without this the compass sits flush against the rounded
-// square edge and reads larger than neighbouring apps.
-const STD_COVERAGE = 0.88;
+// Standard icons use 72% coverage (≈14% inner padding per side) applied to the
+// already-trimmed source, matching iOS native app-icon visual rhythm (Fitdays,
+// Reminders, MOZE sit around the same footprint).
+const STD_COVERAGE = 0.72;
 
 // ── 180 — apple-touch-icon default (cream bg) + transparent variant ───────────
 await sharp(await onBg(180, CREAM, STD_COVERAGE)).toFile(join(ICONS_DIR, 'icon-180.png'));
