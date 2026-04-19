@@ -10,7 +10,7 @@ export default defineConfig({
       srcDir: 'src',
       filename: 'sw.ts',
       registerType: 'autoUpdate',
-      includeAssets: ['favicon.svg', 'favicon.ico', 'icons/*.png'],
+      includeAssets: ['favicon.png', 'logo.png', 'icons/*.png'],
       manifest: {
         name: 'TripMori 旅行手帳',
         short_name: 'TripMori',
