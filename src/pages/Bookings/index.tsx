@@ -817,18 +817,23 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
           <div key={carKey} style={cardStyle}>
             {/* ── Header ── */}
             <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 12 }}>
-              <div style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#7A5A00' }}>
+              <div className="tm-booking-car-icon" style={{ width: 46, height: 46, borderRadius: 14, background: '#FFF2CC', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, color: '#7A5A00', flexShrink: 0 }}>
                 <FontAwesomeIcon icon={faBus} />
               </div>
-              <div style={{ flex: 1 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                  <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>
-                    {car.company}{car.carMode === 'rental' && car.carType ? `　${car.carType}` : ''}{car.carMode === 'charter' && car.seats ? `　${car.seats}` : ''}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0, wordBreak: 'break-word' }}>
+                    {car.company}
                   </p>
-                  <span className={car.carMode === 'charter' ? 'tm-badge-sky-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 10, fontWeight: 700, background: car.carMode === 'charter' ? '#D8EDF8' : '#FFF2CC', color: car.carMode === 'charter' ? '#2A6A9A' : '#7A5A00', borderRadius: 6, padding: '2px 7px' }}>
+                  <span className={car.carMode === 'charter' ? 'tm-badge-sky-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 10, fontWeight: 700, background: car.carMode === 'charter' ? '#D8EDF8' : '#FFF2CC', color: car.carMode === 'charter' ? '#2A6A9A' : '#7A5A00', borderRadius: 6, padding: '2px 7px', flexShrink: 0 }}>
                     {car.carMode === 'charter' ? '包車' : '租車'}
                   </span>
                 </div>
+                {(car.carMode === 'rental' && car.carType) || (car.carMode === 'charter' && car.seats) ? (
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>
+                    {car.carMode === 'rental' ? car.carType : car.seats}
+                  </p>
+                ) : null}
                 {!isVisitor && car.confirmCode && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>預約編號：{car.confirmCode}</p>}
                 {!isVisitor && car.carMode === 'charter' && car.contactInfo && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}><FontAwesomeIcon icon={faPhone} style={{ fontSize: 10, marginRight: 4 }} />{car.contactInfo}</p>}
               </div>

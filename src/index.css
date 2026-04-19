@@ -138,8 +138,26 @@
   /* Schedule category chips */
   .tm-category-chip-attraction { background: #162A12 !important; color: #88CC72 !important; }
   .tm-category-chip-food       { background: #2E2208 !important; color: #D4A040 !important; }
+  .tm-category-chip-experience { background: #1A0E30 !important; color: #C090F0 !important; }
   .tm-category-chip-transport  { background: #0C1E30 !important; color: #78AACC !important; }
   .tm-category-chip-hotel      { background: #2C100E !important; color: #CC8082 !important; }
+  .tm-category-chip-misc       { background: #242118 !important; color: #B8B0A0 !important; }
+
+  /* Schedule timeline dots — saturated hue on dark bg (light mode keeps inline pastel+dark-border combo) */
+  .tm-category-dot-attraction  { background: #88CC72 !important; border-color: #2E5A22 !important; }
+  .tm-category-dot-food        { background: #D4A040 !important; border-color: #5A4218 !important; }
+  .tm-category-dot-experience  { background: #C090F0 !important; border-color: #4A2A7A !important; }
+  .tm-category-dot-transport   { background: #78AACC !important; border-color: #2A5A7A !important; }
+  .tm-category-dot-hotel       { background: #CC8082 !important; border-color: #5A2018 !important; }
+  .tm-category-dot-misc        { background: #B8B0A0 !important; border-color: #5A5248 !important; }
+
+  /* Schedule category selection buttons — unselected state: lift text + border for contrast (bg stays var --tm-card-bg) */
+  .tm-category-text-attraction { color: #88CC72 !important; border-color: #2E5A22 !important; }
+  .tm-category-text-food       { color: #D4A040 !important; border-color: #5A4218 !important; }
+  .tm-category-text-experience { color: #C090F0 !important; border-color: #4A2A7A !important; }
+  .tm-category-text-transport  { color: #78AACC !important; border-color: #2A5A7A !important; }
+  .tm-category-text-hotel      { color: #CC8082 !important; border-color: #5A2018 !important; }
+  .tm-category-text-misc       { color: #B8B0A0 !important; border-color: #5A5248 !important; }
 
   /* Expense category breakdown chips */
   .tm-expense-chip { color: #EDE4D8 !important; }
@@ -290,6 +308,13 @@
   /* Info-box sky family (Schedule 交通模式 hint and similar) — light blue
    * bg + dark blue text → deep navy bg + soft sky text. */
   .tm-info-box-sky { background: #0E2030 !important; border-color: #3A6A9A !important; color: #7AB0E0 !important; }
+  /* Booking car icon — dark-mode: swap pale yellow pastel for a warm gradient
+   * so it reads as a deliberate colour island (matches hotel's sky→sage gradient style). */
+  .tm-booking-car-icon {
+    background: linear-gradient(135deg, #D4A040, #9A6C2E) !important;
+    color: #FFFFFF !important;
+  }
+
   /* Booking-type chips / icons — keep each hue family but darken in dark mode.
    * Light mode inline bg/color from BOOKING_TYPES still wins. */
   .tm-booking-type-activity  { background: #162A12 !important; color: #88CC72 !important; }
