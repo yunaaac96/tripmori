@@ -4,7 +4,7 @@ import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, g
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus } from '@fortawesome/free-solid-svg-icons';
+import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus, faCircleCheck, faPlus } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
 import SchedulePage from './pages/Schedule/index';
@@ -500,6 +500,14 @@ function App() {
     setOnboardingStep('none');
   };
 
+  // Bind-success toast (短暫 confirm，關閉後才跳 install/notification 橫幅)
+  const [bindSuccessToast, setBindSuccessToast] = useState<{ name: string } | null>(null);
+  // Inline "create member card + bind" form inside the bind modal
+  const MEMBER_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
+  const [createFormOpen, setCreateFormOpen] = useState(false);
+  const [createFormName, setCreateFormName] = useState('');
+  const [createFormColor, setCreateFormColor] = useState(MEMBER_COLORS[0]);
+
   const dismissOnboarding = () => {
     // Remember which step the user dismissed so we don't nag on every open,
     // but keep per-step keys so they can still be nudged about the other step
@@ -730,26 +738,64 @@ function App() {
     }
   };
 
-  // Bind current Google account to a member card
+  // Show the "bind success" toast for ~1.8s, then chain onboarding.
+  const flashBindSuccess = (name: string) => {
+    setBindSuccessToast({ name });
+    setTimeout(() => {
+      setBindSuccessToast(null);
+      startPostSetupOnboarding();
+    }, 1800);
+  };
+
+  // Bind current Google account to an EXISTING member card
   const handleBindMemberCard = async (memberId: string) => {
     const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
     if (!user || !activeProject) return;
     setBindingMember(true);
     let bindOk = false;
+    let boundName = '';
     try {
       await updateDoc(doc(db, 'trips', activeProject.id, 'members', memberId), {
         googleUid: user.uid,
         googleEmail: user.email || '',
       });
-      localStorage.setItem('tripmori_current_user',
-        members.find((m: any) => m.id === memberId)?.name || '');
+      boundName = members.find((m: any) => m.id === memberId)?.name || '';
+      localStorage.setItem('tripmori_current_user', boundName);
       bindOk = true;
     } catch (e) { console.error(e); alert('綁定失敗，請重試'); }
     setBindingMember(false);
     setShowMemberBind(false);
     setUpgradeStep('none');
-    // Chain into the install → notification onboarding right after binding
-    if (bindOk) startPostSetupOnboarding();
+    if (bindOk) flashBindSuccess(boundName);
+  };
+
+  // Create a NEW member card and bind the current Google account in one shot
+  const handleCreateAndBindMember = async () => {
+    const user = auth.currentUser && !auth.currentUser.isAnonymous ? auth.currentUser : null;
+    const name = createFormName.trim();
+    if (!user || !activeProject || !name) return;
+    setBindingMember(true);
+    let bindOk = false;
+    try {
+      await addDoc(collection(db, 'trips', activeProject.id, 'members'), {
+        name,
+        role: '旅伴',
+        color: createFormColor,
+        avatarUrl: '',
+        googleUid: user.uid,
+        googleEmail: user.email || '',
+        createdAt: new Date().toISOString(),
+      });
+      localStorage.setItem('tripmori_current_user', name);
+      bindOk = true;
+    } catch (e) { console.error(e); alert('建立並綁定失敗，請重試'); }
+    setBindingMember(false);
+    setShowMemberBind(false);
+    setUpgradeStep('none');
+    setCreateFormOpen(false);
+    setCreateFormName('');
+    setCreateFormColor(MEMBER_COLORS[0]);
+    if (bindOk) flashBindSuccess(name);
   };
 
   // ── Splash screen：每次 App 啟動都先顯示（含桌機首次開啟）
@@ -897,11 +943,60 @@ function App() {
                 </div>
               )}
 
-              {/* Go to Members page to create a card */}
-              <button onClick={() => { setShowMemberBind(false); setActiveTab('成員'); }}
-                style={{ padding: '12px', borderRadius: 14, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, width: '100%' }}>
-                ＋ 前往成員頁新增成員卡
-              </button>
+              {/* Inline "create new card + bind" — 創建並綁定一步完成 */}
+              {!createFormOpen ? (
+                <button onClick={() => setCreateFormOpen(true)}
+                  style={{ padding: '12px', borderRadius: 14, border: `1.5px dashed var(--tm-input-border)`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, fontSize: 14, cursor: 'pointer', fontFamily: FONT, width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                  <FontAwesomeIcon icon={faPlus} /> 新增並綁定成員卡
+                </button>
+              ) : (
+                <div style={{ padding: 14, borderRadius: 14, border: `1.5px solid var(--tm-input-border)`, background: 'var(--tm-card-bg)' }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: C.barkLight, margin: '0 0 8px' }}>新增成員卡</p>
+                  <input
+                    autoFocus
+                    value={createFormName}
+                    onChange={e => setCreateFormName(e.target.value)}
+                    placeholder="顯示名稱"
+                    style={inputStyle}
+                  />
+                  <div style={{ marginTop: 12 }}>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>標籤顏色</label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {MEMBER_COLORS.map(c => (
+                        <button key={c} type="button" onClick={() => setCreateFormColor(c)}
+                          style={{ width: 28, height: 28, borderRadius: '50%', background: c, border: createFormColor === c ? `2.5px solid ${C.bark}` : '1px solid var(--tm-input-border)', cursor: 'pointer', padding: 0 }}
+                          aria-label={`color ${c}`}
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
+                    <button
+                      onClick={() => { setCreateFormOpen(false); setCreateFormName(''); setCreateFormColor(MEMBER_COLORS[0]); }}
+                      disabled={bindingMember}
+                      style={{ flex: 1, padding: '10px', borderRadius: 12, border: `1px solid var(--tm-input-border)`, background: 'transparent', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                      取消
+                    </button>
+                    <button
+                      onClick={handleCreateAndBindMember}
+                      disabled={bindingMember || !createFormName.trim()}
+                      style={{ flex: 2, padding: '10px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, opacity: (bindingMember || !createFormName.trim()) ? 0.55 : 1 }}>
+                      {bindingMember ? '處理中...' : '建立並綁定'}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* ── Bind success toast (顯示 ~1.8s 後才跳 install/notification 橫幅) ── */}
+        {bindSuccessToast && (
+          <div style={{ position: 'fixed', top: '40%', left: 0, right: 0, zIndex: 10000, display: 'flex', justifyContent: 'center', pointerEvents: 'none' }}>
+            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: 20, padding: '22px 26px', boxShadow: '0 14px 40px rgba(0,0,0,0.25)', border: `1px solid var(--tm-card-border)`, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 8, maxWidth: 320, fontFamily: FONT }}>
+              <FontAwesomeIcon icon={faCircleCheck} style={{ color: '#4A7A35', fontSize: 36 }} />
+              <p style={{ fontSize: 15, fontWeight: 800, color: C.bark, margin: 0 }}>已綁定成功</p>
+              <p style={{ fontSize: 12, color: C.barkLight, margin: 0 }}>歡迎加入，{bindSuccessToast.name}</p>
             </div>
           </div>
         )}
