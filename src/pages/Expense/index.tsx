@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
-import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements } from '../../utils/expenseCalc';
+import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -36,6 +36,10 @@ const EMPTY_FORM = {
   subItems: [] as { name: string; amount: string }[],
   date: '', notes: '', receiptUrl: '',
   isPrivate: false,
+  // FX + card-fee controls
+  exchangeRate: '',          // per-expense override (blank → use trip rate → fallback table)
+  cardFeePercent: '1.5',     // only used when paymentMethod === 'card' and currency !== 'TWD'
+  awaitCardStatement: false, // credit-card row where user wants to wait for statement
 };
 
 // Currency display helpers
@@ -384,6 +388,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       notes: e.notes || '',
       receiptUrl: e.receiptUrl || '',
       isPrivate: e.isPrivate || false,
+      exchangeRate: e.exchangeRate != null ? String(e.exchangeRate) : '',
+      cardFeePercent: e.cardFeePercent != null ? String(e.cardFeePercent) : '1.5',
+      awaitCardStatement: !!e.awaitCardStatement,
     });
     setEditingId(e.id);
     setShowForm(true);
@@ -395,7 +402,25 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     : memberNames;
 
   const mainAmt = Number(form.amount) || 0;
-  const mainAmtTWD = toTWD(mainAmt, form.currency);
+  // Trip-level FX rate (only applies when expense currency matches the trip's primary currency).
+  const tripCurrency: string | null = project?.currency || null;
+  const tripRate: number | null = project?.exchangeRate != null ? Number(project.exchangeRate) : null;
+  // Per-expense FX override + card fee %
+  const formExchangeRate = form.exchangeRate.trim() ? Number(form.exchangeRate) : null;
+  const formCardFee = form.cardFeePercent.trim() ? Number(form.cardFeePercent) : 1.5;
+  // Show which rate is actually in effect (for the preview hint)
+  const resolvedRate = (() => {
+    if (formExchangeRate && formExchangeRate > 0) return { rate: formExchangeRate, source: '本筆指定' };
+    if (tripRate && tripRate > 0 && tripCurrency === form.currency) return { rate: tripRate, source: '旅行預設' };
+    const fallback = CURRENCY_TO_TWD[form.currency] ?? 1;
+    return { rate: fallback, source: '系統預設' };
+  })();
+  const mainAmtTWD = computeAmountTWD(mainAmt, form.currency, {
+    exchangeRate: formExchangeRate,
+    tripCurrency, tripRate,
+    paymentMethod: form.paymentMethod,
+    cardFeePercent: formCardFee,
+  });
 
   const customTotal = Object.values(form.customAmounts).reduce((s, v) => s + (Number(v) || 0), 0);
   const customRemaining = mainAmt - customTotal;
@@ -410,12 +435,21 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     if (!form.isPrivate && !form.payer) return;
     setSaving(true);
     const amt = Number(form.amount);
-    const amtTWD = toTWD(amt, form.currency);
+    const formExRate = form.exchangeRate.trim() ? Number(form.exchangeRate) : null;
+    const cardFee = form.cardFeePercent.trim() ? Number(form.cardFeePercent) : 1.5;
+    const amtTWD = computeAmountTWD(amt, form.currency, {
+      exchangeRate: formExRate,
+      tripCurrency, tripRate,
+      paymentMethod: form.paymentMethod,
+      cardFeePercent: cardFee,
+    });
 
     let splitWith = form.isPrivate ? [] : memberNames;
     if (!form.isPrivate && form.splitMode === 'equal' && form.splitWith.length > 0) splitWith = form.splitWith;
 
     const pcts = form.splitMode === 'weighted' ? getActivePcts() : {};
+
+    const isForeignCard = form.paymentMethod === 'card' && form.currency !== 'TWD';
 
     const payload: any = {
       description: form.description,
@@ -433,6 +467,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       receiptUrl: form.receiptUrl || '',
       isPrivate: form.isPrivate || false,
       privateOwnerUid: form.isPrivate ? (googleUid || null) : null,
+      // Cross-currency bookkeeping
+      exchangeRate: formExRate && formExRate > 0 ? formExRate : null,
+      cardFeePercent: isForeignCard ? cardFee : null,
+      awaitCardStatement: isForeignCard && form.awaitCardStatement ? true : false,
     };
 
     try {
@@ -520,6 +558,39 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       })
     )).catch(err => console.warn('[migrate] restore batches failed', err));
   }, [TRIP_ID, isReadOnly, expenses, doc, updateDoc, db]);
+
+  // ── Fill actual TWD for a credit-card foreign expense after the card
+  //   statement arrives. Stores actualTWD + auto-clears awaitCardStatement
+  //   so the expense flows into settlement suggestions automatically.
+  const [actualTarget, setActualTarget] = useState<any | null>(null);
+  const [actualValue, setActualValue]   = useState('');
+  const [actualSaving, setActualSaving] = useState(false);
+  const openActualForm = (original: any) => {
+    setActualTarget(original);
+    setActualValue(original.actualTWD != null ? String(original.actualTWD) : '');
+  };
+  const closeActualForm = () => {
+    setActualTarget(null);
+    setActualValue('');
+  };
+  const handleActualSave = async () => {
+    if (!actualTarget || !actualValue || actualSaving) return;
+    const v = Number(actualValue);
+    if (!v || Number.isNaN(v) || v <= 0) return;
+    setActualSaving(true);
+    try {
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', actualTarget.id), {
+        actualTWD: Math.round(v),
+        awaitCardStatement: false,
+      });
+      closeActualForm();
+    } catch (e) {
+      console.error(e);
+      alert('儲存失敗，請重試');
+    } finally {
+      setActualSaving(false);
+    }
+  };
 
   // ── Adjustment (補記差額) — copy original payer / split / category,
   //   amount = signed delta (positive = 少收補收, negative = 多收退款).
@@ -615,17 +686,18 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   const nonSettlementExpenses = baseExpenses.filter((e: any) => e.category !== 'settlement');
 
-  // 團隊總支出: always = non-private, non-settlement (never includes anyone's private expenses)
+  // 團隊總支出: non-private, non-settlement, excluding anything still awaiting
+  // a card statement (real TWD unknown). Uses effectiveTWD = actualTWD fallback to amountTWD.
   const teamTotalTWD = visibleExpenses
-    .filter((e: any) => !e.isPrivate && e.category !== 'settlement')
-    .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
+    .filter((e: any) => !e.isPrivate && e.category !== 'settlement' && !e.awaitCardStatement)
+    .reduce((s: number, e: any) => s + effectiveTWD(e), 0);
 
   // 個人負擔總額 (與我有關 mode): my share of shared expenses + my own private expenses
   const myBurdenTWD = currentUserName
     ? visibleExpenses
-        .filter((e: any) => e.category !== 'settlement' && isMyExpense(e))
+        .filter((e: any) => e.category !== 'settlement' && !e.awaitCardStatement && isMyExpense(e))
         .reduce((s: number, e: any) => {
-          if (e.isPrivate) return s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY'));
+          if (e.isPrivate) return s + effectiveTWD(e);
           return s + getPersonalShare(e, currentUserName, memberNames);
         }, 0)
     : 0;
@@ -634,9 +706,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const headerTWD = expenseView === 'mine' && currentUserName ? myBurdenTWD : teamTotalTWD;
 
   const categoryBreakdown = Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => {
-    const cats = nonSettlementExpenses.filter((e: any) => e.category === key);
+    const cats = nonSettlementExpenses.filter((e: any) => e.category === key && !e.awaitCardStatement);
     const total = cats.reduce((s: number, e: any) => {
-      const rawAmt = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
+      const rawAmt = effectiveTWD(e);
       if (expenseView === 'mine' && currentUserName) {
         // personal burden: full amount for my private, my share for shared
         if (e.isPrivate) return s + rawAmt;
@@ -682,8 +754,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       if (sortMode === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
       if (sortMode === 'oldest') return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
       // largest
-      const aAmt = a.amountTWD || toTWDCalc(a.amount || 0, a.currency || 'JPY');
-      const bAmt = b.amountTWD || toTWDCalc(b.amount || 0, b.currency || 'JPY');
+      const aAmt = effectiveTWD(a);
+      const bAmt = effectiveTWD(b);
       return bAmt - aAmt;
     });
 
@@ -721,6 +793,43 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               style={{ position: 'absolute', top: -12, right: -12, width: 32, height: 32, borderRadius: '50%', border: 'none', background: 'white', color: '#333', fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 2px 8px rgba(0,0,0,0.3)' }}>
               ✕
             </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 補實際金額 Modal ── */}
+      {actualTarget && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 550 }}
+          onClick={ev => { if (ev.target === ev.currentTarget) closeActualForm(); }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '80vh', overflowY: 'auto', boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faReceipt} style={{ fontSize: 14 }} /> 補實際金額</p>
+              <button onClick={closeActualForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+            </div>
+            <div style={{ padding: '10px 12px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px dashed ${C.creamDark}`, marginBottom: 14 }}>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 4px', fontWeight: 600 }}>原筆記帳</p>
+              <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px' }}>{actualTarget.description}</p>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
+                {actualTarget.currency} {actualTarget.amount?.toLocaleString()} · 預估 NT$ {(actualTarget.amountTWD || 0).toLocaleString()}
+              </p>
+            </div>
+            <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 14px', lineHeight: 1.6 }}>
+              請填入刷卡單上實際扣款的台幣金額。填入後這筆記帳會自動以實際金額計算，若有「等卡單」狀態會一併解除。
+            </p>
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>實際 TWD 金額</label>
+              <input type="number" inputMode="decimal" value={actualValue} onChange={ev => setActualValue(ev.target.value)}
+                placeholder="例：1085"
+                style={iStyle} />
+            </div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button onClick={closeActualForm}
+                style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>取消</button>
+              <button onClick={handleActualSave} disabled={actualSaving || !actualValue || !Number(actualValue) || Number(actualValue) <= 0}
+                style={{ ...btnPrimary(), flex: 2, opacity: (actualSaving || !actualValue || !Number(actualValue) || Number(actualValue) <= 0) ? 0.6 : 1 }}>
+                {actualSaving ? '儲存中…' : <><FontAwesomeIcon icon={faCheck} style={{ marginRight: 6 }} />確認</>}
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -794,7 +903,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
         // Personal share for tab rows
         const shareFor = (e: any): number => {
-          if (e.isPrivate) return e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
+          if (e.isPrivate) return effectiveTWD(e);
           return getPersonalShare(e, detailName, memberNames);
         };
 
@@ -807,7 +916,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         const sharedBurdenTWD = sharedExpenses
           .reduce((s: number, e: any) => s + getPersonalShare(e, detailName, memberNames), 0);
         const privateTotalTWD = privateExpenses
-          .reduce((s: number, e: any) => s + (e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY')), 0);
+          .reduce((s: number, e: any) => s + (effectiveTWD(e)), 0);
 
         // Category breakdown for the currently selected tab
         const tabBreakdown = Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => {
@@ -899,7 +1008,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 {tabExpenses.map((e: any) => {
                   const share = shareFor(e);
-                  const amtTWD = e.amountTWD || toTWDCalc(e.amount || 0, e.currency || 'JPY');
+                  const amtTWD = effectiveTWD(e);
                   const isPayer = e.payer === detailName;
                   const cat = EXPENSE_CATEGORY_MAP[e.category] || EXPENSE_CATEGORY_MAP.other;
                   const isPrivateRow = !!e.isPrivate;
@@ -1002,20 +1111,56 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     </button>
                   ))}
                 </div>
-                {form.paymentMethod === 'card' && form.currency !== 'TWD' && (
-                  <div className="tm-badge-amber-sm" style={{ marginTop: 8, background: '#FFF8E0', borderRadius: 10, padding: '7px 12px', border: '1px solid #E8C96A', display: 'flex', alignItems: 'center', gap: 7 }}>
-                    <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 13 }} />
-                    <div>
-                      <p style={{ fontSize: 11, fontWeight: 700, margin: 0 }}>海外刷卡手續費提醒</p>
-                      <p style={{ fontSize: 10, margin: '1px 0 0' }}>
-                        海外刷卡通常收取 1.5% 手續費，實際約 NT$ {form.amount
-                          ? Math.round(toTWD(Number(form.amount), form.currency) * 1.015).toLocaleString()
-                          : '—'}
-                      </p>
-                    </div>
-                  </div>
-                )}
               </div>
+
+              {/* FX rate + card fee (only non-TWD) */}
+              {form.currency !== 'TWD' && (
+                <div style={{ padding: '10px 12px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
+                      匯率（1 {form.currency} = __ TWD）
+                    </label>
+                    <input style={{ ...inputStyle, fontSize: 14 }} type="number" step="0.0001" inputMode="decimal"
+                      placeholder={`預設 ${resolvedRate.rate}（${resolvedRate.source}）`}
+                      value={form.exchangeRate}
+                      onChange={ev => set('exchangeRate', ev.target.value)} />
+                  </div>
+                  {form.paymentMethod === 'card' && (
+                    <div>
+                      <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
+                        海外刷卡手續費（%）
+                      </label>
+                      <input style={{ ...inputStyle, fontSize: 14 }} type="number" step="0.1" inputMode="decimal"
+                        placeholder="預設 1.5"
+                        value={form.cardFeePercent}
+                        onChange={ev => set('cardFeePercent', ev.target.value)} />
+                    </div>
+                  )}
+                  {mainAmt > 0 && (
+                    <p style={{ fontSize: 11, color: C.sageDark, margin: 0, fontWeight: 600 }}>
+                      <FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 10, marginRight: 4 }} />
+                      {form.paymentMethod === 'card' ? '預估 TWD' : '換算 TWD'}：NT$ {mainAmtTWD.toLocaleString()}
+                      <span style={{ color: C.barkLight, fontWeight: 400, marginLeft: 6, fontSize: 10 }}>
+                        = {form.currency} {mainAmt.toLocaleString()} × {formExchangeRate || resolvedRate.rate}
+                        {form.paymentMethod === 'card' && ` × (1 + ${formCardFee}%)`}
+                      </span>
+                    </p>
+                  )}
+                  {form.paymentMethod === 'card' && (
+                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                      <input type="checkbox" checked={form.awaitCardStatement}
+                        onChange={ev => set('awaitCardStatement', ev.target.checked)}
+                        style={{ marginTop: 2 }} />
+                      <div>
+                        <p style={{ fontSize: 12, color: C.bark, fontWeight: 600, margin: 0 }}>等卡單下來再結算</p>
+                        <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0', lineHeight: 1.5 }}>
+                          勾選後此筆暫不納入結算建議，等刷卡單下來用「補實際金額」填入實際 TWD 即自動納入
+                        </p>
+                      </div>
+                    </label>
+                  )}
+                </div>
+              )}
 
               {/* Category */}
               <div>
@@ -1318,6 +1463,21 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         )}
 
         {/* ── Settlement suggestions (hidden for visitors) ── */}
+        {/* Awaiting-statement reminder — these expenses are excluded from stats */}
+        {!isVisitor && (() => {
+          const awaitCount = visibleExpenses.filter((e: any) => e.awaitCardStatement).length;
+          if (awaitCount === 0) return null;
+          return (
+            <div style={{ marginBottom: 10, padding: '9px 12px', borderRadius: 12, background: '#FFE8CC', border: '1px solid #E8B96A', display: 'flex', alignItems: 'center', gap: 8 }}>
+              <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 12, color: '#9A6800' }} />
+              <span style={{ fontSize: 11, color: '#9A6800', fontWeight: 600, lineHeight: 1.5 }}>
+                共 {awaitCount} 筆刷卡記帳等卡單中，暫未納入結算。卡單到後請點卡片上
+                <FontAwesomeIcon icon={faReceipt} style={{ fontSize: 10, margin: '0 3px' }} />補實際金額。
+              </span>
+            </div>
+          );
+        })()}
+
         {!isVisitor && settlements.length > 0 && (
           <div style={{ marginBottom: 12 }}>
             <button onClick={() => setSettlementExpanded(v => !v)}
@@ -1477,13 +1637,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
             {filteredExpenses.map((e: any) => {
               const isSettlement = e.category === 'settlement';
               const cat = isSettlement ? null : (EXPENSE_CATEGORY_MAP[e.category] || EXPENSE_CATEGORY_MAP.other);
-              const amtTWD = e.amountTWD || toTWD(e.amount || 0, e.currency || 'JPY');
+              const amtTWD = effectiveTWD(e);
               const hasSubItems = e.subItems && e.subItems.length > 0;
               const isExpanded = expandedExpense === e.id;
               const isPrivateExpense = !!e.isPrivate;
               const isAdjustment = !!e.adjustmentOf;
+              const isAwaiting = !!e.awaitCardStatement;
+              const hasActual  = e.actualTWD != null;
+              const isForeignCard = e.paymentMethod === 'card' && (e.currency || 'JPY') !== 'TWD';
               return (
-                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined }}>
+                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined, opacity: isAwaiting ? 0.8 : 1 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
                     {(() => {
@@ -1515,6 +1678,22 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF2CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                             <FontAwesomeIcon icon={faPen} style={{ fontSize: 8 }} />補記
                           </span>
+                        )}
+                        {/* FX status chip: actual / estimated / awaiting */}
+                        {!isSettlement && !isPrivateExpense && (e.currency || 'JPY') !== 'TWD' && (
+                          isAwaiting ? (
+                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFE8CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 8 }} />等卡單
+                            </span>
+                          ) : hasActual ? (
+                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                              <FontAwesomeIcon icon={faCheck} style={{ fontSize: 8 }} />實際
+                            </span>
+                          ) : isForeignCard ? (
+                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: 'var(--tm-section-bg)', color: C.barkLight, display: 'inline-flex', alignItems: 'center', gap: 3, border: `1px dashed ${C.creamDark}` }}>
+                              預估
+                            </span>
+                          ) : null
                         )}
                       </div>
                       <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
@@ -1556,6 +1735,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                             <button onClick={() => openEdit(e)}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faPen} />
+                            </button>
+                          )}
+                          {/* 補實際金額 — foreign-card expense, whether awaiting or already estimated */}
+                          {!isSettlement && isForeignCard && (
+                            <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
+                              style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                              <FontAwesomeIcon icon={faReceipt} />
                             </button>
                           )}
                           {/* 補記差額 — only for shared (non-settlement, non-private) rows */}
