@@ -297,8 +297,31 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
     getDoc(_doc(db, 'trips', TRIP_ID)).then(async (snap: any) => {
       if (!snap.exists()) return;
       const data = snap.data();
-      setAllowedEditorUids(data.allowedEditorUids || []);
-      setEditorInfo(data.editorInfo || {});
+      const ownerUid   = data.ownerUid as string | undefined;
+      const rawEditors = (data.allowedEditorUids || []) as string[];
+      const rawInfo    = (data.editorInfo || {}) as Record<string, { email: string; joinedAt: number }>;
+
+      // Self-heal: the owner's own uid must never appear in allowedEditorUids.
+      // An earlier bug let the owner pass through the visitor-link key-upgrade
+      // flow in incognito, which added their uid to this list. Strip it here
+      // so the editor list never shows the owner as an editor and there's no
+      // "降級訪客" button tempting them to downgrade themselves.
+      if (ownerUid && rawEditors.includes(ownerUid)) {
+        try {
+          await _updateDoc(_doc(db, 'trips', TRIP_ID), {
+            allowedEditorUids: arrayRemove(ownerUid),
+            [`editorInfo.${ownerUid}`]: deleteField(),
+          });
+        } catch (e) { console.warn('[owner-cleanup] failed', e); }
+        const cleaned = rawEditors.filter(u => u !== ownerUid);
+        const cleanedInfo = { ...rawInfo }; delete cleanedInfo[ownerUid];
+        setAllowedEditorUids(cleaned);
+        setEditorInfo(cleanedInfo);
+      } else {
+        setAllowedEditorUids(rawEditors);
+        setEditorInfo(rawInfo);
+      }
+
       const existing = data.collaboratorKey;
       if (existing) {
         setFirestoreCollaboratorKey(existing);
@@ -653,8 +676,13 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
             <span style={{ fontSize: 12, color: C.barkLight }}><FontAwesomeIcon icon={editorListOpen ? faChevronUp : faChevronDown} /></span>
           </button>
           {editorListOpen && <div style={{ display: 'flex', flexDirection: 'column', gap: 8, padding: '0 16px 14px' }}>
-            {/* Sort editor UIDs by owner-defined member card order */}
-            {[...allowedEditorUids].sort((a, b) => {
+            {/* Sort editor UIDs by owner-defined member card order.
+                Filter: never render the current (owner) user's own uid — that
+                would be a 降級訪客 button pointed at themselves (belt & braces
+                on top of the Firestore self-heal). */}
+            {[...allowedEditorUids]
+              .filter(uid => uid !== auth.currentUser?.uid)
+              .sort((a, b) => {
               const ai = displayMembers.findIndex((m: any) => m.googleUid === a);
               const bi = displayMembers.findIndex((m: any) => m.googleUid === b);
               return (ai === -1 ? 9999 : ai) - (bi === -1 ? 9999 : bi);
