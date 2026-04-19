@@ -76,11 +76,11 @@ export default function SplashScreen() {
         {/* LOGO */}
         <div className="tm-splash-logo" style={{ marginBottom: 28 }}>
           <img
-            src="/logo.png"
+            src="/favicon.png"
             alt="TripMori"
             style={{
-              width: 240,
-              height: 'auto',
+              width: 140,
+              height: 140,
               display: 'block',
             }}
           />
