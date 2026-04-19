@@ -403,11 +403,30 @@ input[type="datetime-local"] {
   max-width: 100%;
   min-width: 0;
   box-sizing: border-box;
+  /* Match the regular text-input line-height so the visible row height
+   * matches text inputs in the same form (otherwise iOS Safari's native
+   * datetime-edit container uses its own metrics and the field renders
+   * visibly taller / shorter than the adjacent <input type="text"> cells.) */
+  line-height: 1.5;
+}
+/* Normalise the shadow-DOM datetime-edit container so its own padding /
+ * line-height doesn't add extra height on top of the author's inline
+ * padding. All the inner field & text nodes inherit parent metrics. */
+input[type="date"]::-webkit-datetime-edit,
+input[type="time"]::-webkit-datetime-edit,
+input[type="datetime-local"]::-webkit-datetime-edit,
+input[type="date"]::-webkit-datetime-edit-fields-wrapper,
+input[type="time"]::-webkit-datetime-edit-fields-wrapper,
+input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+  line-height: inherit;
 }
 input[type="date"]::-webkit-date-and-time-value,
 input[type="time"]::-webkit-date-and-time-value,
 input[type="datetime-local"]::-webkit-date-and-time-value {
   text-align: left;
+  margin: 0;
+  line-height: inherit;
 }
 
 /* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */
