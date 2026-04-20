@@ -408,10 +408,20 @@ input[type="datetime-local"] {
    * datetime-edit container uses its own metrics and the field renders
    * visibly taller / shorter than the adjacent <input type="text"> cells.) */
   line-height: 1.5;
+  /* Fix 1: empty date inputs collapse in height on iOS Safari because
+   * the shadow-DOM datetime-edit has no text nodes to push line-height.
+   * Pin a min-height matching a typical text input so an empty date cell
+   * doesn't visibly shrink next to a time cell that has a value. */
+  min-height: 44px;
 }
 /* Normalise the shadow-DOM datetime-edit container so its own padding /
  * line-height doesn't add extra height on top of the author's inline
- * padding. All the inner field & text nodes inherit parent metrics. */
+ * padding. All the inner field & text nodes inherit parent metrics.
+ *
+ * Fix 2: force single-line layout + ellipsis on overflow so a wide
+ * locale-formatted date string like 「2026年4月23日」 doesn't wrap to
+ * a second line inside a narrow flight-edit column — it stays on one
+ * line and clips if genuinely too narrow. */
 input[type="date"]::-webkit-datetime-edit,
 input[type="time"]::-webkit-datetime-edit,
 input[type="datetime-local"]::-webkit-datetime-edit,
@@ -420,6 +430,9 @@ input[type="time"]::-webkit-datetime-edit-fields-wrapper,
 input[type="datetime-local"]::-webkit-datetime-edit-fields-wrapper {
   padding: 0;
   line-height: inherit;
+  font-size: inherit;
+  white-space: nowrap;
+  overflow: hidden;
 }
 input[type="date"]::-webkit-date-and-time-value,
 input[type="time"]::-webkit-date-and-time-value,
@@ -427,6 +440,9 @@ input[type="datetime-local"]::-webkit-date-and-time-value {
   text-align: left;
   margin: 0;
   line-height: inherit;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 /* Hide scrollbar on horizontally scrollable containers (photo strips, etc.) */

@@ -958,11 +958,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
               <div style={{ display: 'flex', gap: 8 }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>開始時間 *</label>
-                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="time" value={form.startTime} onChange={e => set('startTime', e.target.value)} />
+                  <input style={inputStyle} type="time" value={form.startTime} onChange={e => set('startTime', e.target.value)} />
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>結束時間</label>
-                  <input style={{ ...inputStyle, padding: '10px 8px' }} type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} />
+                  <input style={inputStyle} type="time" value={form.endTime} onChange={e => set('endTime', e.target.value)} />
                 </div>
               </div>
               {/* 預計車程 — auto-calc */}

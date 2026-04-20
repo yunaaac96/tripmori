@@ -1197,7 +1197,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </div>
               </div>
               <Row>
-                <Field label="日期" flex={1.5}><input style={inSt} type="date" value={singleFlightForm.date || ''} onChange={e => setSF('date', e.target.value)} /></Field>
+                <Field label="日期" flex={2}><input style={inSt} type="date" value={singleFlightForm.date || ''} onChange={e => setSF('date', e.target.value)} /></Field>
                 <Field label="航空公司" flex={0.9}><input style={inSt} value={singleFlightForm.airline || ''} onChange={e => setSF('airline', e.target.value)} /></Field>
                 <Field label="航班號" flex={0.7}><input style={inSt} value={singleFlightForm.flightNo || ''} onChange={e => setSF('flightNo', e.target.value)} /></Field>
               </Row>
@@ -1258,7 +1258,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </div>
               </div>
               <Field label="預訂名稱 *"><input style={inSt} placeholder="台北101門票" value={customForm.title} onChange={e => setC('title', e.target.value)} /></Field>
-              <Field label="日期（選填）"><input style={{ ...inSt, padding: '10px 8px' }} type="date" value={customForm.date} onChange={e => setC('date', e.target.value)} /></Field>
+              <Field label="日期（選填）"><input style={inSt} type="date" value={customForm.date} onChange={e => setC('date', e.target.value)} /></Field>
               <Field label="訂單編號（選填）"><input style={inSt} placeholder="預訂確認碼" value={customForm.confirmCode} onChange={e => setC('confirmCode', e.target.value)} /></Field>
               <div>
                 <label style={lblSt}>幣別</label>
