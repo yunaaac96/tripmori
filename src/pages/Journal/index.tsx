@@ -4,15 +4,14 @@ import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage, faXmark, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth } from '../../config/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useGoogleUid } from '../../hooks/useAuth';
 import { arrayUnion, arrayRemove } from 'firebase/firestore';
 
 const LS_USER_KEY  = 'tripmori_current_user';
 const MAX_PHOTOS   = 5;
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '🥹', '👍', '🎉'];
 
-export default function JournalPage({ journals, members, journalComments, firestore, project, currentUserName: propCurrentUser }: any) {
+export default function JournalPage({ journals, members, journalComments, firestore, project, currentUserName: propCurrentUser, hasMoreJournals, onShowMoreJournals }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const [showForm, setShowForm] = useState(false);
   const [saving, setSaving]    = useState(false);
@@ -39,7 +38,7 @@ export default function JournalPage({ journals, members, journalComments, firest
   const [journalCommentInputs, setJournalCommentInputs] = useState<Record<string, string>>({});
   const [savingComment, setSavingComment] = useState<string | null>(null);
   const [currentUser, setCurrentUser] = useState<string>(() => propCurrentUser || localStorage.getItem(LS_USER_KEY) || '');
-  const [googleUid, setGoogleUid]     = useState<string | null>(null);
+  const googleUid = useGoogleUid();
 
   // @mention state per comment input
   const [mentionMenuFor, setMentionMenuFor] = useState<string | null>(null);
@@ -64,14 +63,6 @@ export default function JournalPage({ journals, members, journalComments, firest
     const t = setTimeout(() => contentRef.current?.focus(), 350);
     return () => clearTimeout(t);
   }, [showForm]);
-
-  // 追蹤 Google 登入狀態
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, user => {
-      setGoogleUid(user && !user.isAnonymous ? user.uid : null);
-    });
-    return unsub;
-  }, []);
 
   // 當 Google UID 或成員列表更新時，自動帶入綁定成員身份
   useEffect(() => {
@@ -553,6 +544,12 @@ export default function JournalPage({ journals, members, journalComments, firest
                 </div>
               );
             })}
+            {hasMoreJournals && (
+              <button onClick={onShowMoreJournals}
+                style={{ margin: '12px auto 0', padding: '10px 20px', borderRadius: 20, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontFamily: FONT, fontSize: 13, fontWeight: 600, cursor: 'pointer', display: 'block' }}>
+                載入更多日誌
+              </button>
+            )}
           </div>
         )}
       </div>

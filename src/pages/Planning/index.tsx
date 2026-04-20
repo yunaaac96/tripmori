@@ -2,8 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react';
 import { C, FONT } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
-import { auth } from '../../config/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useGoogleAuth } from '../../hooks/useAuth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList, faLock, faUsers, faStar, faUserTag } from '@fortawesome/free-solid-svg-icons';
 
@@ -23,17 +22,8 @@ export default function PlanningPage({ lists, members, firestore, project }: any
   const { db, TRIP_ID, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const isOwner = role === 'owner';
 
-  // Current Google user identity
-  const [googleUid, setGoogleUid]       = useState<string | null>(null);
-  const [authReady, setAuthReady]       = useState(false);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, user => {
-      setGoogleUid(user && !user.isAnonymous ? user.uid : null);
-      setAuthReady(true);
-    });
-    return unsub;
-  }, []);
+  // Current Google user identity (shared singleton listener)
+  const { uid: googleUid, ready: authReady } = useGoogleAuth();
 
   const [filterBy, setFilterBy]           = useState<string>('all');
   const [packingTab, setPackingTab]        = useState<string>('');

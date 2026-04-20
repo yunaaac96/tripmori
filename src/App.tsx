@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
-import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion, deleteField } from 'firebase/firestore';
+import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion, deleteField, orderBy, limit } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -369,6 +369,12 @@ function App() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [journals, setJournals] = useState<any[]>([]);
+  // Journal pagination — live-subscribe to newest N entries, let user click
+  // "載入更多" to grow. Avoids pulling 100+ docs + their photo URLs on every
+  // trip open for long-running trips.
+  const JOURNAL_PAGE = 20;
+  const [journalsLimit, setJournalsLimit] = useState(JOURNAL_PAGE);
+  const [hasMoreJournals, setHasMoreJournals] = useState(false);
   const [lists, setLists]       = useState<any[]>([]);
   const [memberNotes, setMemberNotes]         = useState<any[]>([]);
   const [journalComments, setJournalComments] = useState<any[]>([]);
@@ -588,7 +594,8 @@ function App() {
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
           ['events', setEvents], ['bookings', setBookings],
-          ['journals', setJournals], ['lists', setLists],
+          ['lists', setLists],
+          // journals handled separately below — it's paginated
         ];
         const logErr = (col: string) => (e: Error) => console.warn(`[onSnapshot/${col}]`, e.message);
         unsubs = cols.map(([col, setter]) =>
@@ -693,6 +700,31 @@ function App() {
     // /memberOrder sync inside the trip-doc snapshot below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTripId, currentRole]);
+
+  // Dedicated journals subscription — paginated (newest first) so opening a
+  // long-running trip doesn't pull every journal + photo URL at once.
+  useEffect(() => {
+    if (!activeProject) return;
+    const tripRef = doc(db, 'trips', activeTripId);
+    const q = query(
+      collection(tripRef, 'journals'),
+      orderBy('date', 'desc'),
+      limit(journalsLimit)
+    );
+    const unsub = onSnapshot(q, snap => {
+      setJournals(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      // If the page is full, there might be more older entries available.
+      setHasMoreJournals(snap.size >= journalsLimit);
+    }, e => console.warn('[onSnapshot/journals]', e.message));
+    return unsub;
+  }, [activeTripId, activeProject, journalsLimit]);
+
+  // Reset journals pagination when switching trips
+  useEffect(() => {
+    setJournalsLimit(JOURNAL_PAGE);
+  }, [activeTripId]);
+
+  const showMoreJournals = () => setJournalsLimit(n => n + JOURNAL_PAGE);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
@@ -994,7 +1026,7 @@ function App() {
         {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={activeProject} currentUserName={localStorage.getItem('tripmori_current_user') || ''} />}
+        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={activeProject} currentUserName={localStorage.getItem('tripmori_current_user') || ''} hasMoreJournals={hasMoreJournals} onShowMoreJournals={showMoreJournals} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />

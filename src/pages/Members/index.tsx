@@ -7,7 +7,8 @@ import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, fa
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
-import { onAuthStateChanged, GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
+import { useGoogleAuth } from '../../hooks/useAuth';
 import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc, deleteField, query, where, getDocs, collection as _collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { makeCollabKey, saveProject } from '../ProjectHub/index';
@@ -32,8 +33,7 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
   // Identity: who is the current user? Stored in localStorage
   const [currentUser, setCurrentUser]   = useState<string>(() => localStorage.getItem(LS_USER_KEY) || '');
   const [copied, setCopied]             = useState<string | null>(null);
-  const [googleUid, setGoogleUid]       = useState<string | null>(null);
-  const [googleEmail, setGoogleEmail]   = useState<string | null>(null);
+  const { uid: googleUid, email: googleEmail } = useGoogleAuth();
   const [signingIn, setSigningIn]       = useState(false);
   const [authError, setAuthError]       = useState<string | null>(null);
   const [bindingSummaryOpen, setBindingSummaryOpen] = useState(false);
@@ -67,18 +67,6 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
     setNotionBusy(false);
   };
 
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, user => {
-      if (user && !user.isAnonymous) {
-        setGoogleUid(user.uid);
-        setGoogleEmail(user.email);
-      } else {
-        setGoogleUid(null);
-        setGoogleEmail(null);
-      }
-    });
-    return unsub;
-  }, []);
 
   // Auto-detect identity from Google binding
   useEffect(() => {
@@ -113,9 +101,8 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
   const handleGoogleSignIn = () => {
     const provider = new GoogleAuthProvider();
     signInWithPopup(auth, provider)
-      .then(result => {
-        setGoogleUid(result.user.uid);
-        setGoogleEmail(result.user.email);
+      .then(() => {
+        // Shared auth listener (useGoogleAuth) will pick up uid/email automatically
         setSigningIn(false);
         setAuthError(null);
       })
