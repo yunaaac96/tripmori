@@ -223,80 +223,90 @@ export const preFlightReminder = onSchedule(
 
     const tripsSnap = await db.collection('trips').get();
 
+    // Defence: a malformed departureTime or a single failing member notify
+    // shouldn't abort the entire cron run for every other trip.
     for (const tripDoc of tripsSnap.docs) {
-      const trip = tripDoc.data();
-      if (!trip.startDate) continue;
+      try {
+        const trip = tripDoc.data();
+        if (!trip.startDate) continue;
 
-      const bookingsSnap = await db
-        .collection('trips').doc(tripDoc.id)
-        .collection('bookings')
-        .where('type', '==', 'flight')
-        .get();
+        const bookingsSnap = await db
+          .collection('trips').doc(tripDoc.id)
+          .collection('bookings')
+          .where('type', '==', 'flight')
+          .get();
 
-      for (const bDoc of bookingsSnap.docs) {
-        const b = bDoc.data();
-        const flights: any[] = b.flights || (b.departureTime ? [b] : []);
+        for (const bDoc of bookingsSnap.docs) {
+          try {
+            const b = bDoc.data();
+            const flights: any[] = b.flights || (b.departureTime ? [b] : []);
 
-        for (const f of flights) {
-          if (!f.departureDate || !f.departureTime) continue;
-          const depMs = new Date(`${f.departureDate}T${f.departureTime}:00+08:00`).getTime();
-          if (depMs < windowStart || depMs > windowEnd) continue;
+            for (const f of flights) {
+              if (!f.departureDate || !f.departureTime) continue;
+              const depMs = new Date(`${f.departureDate}T${f.departureTime}:00+08:00`).getTime();
+              if (Number.isNaN(depMs) || depMs < windowStart || depMs > windowEnd) continue;
 
-          // Determine direction: 去程 (outbound) vs 回程 (return)
-          // Use f.direction field; fall back to comparing date with trip.startDate
-          let isReturn = false;
-          if (f.direction) {
-            isReturn = f.direction === '回程';
-          } else if (trip.startDate && f.departureDate) {
-            // If departure date is same as trip start date → outbound; otherwise → return
-            isReturn = f.departureDate !== trip.startDate;
-          }
+              // Determine direction: 去程 (outbound) vs 回程 (return)
+              let isReturn = false;
+              if (f.direction) {
+                isReturn = f.direction === '回程';
+              } else if (trip.startDate && f.departureDate) {
+                isReturn = f.departureDate !== trip.startDate;
+              }
 
-          const membersSnap = await db
-            .collection('trips').doc(tripDoc.id)
-            .collection('members').get();
+              const membersSnap = await db
+                .collection('trips').doc(tripDoc.id)
+                .collection('members').get();
 
-          const flightNo  = f.flightNumber || f.flightNo || '';
-          const direction = isReturn ? '回程' : '去程';
+              const flightNo  = f.flightNumber || f.flightNo || '';
+              const direction = isReturn ? '回程' : '去程';
 
-          // Personalised copy per direction
-          const buildNotification = (memberName: string) => {
-            if (isReturn) {
-              return {
-                title: '✈️ 準備回家囉！',
-                body: `${flightNo ? flightNo + ' ' : ''}航班 4 小時後起飛，該前往機場囉。確認行李已封箱、護照隨身帶。Tripmori 陪你平安回家 🏠`,
+              const buildNotification = (memberName: string) => {
+                if (isReturn) {
+                  return {
+                    title: '✈️ 準備回家囉！',
+                    body: `${flightNo ? flightNo + ' ' : ''}航班 4 小時後起飛，該前往機場囉。確認行李已封箱、護照隨身帶。Tripmori 陪你平安回家 🏠`,
+                  };
+                } else {
+                  return {
+                    title: '🛫 出發倒數 4 小時！',
+                    body: `嘿 ${memberName}，該前往機場囉！檢查好護照與行李，把工作放下，我們只負責享受旅行！祝一路順風 ✨`,
+                  };
+                }
               };
-            } else {
-              return {
-                title: '🛫 出發倒數 4 小時！',
-                body: `嘿 ${memberName}，該前往機場囉！檢查好護照與行李，把工作放下，我們只負責享受旅行！祝一路順風 ✨`,
-              };
+
+              for (const mDoc of membersSnap.docs) {
+                try {
+                  const m = mDoc.data();
+                  if (!m.name) continue;
+
+                  const dedupTag = `flight-${bDoc.id}-${direction}`;
+                  const alreadySent = await db
+                    .collection('trips').doc(tripDoc.id)
+                    .collection('notifications')
+                    .where('recipientName', '==', m.name)
+                    .where('tag', '==', dedupTag)
+                    .limit(1)
+                    .get();
+                  if (!alreadySent.empty) continue;
+
+                  const { title, body } = buildNotification(m.name);
+                  await notifyMember(
+                    tripDoc.id, m.name,
+                    title, body,
+                    { tag: dedupTag, url: '/' }
+                  );
+                } catch (memberErr) {
+                  console.error(`[preflight] trip ${tripDoc.id} booking ${bDoc.id} member ${mDoc.id} failed`, memberErr);
+                }
+              }
             }
-          };
-
-          for (const mDoc of membersSnap.docs) {
-            const m = mDoc.data();
-            if (!m.name) continue;
-
-            // Dedup: only send once per flight direction per member
-            const dedupTag = `flight-${bDoc.id}-${direction}`;
-            const alreadySent = await db
-              .collection('trips').doc(tripDoc.id)
-              .collection('notifications')
-              .where('recipientName', '==', m.name)
-              .where('tag', '==', dedupTag)
-              .limit(1)
-              .get();
-            if (!alreadySent.empty) continue;
-
-            const { title, body } = buildNotification(m.name);
-            await notifyMember(
-              tripDoc.id, m.name,
-              title, body,
-              { tag: dedupTag, url: '/' }
-            );
+          } catch (bookingErr) {
+            console.error(`[preflight] trip ${tripDoc.id} booking ${bDoc.id} failed`, bookingErr);
           }
         }
+      } catch (tripErr) {
+        console.error(`[preflight] trip ${tripDoc.id} failed`, tripErr);
       }
     }
   }
@@ -423,30 +433,59 @@ export const pruneOldNotifications = onSchedule(
     const cutoff = admin.firestore.Timestamp.fromMillis(
       Date.now() - 30 * 24 * 60 * 60 * 1000
     );
+    const PER_TRIP_CAP = 500; // hard upper bound per daily run to avoid
+                              //  fetching a runaway trip's whole collection
+                              //  into memory. Anything over this spills
+                              //  to tomorrow's run.
     const tripsSnap = await db.collection('trips').get();
     let totalDeleted = 0;
+    let totalStamped = 0;
     for (const tripDoc of tripsSnap.docs) {
       try {
+        // 1. Normal prune: notifications older than the 30-day cutoff.
         const snap = await db
           .collection('trips').doc(tripDoc.id)
           .collection('notifications')
           .where('createdAt', '<', cutoff)
+          .limit(PER_TRIP_CAP)
           .get();
-        if (snap.empty) continue;
-        // Firestore batches cap at 500 writes
-        const docs = snap.docs;
-        for (let i = 0; i < docs.length; i += 400) {
-          const batch = db.batch();
-          docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
-          await batch.commit();
+        if (!snap.empty) {
+          // Firestore batches cap at 500 writes; stay well below.
+          const docs = snap.docs;
+          for (let i = 0; i < docs.length; i += 400) {
+            const batch = db.batch();
+            docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+            await batch.commit();
+          }
+          totalDeleted += docs.length;
+          console.log(`[prune-notifs] trip ${tripDoc.id}: deleted ${docs.length}`);
         }
-        totalDeleted += docs.length;
-        console.log(`[prune-notifs] trip ${tripDoc.id}: deleted ${docs.length}`);
+
+        // 2. Self-heal pass: Firestore's `where('createdAt', '<', cutoff)`
+        //    excludes docs where the field is missing, so legacy rows with
+        //    no createdAt would never be pruned. Sample up to 50 per trip
+        //    per run and stamp them with serverTimestamp so they enter the
+        //    30-day clock — eventually caught by the normal prune above.
+        const sample = await db
+          .collection('trips').doc(tripDoc.id)
+          .collection('notifications')
+          .limit(50)
+          .get();
+        const missing = sample.docs.filter(d => !d.data().createdAt);
+        if (missing.length > 0) {
+          const batch = db.batch();
+          missing.forEach(d => batch.set(d.ref, {
+            createdAt: admin.firestore.FieldValue.serverTimestamp(),
+          }, { merge: true }));
+          await batch.commit();
+          totalStamped += missing.length;
+          console.log(`[prune-notifs] trip ${tripDoc.id}: stamped ${missing.length} legacy rows with createdAt`);
+        }
       } catch (err) {
         console.error(`[prune-notifs] trip ${tripDoc.id} failed`, err);
       }
     }
-    console.log(`[prune-notifs] done, total deleted: ${totalDeleted}`);
+    console.log(`[prune-notifs] done, deleted ${totalDeleted}, stamped ${totalStamped}`);
   }
 );
 

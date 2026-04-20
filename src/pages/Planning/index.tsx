@@ -4,7 +4,7 @@ import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import { useGoogleAuth } from '../../hooks/useAuth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList, faLock, faUsers, faStar, faUserTag } from '@fortawesome/free-solid-svg-icons';
+import { faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faSquareCheck, faSuitcase, faLeaf, faChevronLeft, faChevronRight, faUser, faClock, faClipboardList, faLock, faUsers, faStar, faUserTag, faXmark } from '@fortawesome/free-solid-svg-icons';
 
 const EMPTY_FORM = { text: '', listType: 'todo', assignedTo: 'all', dueDate: '' };
 
@@ -154,13 +154,16 @@ export default function PlanningPage({ lists, members, firestore, project }: any
     if (s === 'soon')    return 3 + idBucket;  // ≤3 days: 3/4/5
     return 6 + idBucket;                        // >3 days: 6/7/8
   };
-  // Defer identity-based sort until auth state is resolved to prevent flicker
+  // Defer identity-based sort until auth state is resolved to prevent flicker.
+  // Tiebreak by id everywhere so rapid inserts within the same timestamp
+  // don't reshuffle on every render (was: audit item #12 / #13).
   const todos = [...lists.filter((l: any) => l.listType === 'todo')].sort((a: any, b: any) => {
+    const idTie = String(a.id || '').localeCompare(String(b.id || ''));
     if (!authReady) {
       // Stable sort by createdAt only (no identity bucket yet)
       const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
       const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-      return ta - tb;
+      return ta !== tb ? ta - tb : idTie;
     }
     const pa = todoSortPri(a);
     const pb = todoSortPri(b);
@@ -168,11 +171,14 @@ export default function PlanningPage({ lists, members, firestore, project }: any
     // Within the same priority bucket: dated items sort by due-date ascending;
     // no-date items fall back to createdAt.
     if (a.dueDate && b.dueDate) {
-      return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+      const da = new Date(a.dueDate).getTime();
+      const db = new Date(b.dueDate).getTime();
+      if (da !== db) return da - db;
+      return idTie;
     }
     const ta = a.createdAt ? new Date(a.createdAt).getTime() : 0;
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
-    return ta - tb;
+    return ta !== tb ? ta - tb : idTie;
   });
   // Visitor-visible packing: global preset items only (no member-private items)
   const visitorPackingItems = lists.filter((l: any) =>
@@ -431,7 +437,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 {isEdit ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 13 }} /> 編輯項目</> : <><FontAwesomeIcon icon={faPlus} style={{ fontSize: 13 }} /> 新增項目</>}
               </p>
               <button onClick={() => { setShowSheet(false); setEditTarget(null); }}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+                style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: C.barkLight, display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>

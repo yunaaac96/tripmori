@@ -254,7 +254,7 @@ export default function JournalPage({ journals, members, journalComments, firest
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faBook} style={{ fontSize: 14 }} /> 新增日誌</p>
-              <button onClick={closeForm} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--tm-bark-light)' }}>✕</button>
+              <button onClick={closeForm} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--tm-bark-light)', display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* 作者 */}
@@ -311,7 +311,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                         <img src={url} alt="" onClick={() => setLightbox({ photos: form.photos, idx })}
                           style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, display: 'block', cursor: 'pointer' }} />
                         <button onClick={() => removePhoto(idx)}
-                          style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700 }}>✕</button>
+                          style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
                       </div>
                     ))}
                   </div>
@@ -329,7 +329,7 @@ export default function JournalPage({ journals, members, journalComments, firest
         </div>
       )}
 
-      <PageHeader title="旅行日誌" subtitle="記錄美好時刻 📸" emoji={<FontAwesomeIcon icon={faBook} />} color={C.blush} className="tm-hero-page-blush" />
+      <PageHeader title="旅行日誌" subtitle="記錄美好時刻" emoji={<FontAwesomeIcon icon={faBook} />} color={C.blush} className="tm-hero-page-blush" />
 
       <div style={{ padding: '12px 16px 80px' }}>
 
@@ -481,7 +481,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                                 </div>
                                 {isOwn && !isReadOnly && (
                                   <button onClick={() => handleDeleteComment(c.id)}
-                                    style={{ width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}>✕</button>
+                                    style={{ width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginTop: 4 }}><FontAwesomeIcon icon={faXmark} /></button>
                                 )}
                               </div>
                             );
