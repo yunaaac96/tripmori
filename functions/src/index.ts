@@ -302,15 +302,47 @@ export const preFlightReminder = onSchedule(
   }
 );
 
-// ── 5. Todo due-date daily reminder (runs at 08:00 Taipei time) ──────────────
-// Notifies assignees when a todo is due today.
+// ── 5. Todo due-date reminder (runs at 12:00 Taipei time) ───────────────────
+// Fires three tiers of reminders on the same daily cron:
+//   明天到期 (D-1)  → 前一天提醒
+//   今天到期 (D+0)  → 當天提醒
+//   已逾期 1 天 (D+1) → 最後 nudge（更早的逾期不再打擾，UI 已紅標）
 export const todoDueDateReminder = onSchedule(
-  { schedule: '0 8 * * *', timeZone: 'Asia/Taipei' },
+  { schedule: '0 12 * * *', timeZone: 'Asia/Taipei' },
   async () => {
-    const today = new Date().toLocaleDateString('zh-TW', {
+    const fmt = (d: Date) => d.toLocaleDateString('zh-TW', {
       timeZone: 'Asia/Taipei',
       year: 'numeric', month: '2-digit', day: '2-digit',
     }).replace(/\//g, '-'); // → 'YYYY-MM-DD'
+
+    const now = new Date();
+    const today     = fmt(now);
+    const tomorrow  = fmt(new Date(now.getTime() + 86400000));
+    const yesterday = fmt(new Date(now.getTime() - 86400000));
+    const triggerDates = [yesterday, today, tomorrow];
+
+    type Stage = 'soon' | 'today' | 'overdue';
+    const stageFor = (dueDate: string): Stage | null => {
+      if (dueDate === tomorrow)  return 'soon';
+      if (dueDate === today)     return 'today';
+      if (dueDate === yesterday) return 'overdue';
+      return null;
+    };
+    const copyFor = (stage: Stage, text: string, isAll: boolean): { title: string; body: string } => {
+      const suffix = isAll ? '（全體待辦）' : '';
+      if (stage === 'soon') return {
+        title: '⏰ 待辦明天到期',
+        body:  `「${text}」明天就到期囉${suffix}，記得提前準備！`,
+      };
+      if (stage === 'today') return {
+        title: '📋 待辦今天到期',
+        body:  `「${text}」今天到期${suffix}，記得完成！`,
+      };
+      return {
+        title: '⚠️ 待辦已逾期',
+        body:  `「${text}」昨天就到期了${suffix}，尚未完成，請盡快處理！`,
+      };
+    };
 
     const tripsSnap = await db.collection('trips').get();
 
@@ -318,17 +350,19 @@ export const todoDueDateReminder = onSchedule(
       const listsSnap = await db
         .collection('trips').doc(tripDoc.id)
         .collection('lists')
-        .where('dueDate', '==', today)
+        .where('dueDate', 'in', triggerDates)
         .where('checked', '==', false)
         .get();
 
       for (const listDoc of listsSnap.docs) {
         const item = listDoc.data();
+        const stage = stageFor(item.dueDate);
+        if (!stage) continue;
         const assignee: string = item.assignee || item.assignedTo || '';
         if (!assignee) continue;
 
         const text = item.text || item.name || '待辦';
-        const title = '📋 待辦事項到期提醒';
+        const tagStage = stage === 'today' ? 'd0' : stage === 'soon' ? 'd1' : 'overdue';
 
         if (assignee === 'all') {
           // 全體待辦：推播給這個行程的每一位成員
@@ -338,19 +372,19 @@ export const todoDueDateReminder = onSchedule(
           for (const mDoc of membersSnap.docs) {
             const m = mDoc.data() as { name?: string };
             if (!m.name) continue;
+            const { title, body } = copyFor(stage, text, true);
             await notifyMember(
               tripDoc.id, m.name,
-              title,
-              `「${text}」今天到期（全體待辦），記得完成！`,
-              { tag: `todo-${listDoc.id}-${m.name}`, url: '/' }
+              title, body,
+              { tag: `todo-${listDoc.id}-${tagStage}-${m.name}`, url: '/' }
             );
           }
         } else {
+          const { title, body } = copyFor(stage, text, false);
           await notifyMember(
             tripDoc.id, assignee,
-            title,
-            `「${text}」今天到期，記得完成！`,
-            { tag: `todo-${listDoc.id}`, url: '/' }
+            title, body,
+            { tag: `todo-${listDoc.id}-${tagStage}`, url: '/' }
           );
         }
       }
