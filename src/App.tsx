@@ -799,6 +799,7 @@ function App() {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: 'instant' });
     if (tab === '成員') { markSeen(LS_SEEN_MEMBERS); setNotifications(n => ({ ...n, '成員': false })); }
     if (tab === '日誌') { markSeen(LS_SEEN_JOURNAL); setNotifications(n => ({ ...n, '日誌': false })); }
   };
@@ -807,6 +808,8 @@ function App() {
     saveProject(p);
     setActiveProject(p.id);
     setActiveProjectState(p);
+    setActiveTab('行程');
+    window.scrollTo({ top: 0, behavior: 'instant' });
     // Fresh editor who joined via collaborator key on the hub: open the
     // member-bind modal so they can pick/create a card instead of landing in
     // the project with no member identity. The existing auto-close effect
