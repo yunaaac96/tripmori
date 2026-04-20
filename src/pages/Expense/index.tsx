@@ -4,8 +4,7 @@ import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPr
 import { avatarTextColor } from '../../utils/helpers';
 import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { auth } from '../../config/firebase';
-import { onAuthStateChanged } from 'firebase/auth';
+import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -210,14 +209,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const darkMode = useDarkMode();
   const PIE_COLORS = darkMode ? PIE_COLORS_DARK : PIE_COLORS_LIGHT;
 
-  // Google UID for private expense ownership
-  const [googleUid, setGoogleUid] = useState<string | null>(null);
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, u => {
-      setGoogleUid(u && !u.isAnonymous ? u.uid : null);
-    });
-    return unsub;
-  }, []);
+  // Google UID for private expense ownership (shared singleton listener)
+  const googleUid = useGoogleUid();
 
   // Derive current user's member name from their Google UID (trip-aware, not localStorage-based)
   // Falls back to localStorage for backwards compatibility when UID isn't bound yet
