@@ -310,23 +310,27 @@ export const preFlightReminder = onSchedule(
 export const todoDueDateReminder = onSchedule(
   { schedule: '0 12 * * *', timeZone: 'Asia/Taipei' },
   async () => {
-    const fmt = (d: Date) => d.toLocaleDateString('zh-TW', {
+    // Use en-CA locale which is guaranteed to output YYYY-MM-DD ISO order.
+    // (zh-TW + year: 'numeric' can produce R.O.C. calendar "114/04/20" on
+    // some Node ICU builds, which silently misses the Firestore `dueDate`
+    // field that Planning always stores as ISO via <input type="date">.)
+    const dateFmt = new Intl.DateTimeFormat('en-CA', {
       timeZone: 'Asia/Taipei',
       year: 'numeric', month: '2-digit', day: '2-digit',
-    }).replace(/\//g, '-'); // → 'YYYY-MM-DD'
+    });
+    const fmt = (d: Date) => dateFmt.format(d);
 
     const now = new Date();
     const today     = fmt(now);
     const tomorrow  = fmt(new Date(now.getTime() + 86400000));
     const yesterday = fmt(new Date(now.getTime() - 86400000));
-    const triggerDates = [yesterday, today, tomorrow];
+    console.log('[todo-reminder] tick', { yesterday, today, tomorrow });
 
     type Stage = 'soon' | 'today' | 'overdue';
-    const stageFor = (dueDate: string): Stage | null => {
-      if (dueDate === tomorrow)  return 'soon';
-      if (dueDate === today)     return 'today';
-      if (dueDate === yesterday) return 'overdue';
-      return null;
+    const stageByDate: Record<string, Stage> = {
+      [tomorrow]:  'soon',
+      [today]:     'today',
+      [yesterday]: 'overdue',
     };
     const copyFor = (stage: Stage, text: string, isAll: boolean): { title: string; body: string } => {
       const suffix = isAll ? '（全體待辦）' : '';
@@ -347,16 +351,29 @@ export const todoDueDateReminder = onSchedule(
     const tripsSnap = await db.collection('trips').get();
 
     for (const tripDoc of tripsSnap.docs) {
-      const listsSnap = await db
-        .collection('trips').doc(tripDoc.id)
-        .collection('lists')
-        .where('dueDate', 'in', triggerDates)
-        .where('checked', '==', false)
-        .get();
+      // Run 3 separate equality queries instead of a single `in` query.
+      // Pure equality-equality compound queries don't need a composite index;
+      // `in` + another equality sometimes does, and silently failing in a
+      // background function is exactly the class of bug we don't want.
+      let docs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+      try {
+        const results = await Promise.all([yesterday, today, tomorrow].map(date =>
+          db.collection('trips').doc(tripDoc.id)
+            .collection('lists')
+            .where('dueDate', '==', date)
+            .where('checked', '==', false)
+            .get()
+        ));
+        docs = results.flatMap(s => s.docs);
+      } catch (err) {
+        console.error(`[todo-reminder] trip ${tripDoc.id} query failed`, err);
+        continue;
+      }
+      console.log(`[todo-reminder] trip ${tripDoc.id}: ${docs.length} matched lists`);
 
-      for (const listDoc of listsSnap.docs) {
+      for (const listDoc of docs) {
         const item = listDoc.data();
-        const stage = stageFor(item.dueDate);
+        const stage = stageByDate[item.dueDate];
         if (!stage) continue;
         const assignee: string = item.assignee || item.assignedTo || '';
         if (!assignee) continue;
