@@ -412,6 +412,44 @@ export const todoDueDateReminder = onSchedule(
   }
 );
 
+// ── Notification TTL cleanup (runs 03:00 Taipei time, daily) ─────────────────
+// Every notifyMember() writes a row into /trips/{tripId}/notifications so the
+// red-dot tab badge works. There's no runtime cleanup in the UI, so that
+// collection grows forever and gets downloaded in full by every member and
+// visitor who opens the trip. Prune anything older than 30 days.
+export const pruneOldNotifications = onSchedule(
+  { schedule: '0 3 * * *', timeZone: 'Asia/Taipei' },
+  async () => {
+    const cutoff = admin.firestore.Timestamp.fromMillis(
+      Date.now() - 30 * 24 * 60 * 60 * 1000
+    );
+    const tripsSnap = await db.collection('trips').get();
+    let totalDeleted = 0;
+    for (const tripDoc of tripsSnap.docs) {
+      try {
+        const snap = await db
+          .collection('trips').doc(tripDoc.id)
+          .collection('notifications')
+          .where('createdAt', '<', cutoff)
+          .get();
+        if (snap.empty) continue;
+        // Firestore batches cap at 500 writes
+        const docs = snap.docs;
+        for (let i = 0; i < docs.length; i += 400) {
+          const batch = db.batch();
+          docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+          await batch.commit();
+        }
+        totalDeleted += docs.length;
+        console.log(`[prune-notifs] trip ${tripDoc.id}: deleted ${docs.length}`);
+      } catch (err) {
+        console.error(`[prune-notifs] trip ${tripDoc.id} failed`, err);
+      }
+    }
+    console.log(`[prune-notifs] done, total deleted: ${totalDeleted}`);
+  }
+);
+
 // ── 6. addEditor: validate collaborator key and add caller to allowedEditorUids ──
 // Called from the client when a visitor enters the correct collaborator key.
 // Uses Admin SDK to bypass client-side security rules (trip update is owner-only).

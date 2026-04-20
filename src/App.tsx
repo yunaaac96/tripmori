@@ -563,9 +563,20 @@ function App() {
     setNotifications(n => ({ ...n, [tab]: hasNew }));
   };
 
-  // Subscribe to collections whenever activeTripId changes
+  // Subscribe to collections whenever activeTripId / role changes.
+  //
+  // Cost-control notes:
+  //   • Dep array is scoped to [activeTripId, role] — NOT the full
+  //     activeProject object — so editing the trip title / memberOrder sync
+  //     doesn't tear down and rebuild all nine snapshot listeners.
+  //   • Visitors skip the four private / noisy collections entirely
+  //     (expenses, memberNotes, journalComments, notifications). The UI
+  //     hides them anyway; the old code still burned a full-collection read
+  //     for each on every visitor page load.
+  const currentRole = activeProject?.role;
   useEffect(() => {
     if (!activeProject) return;
+    const isVisitorRole = currentRole === 'visitor';
     let unsubs: (() => void)[] = [];
     const init = async () => {
       setLoading(true);
@@ -589,20 +600,27 @@ function App() {
         unsubs.push(onSnapshot(collection(tripRef, 'members'), snap => {
           setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((m: any) => !!m.name));
         }, logErr('members')));
-        // Expenses: include metadata changes to track pending writes (offline indicator)
-        unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
-          setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
-        }, logErr('expenses')));
-        unsubs.push(onSnapshot(collection(tripRef, 'memberNotes'), snap => {
-          const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setMemberNotes(items);
-          checkNotification(items, LS_SEEN_MEMBERS, '成員');
-        }, logErr('memberNotes')));
-        unsubs.push(onSnapshot(collection(tripRef, 'journalComments'), snap => {
-          const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setJournalComments(items);
-          checkNotification(items, LS_SEEN_JOURNAL, '日誌');
-        }, logErr('journalComments')));
+
+        // Visitor-gated collections: only subscribe for editor / owner.
+        if (!isVisitorRole) {
+          // Expenses: include metadata changes to track pending writes (offline indicator)
+          unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
+            setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
+          }, logErr('expenses')));
+          unsubs.push(onSnapshot(collection(tripRef, 'memberNotes'), snap => {
+            const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setMemberNotes(items);
+            checkNotification(items, LS_SEEN_MEMBERS, '成員');
+          }, logErr('memberNotes')));
+          unsubs.push(onSnapshot(collection(tripRef, 'journalComments'), snap => {
+            const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setJournalComments(items);
+            checkNotification(items, LS_SEEN_JOURNAL, '日誌');
+          }, logErr('journalComments')));
+        } else {
+          // Clear any stale data from a previous non-visitor session in this tab
+          setExpenses([]); setMemberNotes([]); setJournalComments([]);
+        }
         // ── Watch trip doc: sync title changes + editor revocation + deletion ──
         const currentUid = auth.currentUser?.uid;
         unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
@@ -646,27 +664,35 @@ function App() {
           }
         }));
 
-        unsubs.push(onSnapshot(collection(tripRef, 'notifications'), snap => {
-          const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
-          setTripNotifications(items);
-          // 若有未讀通知 → 對應 tab 顯示紅點
-          const currentName = localStorage.getItem('tripmori_current_user') || '';
-          if (currentName) {
-            const lastSeen = getLastSeen(LS_SEEN_JOURNAL);
-            const hasUnread = items.some((n: any) => {
-              if (n.recipientName !== currentName) return false;
-              const ts = n.createdAt?.toMillis ? n.createdAt.toMillis() : 0;
-              return ts > lastSeen;
-            });
-            if (hasUnread) setNotifications(prev => ({ ...prev, '日誌': true }));
-          }
-        }, () => { /* notifications collection not yet provisioned — silently skip */ }));
+        if (!isVisitorRole) {
+          unsubs.push(onSnapshot(collection(tripRef, 'notifications'), snap => {
+            const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setTripNotifications(items);
+            // 若有未讀通知 → 對應 tab 顯示紅點
+            const currentName = localStorage.getItem('tripmori_current_user') || '';
+            if (currentName) {
+              const lastSeen = getLastSeen(LS_SEEN_JOURNAL);
+              const hasUnread = items.some((n: any) => {
+                if (n.recipientName !== currentName) return false;
+                const ts = n.createdAt?.toMillis ? n.createdAt.toMillis() : 0;
+                return ts > lastSeen;
+              });
+              if (hasUnread) setNotifications(prev => ({ ...prev, '日誌': true }));
+            }
+          }, () => { /* notifications collection not yet provisioned — silently skip */ }));
+        } else {
+          setTripNotifications([]);
+        }
         setLoading(false);
       } catch (err) { console.error(err); setLoading(false); }
     };
     init();
     return () => unsubs.forEach(u => u());
-  }, [activeTripId, activeProject]);
+    // NOTE: dep list intentionally excludes the full `activeProject` object —
+    // only re-subscribe when tripId or role changes, not when title/emoji
+    // /memberOrder sync inside the trip-doc snapshot below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeTripId, currentRole]);
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
