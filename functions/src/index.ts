@@ -365,13 +365,16 @@ export const todoDueDateReminder = onSchedule(
         const tagStage = stage === 'today' ? 'd0' : stage === 'soon' ? 'd1' : 'overdue';
 
         if (assignee === 'all') {
-          // 全體待辦：推播給這個行程的每一位成員
+          // 全體待辦：每人獨立 checkedBy[uid]。只推播給「自己尚未勾完成」的成員。
+          const checkedBy: Record<string, boolean> = item.checkedBy || {};
           const membersSnap = await db
             .collection('trips').doc(tripDoc.id)
             .collection('members').get();
           for (const mDoc of membersSnap.docs) {
-            const m = mDoc.data() as { name?: string };
+            const m = mDoc.data() as { name?: string; googleUid?: string };
             if (!m.name) continue;
+            // 已綁 Google 帳號且自己勾完了 → 跳過，不打擾
+            if (m.googleUid && checkedBy[m.googleUid]) continue;
             const { title, body } = copyFor(stage, text, true);
             await notifyMember(
               tripDoc.id, m.name,
