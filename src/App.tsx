@@ -615,7 +615,9 @@ function App() {
 
         // Visitor-gated collections: only subscribe for editor / owner.
         if (!isVisitorRole) {
-          // Expenses: include metadata changes to track pending writes (offline indicator)
+          // Expenses: metadata-change callbacks power the "同步中…" indicator
+          //   on the client. Safe for cost — we only reach this branch for
+          //   editor / owner (visitors skip the sub entirely per H2).
           unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
             setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
           }, logErr('expenses')));
@@ -734,15 +736,33 @@ function App() {
   // ── Onboarding: check the "pending" localStorage flag set by creation /
   //   editor-upgrade flows. If we have a Google uid + a project + the user
   //   hasn't already completed that track on any device, show the modal.
+  //
+  //   Guards:
+  //   - Anonymous users are NOT onboarded (firestore.rules blocks /users/{uid}
+  //     writes for anonymous, so flag can't persist). They're also always
+  //     visitors in practice, which is skipped below anyway.
+  //   - LS value is strictly validated; malformed values are cleared so
+  //     they don't keep triggering no-op effect runs.
+  //   - onboarding-done write retries on next effect run if it fails — we
+  //     only clear the LS pending flag AFTER the Firestore flag lands.
   const [onboardingTrack, setOnboardingTrack] = useState<OnboardingTrack | null>(null);
   useEffect(() => {
     if (!activeProject) return;
-    if (!authUid) return;              // waits for Google sign-in
-    if (currentRole === 'visitor') return; // visitors are not onboarded
-    const pending = localStorage.getItem(LS_ONBOARDING_PENDING) as OnboardingTrack | null;
-    if (pending !== 'creator' && pending !== 'invitee') return;
-    // Avoid showing invitee onboarding for the trip owner (sanity guard)
-    if (pending === 'creator' && currentRole !== 'owner') return;
+    if (!authUid) return;                      // needs real Google sign-in
+    if (currentRole === 'visitor') return;     // visitors are not onboarded
+    const raw = localStorage.getItem(LS_ONBOARDING_PENDING);
+    const pending: OnboardingTrack | null =
+      raw === 'creator' || raw === 'invitee' ? raw : null;
+    if (!pending) {
+      // Stale / malformed LS value — clean up so future runs don't loop.
+      if (raw) localStorage.removeItem(LS_ONBOARDING_PENDING);
+      return;
+    }
+    // Sanity: creator track should only fire for actual owner.
+    if (pending === 'creator' && currentRole !== 'owner') {
+      localStorage.removeItem(LS_ONBOARDING_PENDING);
+      return;
+    }
     hasCompletedOnboarding(authUid, pending).then(done => {
       if (done) {
         localStorage.removeItem(LS_ONBOARDING_PENDING);
@@ -752,10 +772,19 @@ function App() {
     });
   }, [activeProject, authUid, currentRole]);
 
-  const finishOnboarding = () => {
-    if (authUid && onboardingTrack) markOnboardingDone(authUid, onboardingTrack);
-    localStorage.removeItem(LS_ONBOARDING_PENDING);
-    setOnboardingTrack(null);
+  const finishOnboarding = async () => {
+    const track = onboardingTrack;
+    setOnboardingTrack(null);                  // close modal immediately
+    if (!authUid || !track) {
+      localStorage.removeItem(LS_ONBOARDING_PENDING);
+      return;
+    }
+    const ok = await markOnboardingDone(authUid, track);
+    // Only clear LS pending when the Firestore flag actually landed.
+    // On failure we keep the LS signal so the effect retries on the next
+    // mount / role change and the user won't see the modal permanently
+    // stuck "seen but not recorded".
+    if (ok) localStorage.removeItem(LS_ONBOARDING_PENDING);
   };
 
   const handleTabChange = (tab: string) => {

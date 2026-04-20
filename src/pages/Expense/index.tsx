@@ -503,6 +503,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   // ── Settlement add ───────────────────────────────────────────────────────
   const handleAddSettlement = async (from: string, to: string, amount: string, currency: string) => {
+    // Defence-in-depth: every entry point to this function is already behind
+    // a `!isReadOnly` UI guard, but we re-check here so the write path itself
+    // can never be exercised by a visitor (firestore.rules would reject too).
+    if (isReadOnly) return;
     const amt = Number(amount);
     const amtTWD = toTWD(amt, currency);
     const payload = {
@@ -741,15 +745,24 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     { key: 'settlement', label: '結清' },
   ];
 
+  // Sort stability: always break ties by document id so rapid inserts within
+  // the same second / identical amount don't flip positions on re-render.
   const filteredExpenses = baseExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
     .sort((a: any, b: any) => {
-      if (sortMode === 'newest') return (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
-      if (sortMode === 'oldest') return (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+      const tieBreak = String(a.id || '').localeCompare(String(b.id || ''));
+      if (sortMode === 'newest') {
+        const diff = (b.createdAt?.seconds || 0) - (a.createdAt?.seconds || 0);
+        return diff !== 0 ? diff : tieBreak;
+      }
+      if (sortMode === 'oldest') {
+        const diff = (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
+        return diff !== 0 ? diff : tieBreak;
+      }
       // largest
       const aAmt = effectiveTWD(a);
       const bAmt = effectiveTWD(b);
-      return bAmt - aAmt;
+      return bAmt !== aAmt ? bAmt - aAmt : tieBreak;
     });
 
   const splitModeLabel = (e: any) => {

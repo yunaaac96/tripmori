@@ -71,12 +71,14 @@ const DEFAULT_CAR = {
 };
 
 // ── Custom booking types ─────────────────────────────────
-const BOOKING_TYPES: Record<string, { emoji: string; label: string; bg: string; color: string }> = {
-  activity:  { emoji: '🎡', label: '景點/活動', bg: '#E0F0D8', color: '#4A7A35' },
-  transport: { emoji: '🚌', label: '交通票券', bg: '#D8EDF8', color: '#2A6A9A' },
-  show:      { emoji: '🎭', label: '表演/票券', bg: '#F0E8FF', color: '#6A3A9A' },
-  ferry:     { emoji: '🛥', label: '船票/渡輪', bg: '#E0F4F8', color: '#2A7A8A' },
-  other:     { emoji: '📦', label: '其他',      bg: '#F0F0F0', color: '#3A3A3A' },
+// Icons come from CATEGORY_ICONS (FontAwesome) — this map is label/colour
+// only so there's a single source of truth for icon strategy.
+const BOOKING_TYPES: Record<string, { label: string; bg: string; color: string }> = {
+  activity:  { label: '景點/活動', bg: '#E0F0D8', color: '#4A7A35' },
+  transport: { label: '交通票券', bg: '#D8EDF8', color: '#2A6A9A' },
+  show:      { label: '表演/票券', bg: '#F0E8FF', color: '#6A3A9A' },
+  ferry:     { label: '船票/渡輪', bg: '#E0F4F8', color: '#2A7A8A' },
+  other:     { label: '其他',      bg: '#F0F0F0', color: '#3A3A3A' },
 };
 
 const EMPTY_CUSTOM_FORM = {
@@ -546,7 +548,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       };
       const mapped = catMap[type] || catMap.other;
       const splitWith = participantNames && participantNames.length > 0 ? participantNames : [];
-      const notes = !participantNames?.length ? '⚠️ 尚未設定參與人，請至記帳確認分帳對象' : '';
+      const notes = !participantNames?.length ? '注意：尚未設定參與人，請至記帳確認分帳對象' : '';
       await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
         description: `${mapped.prefix} - ${name}`,
         amount, currency, amountTWD,

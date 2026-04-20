@@ -111,11 +111,15 @@ service cloud.firestore {
       //           cannot forge another user's private expense
       match /expenses/{expenseId} {
 
-        // Collection query (onSnapshot): allow all, client-side filter handles display
-        allow list: if isAuthed();
+        // Collection query (onSnapshot): Google-authed only. Anonymous
+        // visitors don't subscribe to expenses on the client (per H2
+        // optimisation) and shouldn't be able to list them server-side
+        // either — this is defence-in-depth in case any future client
+        // code attempts a listing under anonymous auth.
+        allow list: if isGoogleAuthed();
 
-        // Single document read: block others' private expenses
-        allow get: if isAuthed() && (
+        // Single document read: Google-authed + not someone else's private
+        allow get: if isGoogleAuthed() && (
           !resource.data.get('isPrivate', false) ||
           resource.data.privateOwnerUid == request.auth.uid
         );
