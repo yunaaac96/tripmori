@@ -415,6 +415,9 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
         currency: newCurrency,
       };
       saveProject(p);
+      // Mark onboarding pending so the creator track fires when the user
+      // lands in the newly-created trip (App.tsx consumes this on mount).
+      try { localStorage.setItem('tripmori_onboarding_pending', 'creator'); } catch { /* ignore storage errors */ }
       setCreatedProject(p);
       // Pre-fill member name from Google display name
       const displayFirst = user.displayName?.split(/[\s_]+/)[0] || '';

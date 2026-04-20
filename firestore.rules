@@ -139,5 +139,11 @@ service cloud.firestore {
         );
       }
     }
+
+    // ── /users: per-uid onboarding + future per-user preferences ─────────
+    // Each user can read / write only their own doc. Google-signed-in only.
+    match /users/{uid} {
+      allow read, write: if isGoogleAuthed() && request.auth.uid == uid;
+    }
   }
 }

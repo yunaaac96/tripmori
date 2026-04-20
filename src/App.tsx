@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion, deleteField, orderBy, limit } from 'firebase/firestore';
+import { LS_ONBOARDING_PENDING, hasCompletedOnboarding, markOnboardingDone } from './utils/onboarding';
+import type { OnboardingTrack } from './utils/onboarding';
+import OnboardingModal from './components/OnboardingModal';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -219,6 +222,8 @@ function App() {
                 saveProject(upgraded);
                 return upgraded;
               });
+              // Trigger invitee onboarding (runs once the useEffect picks it up)
+              try { localStorage.setItem(LS_ONBOARDING_PENDING, 'invitee'); } catch { /* ignore */ }
               setShowMemberBind(true);
               // Delay sync so Firestore write propagates before editorQ is queried
               setTimeout(() => syncUserTrips(user.uid, user.email!), 2000);
@@ -726,6 +731,33 @@ function App() {
 
   const showMoreJournals = () => setJournalsLimit(n => n + JOURNAL_PAGE);
 
+  // ── Onboarding: check the "pending" localStorage flag set by creation /
+  //   editor-upgrade flows. If we have a Google uid + a project + the user
+  //   hasn't already completed that track on any device, show the modal.
+  const [onboardingTrack, setOnboardingTrack] = useState<OnboardingTrack | null>(null);
+  useEffect(() => {
+    if (!activeProject) return;
+    if (!authUid) return;              // waits for Google sign-in
+    if (currentRole === 'visitor') return; // visitors are not onboarded
+    const pending = localStorage.getItem(LS_ONBOARDING_PENDING) as OnboardingTrack | null;
+    if (pending !== 'creator' && pending !== 'invitee') return;
+    // Avoid showing invitee onboarding for the trip owner (sanity guard)
+    if (pending === 'creator' && currentRole !== 'owner') return;
+    hasCompletedOnboarding(authUid, pending).then(done => {
+      if (done) {
+        localStorage.removeItem(LS_ONBOARDING_PENDING);
+      } else {
+        setOnboardingTrack(pending);
+      }
+    });
+  }, [activeProject, authUid, currentRole]);
+
+  const finishOnboarding = () => {
+    if (authUid && onboardingTrack) markOnboardingDone(authUid, onboardingTrack);
+    localStorage.removeItem(LS_ONBOARDING_PENDING);
+    setOnboardingTrack(null);
+  };
+
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
     if (tab === '成員') { markSeen(LS_SEEN_MEMBERS); setNotifications(n => ({ ...n, '成員': false })); }
@@ -744,6 +776,8 @@ function App() {
     if (justJoinedViaKey && p.role === 'editor') {
       setUpgradeStep('binding');
       setShowMemberBind(true);
+      // Trigger invitee onboarding when landing in the trip
+      try { localStorage.setItem(LS_ONBOARDING_PENDING, 'invitee'); } catch { /* ignore */ }
     }
   };
 
@@ -781,6 +815,7 @@ function App() {
         setShowKeyUpgrade(false);
         setUpgradeStep('binding');
         setShowMemberBind(true);
+        try { localStorage.setItem(LS_ONBOARDING_PENDING, 'invitee'); } catch { /* ignore */ }
         // Delay sync so Firestore write propagates before editorQ is queried
         setTimeout(() => syncUserTrips(user.uid, user.email!), 2000);
       } else {
@@ -1030,6 +1065,16 @@ function App() {
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
         {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
+
+        {/* ── Onboarding modal (creator / invitee track) ── */}
+        {onboardingTrack && activeProject && (
+          <OnboardingModal
+            track={onboardingTrack}
+            tripTitle={activeProject.title || '旅行'}
+            onDone={finishOnboarding}
+            onSkip={finishOnboarding}
+          />
+        )}
 
         {/* ── Member card binding modal (shown after key upgrade) ── */}
         {showMemberBind && (
