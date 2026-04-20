@@ -834,6 +834,7 @@ export const backupTripToNotion = onCall(
     }
 
     // ── Append remaining blocks in batches of 95 ─────────────────────────────
+    let truncatedAt = -1;
     for (let i = BATCH; i < blocks.length; i += BATCH) {
       try {
         await (notion.blocks.children as any).append({
@@ -842,7 +843,20 @@ export const backupTripToNotion = onCall(
         });
       } catch (err: any) {
         console.error(`Notion append error at block ${i}:`, err?.message ?? err);
+        truncatedAt = i;
         break; // partial backup beats no backup
+      }
+    }
+
+    // ── Mark page status if truncated ─────────────────────────────────────────
+    if (truncatedAt >= 0) {
+      try {
+        await notion.pages.update({
+          page_id: page.id,
+          properties: { '狀態': { select: { name: '備份不完整' } } },
+        } as any);
+      } catch (err: any) {
+        console.warn('Could not mark page as incomplete:', err?.message ?? err);
       }
     }
 
@@ -855,6 +869,11 @@ export const backupTripToNotion = onCall(
       expenseCount: allExpenses.length,
       totalTWD:     Math.round(totalTWD),
       blockCount:   blocks.length,
+      ...(truncatedAt >= 0 && {
+        truncated:   true,
+        truncatedAt,
+        warning:     `備份不完整：第 ${truncatedAt + 1} 個 block 開始寫入失敗，Notion 頁面狀態已標記為「備份不完整」`,
+      }),
     };
   }
 );

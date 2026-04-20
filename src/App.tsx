@@ -161,9 +161,12 @@ function App() {
       [ownedSnap, emailSnap, editorSnap].forEach(snap => {
         if (snap) snap.forEach((d: any) => firestoreIds.add(d.id));
       });
-      // Only remove stale trips if the corresponding query succeeded
-      const ownerQueriesOK = ownedResult.status === 'fulfilled' || emailResult.status === 'fulfilled';
-      const editorQueryOK  = editorResult.status === 'fulfilled';
+      // Only remove stale trips when we have confirmed server data (not from offline cache).
+      // When offline, Firestore may return an empty fulfilled snapshot from cache, which would
+      // incorrectly delete all locally-stored owner/editor projects.
+      const ownerQueriesOK = (ownedResult.status === 'fulfilled' && !ownedResult.value.metadata.fromCache) ||
+                             (emailResult.status === 'fulfilled' && !emailResult.value.metadata.fromCache);
+      const editorQueryOK  = editorResult.status === 'fulfilled' && !editorResult.value.metadata.fromCache;
       map.forEach((p, id) => {
         if (p.role === 'owner'  && ownerQueriesOK && !firestoreIds.has(id)) map.delete(id);
         if (p.role === 'editor' && editorQueryOK  && !firestoreIds.has(id)) map.delete(id);
@@ -278,6 +281,9 @@ function App() {
         });
       } else if (wasGoogleSignedIn.current) {
         // 使用者主動或自動登出 → 清除所有專案，回到初始畫面
+        // Guard: skip clearing when offline — auth null event may be transient (token refresh failure).
+        // Projects will be re-evaluated once network is restored.
+        if (!navigator.onLine) return;
         wasGoogleSignedIn.current = false;
         // Save last project ID so we can restore it after re-login
         const lastId = localStorage.getItem('tripmori_active_project');
@@ -639,7 +645,11 @@ function App() {
         const currentUid = auth.currentUser?.uid;
         unsubs.push(onSnapshot(doc(db, 'trips', activeTripId), (tripSnap) => {
           if (!tripSnap.exists()) {
-            // Trip was deleted — evict from localStorage and return to hub for all users
+            // When offline, Firestore fires exists()=false for any document not in local cache —
+            // it cannot distinguish "deleted on server" from "not cached yet".
+            // Only evict when we have a confirmed server response (not from cache).
+            if (tripSnap.metadata.fromCache) return;
+            // Trip was deleted on server — evict from localStorage and return to hub for all users
             removeProject(activeTripId);
             localStorage.removeItem('tripmori_active_project');
             setActiveProjectState(null);
@@ -789,6 +799,7 @@ function App() {
 
   const handleTabChange = (tab: string) => {
     setActiveTab(tab);
+    window.scrollTo({ top: 0, behavior: 'instant' });
     if (tab === '成員') { markSeen(LS_SEEN_MEMBERS); setNotifications(n => ({ ...n, '成員': false })); }
     if (tab === '日誌') { markSeen(LS_SEEN_JOURNAL); setNotifications(n => ({ ...n, '日誌': false })); }
   };
@@ -797,6 +808,8 @@ function App() {
     saveProject(p);
     setActiveProject(p.id);
     setActiveProjectState(p);
+    setActiveTab('行程');
+    window.scrollTo({ top: 0, behavior: 'instant' });
     // Fresh editor who joined via collaborator key on the hub: open the
     // member-bind modal so they can pick/create a card instead of landing in
     // the project with no member identity. The existing auto-close effect
