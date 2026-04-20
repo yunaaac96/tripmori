@@ -655,7 +655,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 ) : null;
               })()}
             </div>
-            {f.notes && (
+            {f.notes && !isVisitor && (
               <div style={{ background: 'var(--tm-card-bg)', padding: '10px 18px 14px' }}>
                 <ExpandableNotes notes={f.notes} color={C.barkLight} margin="0" />
               </div>
@@ -765,7 +765,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                     )}
                   </>
                 )}
-                {h.notes && <ExpandableNotes notes={h.notes} color={C.barkLight} margin="0" />}
+                {h.notes && !isVisitor && <ExpandableNotes notes={h.notes} color={C.barkLight} margin="0" />}
                 {h.mapUrl && (
                   <a href={h.mapUrl} target="_blank" rel="noopener noreferrer"
                     style={{ fontSize: 12, color: C.sky, fontWeight: 600, textDecoration: 'none', display: 'inline-block' }}>
@@ -863,7 +863,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               </div>
             ) : null}
             {/* ── Notes: auto-collapse when long, same pattern as flights / hotels / 其他預訂 ── */}
-            {car.notes && <ExpandableNotes notes={car.notes} color={C.barkLight} margin="0 0 10px" />}
+            {car.notes && !isVisitor && <ExpandableNotes notes={car.notes} color={C.barkLight} margin="0 0 10px" />}
             {/* ── Participants ── */}
             <ParticipantAvatars ids={car.participants} />
             {/* ── QR Code ── */}
@@ -987,7 +987,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   </div>
                 )
               )}
-              {b.notes && <ExpandableNotes notes={b.notes} color={C.barkLight} margin="0 0 8px" />}
+              {b.notes && !isVisitor && <ExpandableNotes notes={b.notes} color={C.barkLight} margin="0 0 8px" />}
               <ParticipantAvatars ids={b.participants} />
               {!isVisitor && b.qrUrl && (
                 <>

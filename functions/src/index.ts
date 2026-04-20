@@ -325,14 +325,34 @@ export const todoDueDateReminder = onSchedule(
       for (const listDoc of listsSnap.docs) {
         const item = listDoc.data();
         const assignee: string = item.assignee || item.assignedTo || '';
-        if (!assignee || assignee === 'all') continue;
+        if (!assignee) continue;
 
-        await notifyMember(
-          tripDoc.id, assignee,
-          '📋 待辦事項到期提醒',
-          `「${item.text || item.name || '待辦'}」今天到期，記得完成！`,
-          { tag: `todo-${listDoc.id}`, url: '/' }
-        );
+        const text = item.text || item.name || '待辦';
+        const title = '📋 待辦事項到期提醒';
+
+        if (assignee === 'all') {
+          // 全體待辦：推播給這個行程的每一位成員
+          const membersSnap = await db
+            .collection('trips').doc(tripDoc.id)
+            .collection('members').get();
+          for (const mDoc of membersSnap.docs) {
+            const m = mDoc.data() as { name?: string };
+            if (!m.name) continue;
+            await notifyMember(
+              tripDoc.id, m.name,
+              title,
+              `「${text}」今天到期（全體待辦），記得完成！`,
+              { tag: `todo-${listDoc.id}-${m.name}`, url: '/' }
+            );
+          }
+        } else {
+          await notifyMember(
+            tripDoc.id, assignee,
+            title,
+            `「${text}」今天到期，記得完成！`,
+            { tag: `todo-${listDoc.id}`, url: '/' }
+          );
+        }
       }
     }
   }
