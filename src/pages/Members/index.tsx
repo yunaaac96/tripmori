@@ -44,7 +44,12 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(() =>
     'Notification' in window ? Notification.permission : 'default'
   );
+  const [fcmSyncing, setFcmSyncing]   = useState(false);
+  const [fcmSynced,  setFcmSynced]    = useState(false);
+
   const handleRequestNotif = async () => {
+    setFcmSyncing(true);
+    setFcmSynced(false);
     // Find this user's member doc ID so we can register the FCM token
     const boundId = googleUid
       ? members.find((m: any) => m.googleUid === googleUid)?.id ?? null
@@ -53,11 +58,13 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
       // enableFcmForMember requests permission AND saves the token to Firestore
       const perm = await enableFcmForMember(firestore.TRIP_ID, boundId);
       setNotifPermission(perm);
+      if (perm === 'granted') { setFcmSynced(true); setTimeout(() => setFcmSynced(false), 3000); }
     } else {
       // Not bound yet — just request permission; token will be saved on next bind
       const perm = await Notification.requestPermission();
       setNotifPermission(perm);
     }
+    setFcmSyncing(false);
   };
 
   // Notion backup
@@ -747,6 +754,11 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
             <p style={{ fontSize: 12, fontWeight: 700, color: notifPermission === 'granted' ? '#4A7A35' : C.bark, margin: 0 }}>
               推播通知：{notifPermission === 'granted' ? '已開啟' : notifPermission === 'denied' ? '已拒絕' : '尚未設定'}
             </p>
+            {notifPermission === 'granted' && (
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>
+                {fcmSynced ? '✓ 裝置已完成同步' : '點擊「同步裝置」以確保此裝置可收到通知'}
+              </p>
+            )}
             {notifPermission === 'denied' && (
               <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>請點擊瀏覽器網址列左側的圖示，在「通知」設定中改為允許</p>
             )}
@@ -758,6 +770,12 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
             <button onClick={handleRequestNotif}
               style={{ fontSize: 11, fontWeight: 700, color: 'white', background: C.earth, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
               啟用通知
+            </button>
+          )}
+          {notifPermission === 'granted' && (
+            <button onClick={handleRequestNotif} disabled={fcmSyncing}
+              style={{ fontSize: 11, fontWeight: 700, color: fcmSynced ? '#4A7A35' : 'white', background: fcmSynced ? '#E0F0D8' : C.earth, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: fcmSyncing ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0, opacity: fcmSyncing ? 0.6 : 1, transition: 'all 0.2s' }}>
+              {fcmSyncing ? '同步中…' : fcmSynced ? '✓ 已同步' : '同步裝置'}
             </button>
           )}
         </div>
