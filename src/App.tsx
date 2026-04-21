@@ -138,6 +138,9 @@ function App() {
             endDate:        data.endDate     || '',
             description:    data.description || '',
             currency:       data.currency    || prev?.currency || '',
+            // Preserve member sort order — read from Firestore first,
+            // fall back to what was previously saved in localStorage.
+            memberOrder:    (data.memberOrder as string[] | undefined) ?? prev?.memberOrder,
           };
           map.set(d.id, p);
         });

@@ -12,6 +12,7 @@ import { useGoogleAuth } from '../../hooks/useAuth';
 import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc, deleteField, query, where, getDocs, collection as _collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { makeCollabKey, saveProject } from '../ProjectHub/index';
+import { enableFcmForMember } from '../../hooks/useFcm';
 
 const PRESET_COLORS = ['#ebcef5','#aaa9ab','#E0F0D8','#A8CADF','#FFF2CC','#FAE0E0','#E8C96A','#D8EDF8'];
 const PRESET_ROLES  = ['行程規劃','交通達人','美食搜查','攝影師','財務長','旅伴'];
@@ -44,8 +45,19 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
     'Notification' in window ? Notification.permission : 'default'
   );
   const handleRequestNotif = async () => {
-    const perm = await Notification.requestPermission();
-    setNotifPermission(perm);
+    // Find this user's member doc ID so we can register the FCM token
+    const boundId = googleUid
+      ? members.find((m: any) => m.googleUid === googleUid)?.id ?? null
+      : null;
+    if (boundId && firestore.TRIP_ID) {
+      // enableFcmForMember requests permission AND saves the token to Firestore
+      const perm = await enableFcmForMember(firestore.TRIP_ID, boundId);
+      setNotifPermission(perm);
+    } else {
+      // Not bound yet — just request permission; token will be saved on next bind
+      const perm = await Notification.requestPermission();
+      setNotifPermission(perm);
+    }
   };
 
   // Notion backup
