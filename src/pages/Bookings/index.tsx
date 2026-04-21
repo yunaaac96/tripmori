@@ -18,6 +18,11 @@ const BOOKING_TYPE_ICONS: Record<string, IconDefinition> = {
   other:     faEllipsis,
 };
 
+const CURRENCY_SYMBOLS: Record<string, string> = {
+  TWD: 'NT$', JPY: '¥', KRW: '₩', USD: '$', EUR: '€', GBP: '£', IDR: 'Rp', HKD: 'HK$', AUD: 'A$', CAD: 'C$', SGD: 'S$', THB: '฿',
+};
+const getCurrencySymbol = (currency: string) => CURRENCY_SYMBOLS[currency] ?? currency;
+
 // ── QR Code for OTS car rental ──────────────────────────
 const QR_SRC = '/ots-qr.png';
 
@@ -760,8 +765,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                       <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
                         <div style={{ textAlign: 'right' }}>
-                          {h.totalCost && <p style={{ fontSize: 16, fontWeight: 700, color: C.earth, margin: 0 }}>{h.currency === 'TWD' ? 'NT$' : h.currency === 'IDR' ? 'Rp' : '¥'} {Number(h.totalCost).toLocaleString()}</p>}
-                          {h.costPerPerson && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>每人 {h.currency === 'TWD' ? 'NT$' : h.currency === 'IDR' ? 'Rp' : '¥'} {Number(h.costPerPerson).toLocaleString()}</p>}
+                          {h.totalCost && <p style={{ fontSize: 16, fontWeight: 700, color: C.earth, margin: 0 }}>{getCurrencySymbol(h.currency || 'JPY')} {Number(h.totalCost).toLocaleString()}</p>}
+                          {h.costPerPerson && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>每人 {getCurrencySymbol(h.currency || 'JPY')} {Number(h.costPerPerson).toLocaleString()}</p>}
                         </div>
                       </div>
                     )}
@@ -860,7 +865,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
                 <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
-                  {car.currency === 'TWD' ? 'NT$' : car.currency === 'IDR' ? 'Rp' : '¥'} {Number(car.totalCost).toLocaleString()}
+                  {getCurrencySymbol(car.currency || 'JPY')} {Number(car.totalCost).toLocaleString()}
                 </span>
               </div>
             ) : null}
@@ -982,7 +987,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                       <div className="tm-booking-cost" style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
                         <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>費用</p>
                         <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>
-                          {b.currency === 'TWD' ? 'NT$' : b.currency === 'USD' ? '$' : '¥'} {Number(b.cost).toLocaleString()}
+                          {getCurrencySymbol(b.currency || 'JPY')} {Number(b.cost).toLocaleString()}
                         </p>
                       </div>
                     )}
@@ -1313,7 +1318,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <p style={{ fontSize: 20, textAlign: 'center', margin: '0 0 8px', color: C.earth }}><FontAwesomeIcon icon={faMoneyBill1} /></p>
             <p style={{ fontSize: 16, fontWeight: 700, color: '#5C4A38', margin: '0 0 8px', textAlign: 'center' }}>是否新增至記帳？</p>
             <p style={{ fontSize: 13, color: '#8C7B6E', margin: '0 0 10px', textAlign: 'center', lineHeight: 1.6 }}>
-              偵測到費用 <strong>{expensePrompt.currency === 'TWD' ? 'NT$' : expensePrompt.currency === 'IDR' ? 'Rp' : '¥'} {expensePrompt.amount.toLocaleString()}</strong>，是否同步新增至記帳？
+              偵測到費用 <strong>{getCurrencySymbol(expensePrompt.currency)} {expensePrompt.amount.toLocaleString()}</strong>，是否同步新增至記帳？
             </p>
             {expensePrompt.participantNames && expensePrompt.participantNames.length > 0 ? (
               <div className="tm-badge-sage-sm" style={{ background: '#EAF3DE', borderRadius: 10, padding: '8px 12px', marginBottom: 16 }}>
