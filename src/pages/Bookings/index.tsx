@@ -1251,7 +1251,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6 }}>
                   {Object.entries(BOOKING_TYPES).map(([key, info]) => (
                     <button key={key} onClick={() => setC('type', key)}
-                      style={{ padding: '9px 6px', borderRadius: 12, border: `2px solid ${customForm.type === key ? info.color : '#E0D9C8'}`, background: customForm.type === key ? info.bg : 'var(--tm-card-bg)', color: info.color, fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 0 }}>
+                      className={customForm.type === key ? `tm-booking-type-${key}` : undefined}
+                      style={{ padding: '9px 6px', borderRadius: 12, border: `2px solid ${customForm.type === key ? info.color : 'var(--tm-cream-dark)'}`, background: customForm.type === key ? info.bg : 'var(--tm-card-bg)', color: customForm.type === key ? info.color : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4, minWidth: 0 }}>
                       <FontAwesomeIcon icon={BOOKING_TYPE_ICONS[key] || faEllipsis} style={{ fontSize: 11 }} /> <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{info.label}</span>
                     </button>
                   ))}
@@ -1366,7 +1367,7 @@ function Field({ label, children, flex = 1 }: { label: string; children: React.R
   );
 }
 
-const lblSt: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: '#8C7B6E', display: 'block', marginBottom: 6 };
+const lblSt: React.CSSProperties = { fontSize: 12, fontWeight: 600, color: 'var(--tm-bark-light)', display: 'block', marginBottom: 6 };
 const inSt: React.CSSProperties  = { width: '100%', boxSizing: 'border-box', padding: '11px 12px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-input-bg)', fontSize: 14, color: 'var(--tm-bark)', outline: 'none', fontFamily: "'M PLUS Rounded 1c', 'Noto Sans TC', sans-serif" };
 
 // Shared "+ 新增" button styles — one for section-title right-hand action,
