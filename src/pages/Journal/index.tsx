@@ -11,6 +11,28 @@ const LS_USER_KEY  = 'tripmori_current_user';
 const MAX_PHOTOS   = 5;
 const REACTION_EMOJIS = ['❤️', '😂', '😮', '🥹', '👍', '🎉'];
 
+// Avatar helper — shows member photo when available, otherwise letter + member colour
+function MemberAvatar({ name, members, size = 32, fontSize = 14 }: { name: string; members: any[]; size?: number; fontSize?: number }) {
+  const member = members?.find((m: any) => m.name === name);
+  const bg     = member?.color || C.blush;
+  // Determine readable text colour against the member's background
+  const hex = bg.replace('#', '');
+  const r = parseInt(hex.slice(0, 2), 16) || 0;
+  const g = parseInt(hex.slice(2, 4), 16) || 0;
+  const b = parseInt(hex.slice(4, 6), 16) || 0;
+  const luma = 0.299 * r + 0.587 * g + 0.114 * b;
+  const textColor = luma > 160 ? C.bark : 'white';
+  const base: React.CSSProperties = { width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden' };
+  if (member?.avatarUrl) {
+    return <div style={base}><img src={member.avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>;
+  }
+  return (
+    <div style={{ ...base, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize, color: textColor }}>
+      {name?.[0]?.toUpperCase()}
+    </div>
+  );
+}
+
 export default function JournalPage({ journals, members, journalComments, firestore, project, currentUserName: propCurrentUser, hasMoreJournals, onShowMoreJournals }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const [showForm, setShowForm] = useState(false);
@@ -379,9 +401,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                   <div style={{ padding: '16px 16px 12px' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: C.blush, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: C.bark }}>
-                          {j.authorName?.[0]?.toUpperCase()}
-                        </div>
+                        <MemberAvatar name={j.authorName} members={members} size={32} fontSize={14} />
                         <div>
                           <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>{j.authorName}</p>
                           <p style={{ fontSize: 10, color: 'var(--tm-bark-light)', margin: 0 }}>{j.date}</p>
@@ -469,9 +489,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                             };
                             return (
                               <div key={c.id} style={{ display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-                                <div style={{ width: 28, height: 28, borderRadius: '50%', background: C.blush, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 12, color: C.bark, flexShrink: 0, marginTop: 2 }}>
-                                  {c.authorName?.[0]?.toUpperCase()}
-                                </div>
+                                <div style={{ marginTop: 2 }}><MemberAvatar name={c.authorName} members={members} size={28} fontSize={12} /></div>
                                 <div style={{ flex: 1, background: 'var(--tm-card-bg)', borderRadius: '4px 16px 16px 16px', padding: '8px 12px', minWidth: 0 }}>
                                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
                                     <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--tm-bark)' }}>{c.authorName}</span>
