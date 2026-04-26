@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backupTripToNotion = exports.claimOwnership = exports.addEditor = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
+exports.backupTripToNotion = exports.claimOwnership = exports.addEditor = exports.pruneOldNotifications = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -199,102 +199,274 @@ exports.onMemberNoteCreated = (0, firestore_1.onDocumentCreated)('trips/{tripId}
 // Distinguishes outbound (去程) and return (回程) with different copy.
 exports.preFlightReminder = (0, scheduler_1.onSchedule)({ schedule: 'every 60 minutes', timeZone: 'Asia/Taipei' }, async () => {
     const now = Date.now();
-    const windowStart = now + 3.5 * 60 * 60 * 1000;
-    const windowEnd = now + 4.5 * 60 * 60 * 1000;
+    const tripsSnap = await db.collection('trips').get();
+    // Defence: a malformed departureTime or a single failing member notify
+    // shouldn't abort the entire cron run for every other trip.
+    for (const tripDoc of tripsSnap.docs) {
+        try {
+            const trip = tripDoc.data();
+            if (!trip.startDate)
+                continue;
+            const bookingsSnap = await db
+                .collection('trips').doc(tripDoc.id)
+                .collection('bookings')
+                .where('type', '==', 'flight')
+                .get();
+            for (const bDoc of bookingsSnap.docs) {
+                try {
+                    const b = bDoc.data();
+                    const flights = b.flights || (b.departureTime || b.date ? [b] : []);
+                    for (const f of flights) {
+                        // Support both legacy fields and current schema (f.date / f.dep.time)
+                        const depDate = f.departureDate || f.date || '';
+                        const depTime = f.departureTime || f.dep?.time || '';
+                        if (!depDate || !depTime)
+                            continue;
+                        // Use +08:00 (Taipei) as base. Expand window to ±1h to handle
+                        // destinations in adjacent timezones (e.g. Japan +09:00).
+                        const depMs = new Date(`${depDate}T${depTime}:00+08:00`).getTime();
+                        if (Number.isNaN(depMs))
+                            continue;
+                        // Window: 3.0 – 5.0 hours ahead (covers +08:00 to +09:00 timezone gap)
+                        const inWindow = depMs >= (now + 3.0 * 3600000) && depMs <= (now + 5.0 * 3600000);
+                        if (!inWindow)
+                            continue;
+                        // Determine direction: 去程 (outbound) vs 回程 (return)
+                        let isReturn = false;
+                        if (f.direction) {
+                            isReturn = f.direction === '回程';
+                        }
+                        else if (trip.startDate && depDate) {
+                            isReturn = depDate !== trip.startDate;
+                        }
+                        const membersSnap = await db
+                            .collection('trips').doc(tripDoc.id)
+                            .collection('members').get();
+                        const flightNo = f.flightNumber || f.flightNo || '';
+                        const direction = isReturn ? '回程' : '去程';
+                        const buildNotification = (memberName) => {
+                            if (isReturn) {
+                                return {
+                                    title: '✈️ 準備回家囉！',
+                                    body: `${flightNo ? flightNo + ' ' : ''}航班 4 小時後起飛，該前往機場囉。確認行李已封箱、護照隨身帶。Tripmori 陪你平安回家 🏠`,
+                                };
+                            }
+                            else {
+                                return {
+                                    title: '🛫 出發倒數 4 小時！',
+                                    body: `嘿 ${memberName}，該前往機場囉！檢查好護照與行李，把工作放下，我們只負責享受旅行！祝一路順風 ✨`,
+                                };
+                            }
+                        };
+                        for (const mDoc of membersSnap.docs) {
+                            try {
+                                const m = mDoc.data();
+                                if (!m.name)
+                                    continue;
+                                const dedupTag = `flight-${bDoc.id}-${direction}`;
+                                const alreadySent = await db
+                                    .collection('trips').doc(tripDoc.id)
+                                    .collection('notifications')
+                                    .where('recipientName', '==', m.name)
+                                    .where('tag', '==', dedupTag)
+                                    .limit(1)
+                                    .get();
+                                if (!alreadySent.empty)
+                                    continue;
+                                const { title, body } = buildNotification(m.name);
+                                await notifyMember(tripDoc.id, m.name, title, body, { tag: dedupTag, url: '/' });
+                            }
+                            catch (memberErr) {
+                                console.error(`[preflight] trip ${tripDoc.id} booking ${bDoc.id} member ${mDoc.id} failed`, memberErr);
+                            }
+                        }
+                    }
+                }
+                catch (bookingErr) {
+                    console.error(`[preflight] trip ${tripDoc.id} booking ${bDoc.id} failed`, bookingErr);
+                }
+            }
+        }
+        catch (tripErr) {
+            console.error(`[preflight] trip ${tripDoc.id} failed`, tripErr);
+        }
+    }
+});
+// ── 5. Todo due-date reminder (runs at 12:00 Taipei time) ───────────────────
+// Fires three tiers of reminders on the same daily cron:
+//   明天到期 (D-1)  → 前一天提醒
+//   今天到期 (D+0)  → 當天提醒
+//   已逾期 1 天 (D+1) → 最後 nudge（更早的逾期不再打擾，UI 已紅標）
+exports.todoDueDateReminder = (0, scheduler_1.onSchedule)({ schedule: '0 12 * * *', timeZone: 'Asia/Taipei' }, async () => {
+    // Use en-CA locale which is guaranteed to output YYYY-MM-DD ISO order.
+    // (zh-TW + year: 'numeric' can produce R.O.C. calendar "114/04/20" on
+    // some Node ICU builds, which silently misses the Firestore `dueDate`
+    // field that Planning always stores as ISO via <input type="date">.)
+    const dateFmt = new Intl.DateTimeFormat('en-CA', {
+        timeZone: 'Asia/Taipei',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+    });
+    const fmt = (d) => dateFmt.format(d);
+    const now = new Date();
+    const today = fmt(now);
+    const tomorrow = fmt(new Date(now.getTime() + 86400000));
+    const yesterday = fmt(new Date(now.getTime() - 86400000));
+    console.log('[todo-reminder] tick', { yesterday, today, tomorrow });
+    const stageByDate = {
+        [tomorrow]: 'soon',
+        [today]: 'today',
+        [yesterday]: 'overdue',
+    };
+    const copyFor = (stage, text, isAll) => {
+        const suffix = isAll ? '（全體待辦）' : '';
+        if (stage === 'soon')
+            return {
+                title: '⏰ 待辦明天到期',
+                body: `「${text}」明天就到期囉${suffix}，記得提前準備！`,
+            };
+        if (stage === 'today')
+            return {
+                title: '📋 待辦今天到期',
+                body: `「${text}」今天到期${suffix}，記得完成！`,
+            };
+        return {
+            title: '⚠️ 待辦已逾期',
+            body: `「${text}」昨天就到期了${suffix}，尚未完成，請盡快處理！`,
+        };
+    };
     const tripsSnap = await db.collection('trips').get();
     for (const tripDoc of tripsSnap.docs) {
-        const trip = tripDoc.data();
-        if (!trip.startDate)
+        // Run 3 separate equality queries instead of a single `in` query.
+        // Pure equality-equality compound queries don't need a composite index;
+        // `in` + another equality sometimes does, and silently failing in a
+        // background function is exactly the class of bug we don't want.
+        let docs = [];
+        try {
+            const results = await Promise.all([yesterday, today, tomorrow].map(date => db.collection('trips').doc(tripDoc.id)
+                .collection('lists')
+                .where('dueDate', '==', date)
+                .where('checked', '==', false)
+                .get()));
+            docs = results.flatMap(s => s.docs);
+        }
+        catch (err) {
+            console.error(`[todo-reminder] trip ${tripDoc.id} query failed`, err);
             continue;
-        const bookingsSnap = await db
-            .collection('trips').doc(tripDoc.id)
-            .collection('bookings')
-            .where('type', '==', 'flight')
-            .get();
-        for (const bDoc of bookingsSnap.docs) {
-            const b = bDoc.data();
-            const flights = b.flights || (b.departureTime ? [b] : []);
-            for (const f of flights) {
-                if (!f.departureDate || !f.departureTime)
-                    continue;
-                const depMs = new Date(`${f.departureDate}T${f.departureTime}:00+08:00`).getTime();
-                if (depMs < windowStart || depMs > windowEnd)
-                    continue;
-                // Determine direction: 去程 (outbound) vs 回程 (return)
-                // Use f.direction field; fall back to comparing date with trip.startDate
-                let isReturn = false;
-                if (f.direction) {
-                    isReturn = f.direction === '回程';
-                }
-                else if (trip.startDate && f.departureDate) {
-                    // If departure date is same as trip start date → outbound; otherwise → return
-                    isReturn = f.departureDate !== trip.startDate;
-                }
+        }
+        console.log(`[todo-reminder] trip ${tripDoc.id}: ${docs.length} matched lists`);
+        for (const listDoc of docs) {
+            const item = listDoc.data();
+            const stage = stageByDate[item.dueDate];
+            if (!stage)
+                continue;
+            const assignee = item.assignee || item.assignedTo || '';
+            if (!assignee)
+                continue;
+            const text = item.text || item.name || '待辦';
+            const tagStage = stage === 'today' ? 'd0' : stage === 'soon' ? 'd1' : 'overdue';
+            if (assignee === 'all') {
+                // 全體待辦：每人獨立 checkedBy[uid]。只推播給「自己尚未勾完成」的成員。
+                const checkedBy = item.checkedBy || {};
                 const membersSnap = await db
                     .collection('trips').doc(tripDoc.id)
                     .collection('members').get();
-                const flightNo = f.flightNumber || f.flightNo || '';
-                const direction = isReturn ? '回程' : '去程';
-                // Personalised copy per direction
-                const buildNotification = (memberName) => {
-                    if (isReturn) {
-                        return {
-                            title: '✈️ 準備回家囉！',
-                            body: `${flightNo ? flightNo + ' ' : ''}航班 4 小時後起飛，該前往機場囉。確認行李已封箱、護照隨身帶。Tripmori 陪你平安回家 🏠`,
-                        };
-                    }
-                    else {
-                        return {
-                            title: '🛫 出發倒數 4 小時！',
-                            body: `嘿 ${memberName}，該前往機場囉！檢查好護照與行李，把工作放下，我們只負責享受旅行！祝一路順風 ✨`,
-                        };
-                    }
-                };
                 for (const mDoc of membersSnap.docs) {
                     const m = mDoc.data();
                     if (!m.name)
                         continue;
-                    // Dedup: only send once per flight direction per member
-                    const dedupTag = `flight-${bDoc.id}-${direction}`;
-                    const alreadySent = await db
+                    // 已綁 Google 帳號且自己勾完了 → 跳過，不打擾
+                    if (m.googleUid && checkedBy[m.googleUid])
+                        continue;
+                    const { title, body } = copyFor(stage, text, true);
+                    const dedupTag = `todo-${listDoc.id}-${tagStage}-${today}`;
+                    // Check if already notified this member today
+                    const alreadyNotified = await db
                         .collection('trips').doc(tripDoc.id)
                         .collection('notifications')
                         .where('recipientName', '==', m.name)
                         .where('tag', '==', dedupTag)
-                        .limit(1)
-                        .get();
-                    if (!alreadySent.empty)
+                        .limit(1).get();
+                    if (!alreadyNotified.empty)
                         continue;
-                    const { title, body } = buildNotification(m.name);
                     await notifyMember(tripDoc.id, m.name, title, body, { tag: dedupTag, url: '/' });
                 }
+            }
+            else {
+                const { title, body } = copyFor(stage, text, false);
+                const dedupTag = `todo-${listDoc.id}-${tagStage}-${today}`;
+                const alreadyNotified = await db
+                    .collection('trips').doc(tripDoc.id)
+                    .collection('notifications')
+                    .where('recipientName', '==', assignee)
+                    .where('tag', '==', dedupTag)
+                    .limit(1).get();
+                if (!alreadyNotified.empty)
+                    continue;
+                await notifyMember(tripDoc.id, assignee, title, body, { tag: dedupTag, url: '/' });
             }
         }
     }
 });
-// ── 5. Todo due-date daily reminder (runs at 08:00 Taipei time) ──────────────
-// Notifies assignees when a todo is due today.
-exports.todoDueDateReminder = (0, scheduler_1.onSchedule)({ schedule: '0 8 * * *', timeZone: 'Asia/Taipei' }, async () => {
-    const today = new Date().toLocaleDateString('zh-TW', {
-        timeZone: 'Asia/Taipei',
-        year: 'numeric', month: '2-digit', day: '2-digit',
-    }).replace(/\//g, '-'); // → 'YYYY-MM-DD'
+// ── Notification TTL cleanup (runs 03:00 Taipei time, daily) ─────────────────
+// Every notifyMember() writes a row into /trips/{tripId}/notifications so the
+// red-dot tab badge works. There's no runtime cleanup in the UI, so that
+// collection grows forever and gets downloaded in full by every member and
+// visitor who opens the trip. Prune anything older than 30 days.
+exports.pruneOldNotifications = (0, scheduler_1.onSchedule)({ schedule: '0 3 * * *', timeZone: 'Asia/Taipei' }, async () => {
+    const cutoff = admin.firestore.Timestamp.fromMillis(Date.now() - 30 * 24 * 60 * 60 * 1000);
+    const PER_TRIP_CAP = 500; // hard upper bound per daily run to avoid
+    //  fetching a runaway trip's whole collection
+    //  into memory. Anything over this spills
+    //  to tomorrow's run.
     const tripsSnap = await db.collection('trips').get();
+    let totalDeleted = 0;
+    let totalStamped = 0;
     for (const tripDoc of tripsSnap.docs) {
-        const listsSnap = await db
-            .collection('trips').doc(tripDoc.id)
-            .collection('lists')
-            .where('dueDate', '==', today)
-            .where('checked', '==', false)
-            .get();
-        for (const listDoc of listsSnap.docs) {
-            const item = listDoc.data();
-            const assignee = item.assignee || item.assignedTo || '';
-            if (!assignee || assignee === 'all')
-                continue;
-            await notifyMember(tripDoc.id, assignee, '📋 待辦事項到期提醒', `「${item.text || item.name || '待辦'}」今天到期，記得完成！`, { tag: `todo-${listDoc.id}`, url: '/' });
+        try {
+            // 1. Normal prune: notifications older than the 30-day cutoff.
+            const snap = await db
+                .collection('trips').doc(tripDoc.id)
+                .collection('notifications')
+                .where('createdAt', '<', cutoff)
+                .limit(PER_TRIP_CAP)
+                .get();
+            if (!snap.empty) {
+                // Firestore batches cap at 500 writes; stay well below.
+                const docs = snap.docs;
+                for (let i = 0; i < docs.length; i += 400) {
+                    const batch = db.batch();
+                    docs.slice(i, i + 400).forEach(d => batch.delete(d.ref));
+                    await batch.commit();
+                }
+                totalDeleted += docs.length;
+                console.log(`[prune-notifs] trip ${tripDoc.id}: deleted ${docs.length}`);
+            }
+            // 2. Self-heal pass: Firestore's `where('createdAt', '<', cutoff)`
+            //    excludes docs where the field is missing, so legacy rows with
+            //    no createdAt would never be pruned. Sample up to 50 per trip
+            //    per run and stamp them with serverTimestamp so they enter the
+            //    30-day clock — eventually caught by the normal prune above.
+            const sample = await db
+                .collection('trips').doc(tripDoc.id)
+                .collection('notifications')
+                .limit(50)
+                .get();
+            const missing = sample.docs.filter(d => !d.data().createdAt);
+            if (missing.length > 0) {
+                const batch = db.batch();
+                missing.forEach(d => batch.set(d.ref, {
+                    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+                }, { merge: true }));
+                await batch.commit();
+                totalStamped += missing.length;
+                console.log(`[prune-notifs] trip ${tripDoc.id}: stamped ${missing.length} legacy rows with createdAt`);
+            }
+        }
+        catch (err) {
+            console.error(`[prune-notifs] trip ${tripDoc.id} failed`, err);
         }
     }
+    console.log(`[prune-notifs] done, deleted ${totalDeleted}, stamped ${totalStamped}`);
 });
 // ── 6. addEditor: validate collaborator key and add caller to allowedEditorUids ──
 // Called from the client when a visitor enters the correct collaborator key.
@@ -631,6 +803,7 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
         throw new https_1.HttpsError('internal', `Notion error: ${err?.message ?? detail}`);
     }
     // ── Append remaining blocks in batches of 95 ─────────────────────────────
+    let truncatedAt = -1;
     for (let i = BATCH; i < blocks.length; i += BATCH) {
         try {
             await notion.blocks.children.append({
@@ -640,7 +813,20 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
         }
         catch (err) {
             console.error(`Notion append error at block ${i}:`, err?.message ?? err);
+            truncatedAt = i;
             break; // partial backup beats no backup
+        }
+    }
+    // ── Mark page status if truncated ─────────────────────────────────────────
+    if (truncatedAt >= 0) {
+        try {
+            await notion.pages.update({
+                page_id: page.id,
+                properties: { '狀態': { select: { name: '備份不完整' } } },
+            });
+        }
+        catch (err) {
+            console.warn('Could not mark page as incomplete:', err?.message ?? err);
         }
     }
     return {
@@ -652,6 +838,11 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
         expenseCount: allExpenses.length,
         totalTWD: Math.round(totalTWD),
         blockCount: blocks.length,
+        ...(truncatedAt >= 0 && {
+            truncated: true,
+            truncatedAt,
+            warning: `備份不完整：第 ${truncatedAt + 1} 個 block 開始寫入失敗，Notion 頁面狀態已標記為「備份不完整」`,
+        }),
     };
 });
 //# sourceMappingURL=index.js.map

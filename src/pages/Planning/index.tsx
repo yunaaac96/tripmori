@@ -188,8 +188,18 @@ export default function PlanningPage({ lists, members, firestore, project }: any
     const tb = b.createdAt ? new Date(b.createdAt).getTime() : 0;
     return ta - tb;
   });
-  const allDone  = lists.filter((l: any) => isPackingCheckedFor(l, googleUid || '') || (l.listType === 'todo' && isTodoChecked(l))).length;
-  const allTotal = lists.length;
+  // Progress should only count items the current user can interact with.
+  // Exclude other people's private packing items.
+  const myRelevantItems = lists.filter((l: any) => {
+    if (l.listType === 'todo') return true; // all todos are relevant
+    // Packing: global preset OR my private items OR items assigned to me by name
+    if (l.assignedTo === 'all' && !l.privateOwnerUid) return true;
+    if (googleUid && l.privateOwnerUid === googleUid) return true;
+    if (myMemberName && !l.privateOwnerUid && l.assignedTo === myMemberName) return true;
+    return false;
+  });
+  const allDone  = myRelevantItems.filter((l: any) => isPackingCheckedFor(l, googleUid || '') || (l.listType === 'todo' && isTodoChecked(l))).length;
+  const allTotal = myRelevantItems.length;
 
   function isPackingCheckedFor(item: any, uid: string | undefined): boolean {
     if (item.listType !== 'packing' || !uid) return false;
@@ -872,7 +882,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                       {checked && <span style={{ color: 'white', fontSize: 14, fontWeight: 700, lineHeight: 1 }}>✓</span>}
                     </div>
                     <div onClick={() => canCheck && toggleItem(item)} style={{ flex: 1, minWidth: 0, cursor: canCheck ? 'pointer' : 'default' }}>
-                      <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none' }}>{item.text}</p>
+                      <p style={{ fontSize: 13, fontWeight: 600, color: C.bark, margin: 0, textDecoration: checked ? 'line-through' : 'none', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{item.text}</p>
                       {!checked && item.dueDate && (
                         <p className={status === 'overdue' ? 'tm-todo-date-overdue' : status === 'soon' ? 'tm-todo-date-soon' : ''} style={{ fontSize: 10, color: status === 'overdue' ? '#C0392B' : status === 'soon' ? '#E65100' : C.barkLight, fontWeight: status !== 'normal' ? 700 : 500, margin: '2px 0 0', display: 'flex', alignItems: 'center', gap: 3 }}>
                           {status === 'overdue' ? <><FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9 }} /> 已逾期：</> : status === 'soon' ? <><FontAwesomeIcon icon={faClock} style={{ fontSize: 9 }} /> 即將到期：</> : '截止：'}{item.dueDate}

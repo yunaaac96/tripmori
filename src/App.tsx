@@ -48,12 +48,12 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
         <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7 }}><FontAwesomeIcon icon={faLightbulb} /></span>
         <span style={{
           fontSize: 11, color, fontStyle: 'italic', lineHeight: 1.5,
-          whiteSpace: 'pre-wrap',
+          whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere',
           ...(isLong && !expanded ? {
             display: '-webkit-box', WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
           } : {}),
-        }}>{notes}</span>
+        }}><SmartText text={notes} /></span>
       </div>
       {isLong && (
         <button onClick={() => setExpanded(v => !v)} style={{
@@ -65,6 +65,23 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
         </button>
       )}
     </div>
+  );
+}
+export function SmartText({ text, style }: { text: string; style?: React.CSSProperties }) {
+  const urlRegex = /(https?:\/\/[^\s]+|www\.[^\s]+)/gi;
+  const parts = text.split(urlRegex);
+  return (
+    <span style={{ wordBreak: 'break-word', overflowWrap: 'anywhere', whiteSpace: 'pre-wrap', ...style }}>
+      {parts.map((part, i) => {
+        if (urlRegex.test(part)) {
+          urlRegex.lastIndex = 0; // reset stateful regex
+          const href = /^https?:\/\//i.test(part) ? part : `https://${part}`;
+          return <a key={i} href={href} target="_blank" rel="noopener noreferrer"
+            style={{ color: '#5C8A4A', textDecoration: 'underline', wordBreak: 'break-all' }}>{part}</a>;
+        }
+        return part;
+      })}
+    </span>
   );
 }
 export const CATEGORY_MAP: Record<string, { label: string; bg: string; text: string; emoji: string }> = {

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { C, FONT, cardStyle, inputStyle, btnPrimary } from '../../App';
+import { C, FONT, cardStyle, inputStyle, btnPrimary, SmartText } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage, faXmark, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
@@ -412,7 +412,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                           style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faTrashCan} /></button>
                       )}
                     </div>
-                    <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{j.content}</p>
+                    <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={j.content || ''} /></p>
                     {/* 照片 */}
                     {j.photos?.length > 0 && (
                       <div className="tm-hscroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap', marginBottom: 8, paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
@@ -495,7 +495,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                                     <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--tm-bark)' }}>{c.authorName}</span>
                                     <span style={{ fontSize: 10, color: 'var(--tm-bark-light)' }}>{timeStr}</span>
                                   </div>
-                                  <p style={{ fontSize: 13, color: 'var(--tm-bark)', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word' }}>{renderContent(c.content)}</p>
+                                  <p style={{ fontSize: 13, color: 'var(--tm-bark)', margin: 0, lineHeight: 1.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{renderContent(c.content)}</p>
                                 </div>
                                 {isOwn && !isReadOnly && (
                                   <button onClick={() => handleDeleteComment(c.id)}
