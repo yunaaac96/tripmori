@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
-import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary } from '../../App';
+import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, ExpandableNotes, SmartText } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
 import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1277,8 +1277,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         <span style={{ fontSize: 11, color: C.barkLight, flexShrink: 0 }}>{form.currency}</span>
                       </div>
                     ))}
-                    <div style={{ background: Math.abs(customRemaining) < 1 ? '#EAF3DE' : '#FFF2CC', borderRadius: 10, padding: '8px 12px' }}>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: C.bark, margin: 0 }}>
+                    <div style={{ background: Math.abs(customRemaining) < 1 ? 'var(--tm-status-ok-bg)' : 'var(--tm-status-warn-bg)', borderRadius: 10, padding: '8px 12px' }}>
+                      <p style={{ fontSize: 12, fontWeight: 600, color: Math.abs(customRemaining) < 1 ? 'var(--tm-status-ok-text)' : 'var(--tm-status-warn-text)', margin: 0 }}>
                         總計：{customTotal.toLocaleString()} / 剩餘：{customRemaining.toLocaleString()} {form.currency}
                       </p>
                     </div>
@@ -1666,7 +1666,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, wordBreak: 'break-word' }}>{e.description}</p>
+                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{e.description}</p>
                         {e._pending && (
                           <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>↻</span>
                         )}
@@ -1712,7 +1712,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         </p>
                       )}
                       {isSettlement && e.notes && (
-                        <p style={{ fontSize: 11, color: C.sageDark, margin: 0 }}>{e.notes}</p>
+                        <p style={{ fontSize: 11, color: C.sageDark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{e.notes}</p>
                       )}
                     </div>
                     {/* Amount + actions */}

@@ -218,8 +218,6 @@ export const preFlightReminder = onSchedule(
   { schedule: 'every 60 minutes', timeZone: 'Asia/Taipei' },
   async () => {
     const now = Date.now();
-    const windowStart = now + 3.5 * 60 * 60 * 1000;
-    const windowEnd   = now + 4.5 * 60 * 60 * 1000;
 
     const tripsSnap = await db.collection('trips').get();
 
@@ -239,19 +237,28 @@ export const preFlightReminder = onSchedule(
         for (const bDoc of bookingsSnap.docs) {
           try {
             const b = bDoc.data();
-            const flights: any[] = b.flights || (b.departureTime ? [b] : []);
+            const flights: any[] = b.flights || (b.departureTime || b.date ? [b] : []);
 
             for (const f of flights) {
-              if (!f.departureDate || !f.departureTime) continue;
-              const depMs = new Date(`${f.departureDate}T${f.departureTime}:00+08:00`).getTime();
-              if (Number.isNaN(depMs) || depMs < windowStart || depMs > windowEnd) continue;
+              // Support both legacy fields and current schema (f.date / f.dep.time)
+              const depDate = f.departureDate || f.date || '';
+              const depTime = f.departureTime || f.dep?.time || '';
+              if (!depDate || !depTime) continue;
+
+              // Use +08:00 (Taipei) as base. Expand window to ±1h to handle
+              // destinations in adjacent timezones (e.g. Japan +09:00).
+              const depMs = new Date(`${depDate}T${depTime}:00+08:00`).getTime();
+              if (Number.isNaN(depMs)) continue;
+              // Window: 3.0 – 5.0 hours ahead (covers +08:00 to +09:00 timezone gap)
+              const inWindow = depMs >= (now + 3.0 * 3600000) && depMs <= (now + 5.0 * 3600000);
+              if (!inWindow) continue;
 
               // Determine direction: 去程 (outbound) vs 回程 (return)
               let isReturn = false;
               if (f.direction) {
                 isReturn = f.direction === '回程';
-              } else if (trip.startDate && f.departureDate) {
-                isReturn = f.departureDate !== trip.startDate;
+              } else if (trip.startDate && depDate) {
+                isReturn = depDate !== trip.startDate;
               }
 
               const membersSnap = await db
@@ -403,19 +410,28 @@ export const todoDueDateReminder = onSchedule(
             // 已綁 Google 帳號且自己勾完了 → 跳過，不打擾
             if (m.googleUid && checkedBy[m.googleUid]) continue;
             const { title, body } = copyFor(stage, text, true);
-            await notifyMember(
-              tripDoc.id, m.name,
-              title, body,
-              { tag: `todo-${listDoc.id}-${tagStage}-${m.name}`, url: '/' }
-            );
+            const dedupTag = `todo-${listDoc.id}-${tagStage}-${today}`;
+            // Check if already notified this member today
+            const alreadyNotified = await db
+              .collection('trips').doc(tripDoc.id)
+              .collection('notifications')
+              .where('recipientName', '==', m.name)
+              .where('tag', '==', dedupTag)
+              .limit(1).get();
+            if (!alreadyNotified.empty) continue;
+            await notifyMember(tripDoc.id, m.name, title, body, { tag: dedupTag, url: '/' });
           }
         } else {
           const { title, body } = copyFor(stage, text, false);
-          await notifyMember(
-            tripDoc.id, assignee,
-            title, body,
-            { tag: `todo-${listDoc.id}-${tagStage}`, url: '/' }
-          );
+          const dedupTag = `todo-${listDoc.id}-${tagStage}-${today}`;
+          const alreadyNotified = await db
+            .collection('trips').doc(tripDoc.id)
+            .collection('notifications')
+            .where('recipientName', '==', assignee)
+            .where('tag', '==', dedupTag)
+            .limit(1).get();
+          if (!alreadyNotified.empty) continue;
+          await notifyMember(tripDoc.id, assignee, title, body, { tag: dedupTag, url: '/' });
         }
       }
     }

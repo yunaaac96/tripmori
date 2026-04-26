@@ -1354,8 +1354,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
                   <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <span className={`tm-category-chip-${event.category || 'misc'}`} style={{ fontSize: 10, fontWeight: 700, background: cat.bg, color: cat.text, borderRadius: 6, padding: '2px 7px', display: 'inline-flex', alignItems: 'center', gap: 4, marginBottom: 4 }}><FontAwesomeIcon icon={SCHEDULE_CAT_ICONS[event.category] || faEllipsis} style={{ fontSize: 9 }} /> {cat.label}</span>
-                      <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px', wordBreak: 'break-word' }}>{event.title}</p>
-                      {event.location && <p style={{ fontSize: 11, color: C.barkLight, margin: 0, display: 'flex', alignItems: 'center', gap: 4 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 9, flexShrink: 0 }} />{event.location}</p>}
+                      <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: '0 0 2px', wordBreak: 'break-word', overflowWrap: 'anywhere', minWidth: 0 }}>{event.title}</p>
+                      {event.location && <p style={{ fontSize: 11, color: C.barkLight, margin: 0, display: 'flex', alignItems: 'center', gap: 4, wordBreak: 'break-word', overflowWrap: 'anywhere' }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 9, flexShrink: 0 }} />{event.location}</p>}
                       {event.notes && <ExpandableNotes notes={event.notes} color={C.barkLight} />}
                       {mapUrl && (
                         <a href={mapUrl} target="_blank" rel="noopener noreferrer" onClick={e => e.stopPropagation()}

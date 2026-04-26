@@ -39,6 +39,10 @@
   --tm-note-6: #FFE8CC;
   --tm-weather-bg: #F0F7FF;
   --tm-section-bg: #FAFAF8;
+  --tm-status-ok-bg: #EAF3DE;
+  --tm-status-ok-text: #3A5A3A;
+  --tm-status-warn-bg: #FFF2CC;
+  --tm-status-warn-text: #7A5A00;
 
   --text: #6b6375;
   --text-h: #08060d;
@@ -108,6 +112,10 @@
     --tm-note-6: #361C06;    /* amber */
     --tm-weather-bg: #1A2430;
     --tm-section-bg: #242118;
+    --tm-status-ok-bg: #162610;
+    --tm-status-ok-text: #8FD48F;
+    --tm-status-warn-bg: #2E2806;
+    --tm-status-warn-text: #D4B830;
 
     --text: #B4AAAA;
     --text-h: #F0EAE2;
