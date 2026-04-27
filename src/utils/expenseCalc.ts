@@ -174,7 +174,12 @@ export const getPersonalShare = (
     return Math.ceil(eAmt * e.percentages[name] / 100);
   }
   if (e.splitMode === 'amount' && e.customAmounts?.[name] != null) {
-    return toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency ?? 'JPY');
+    // Compute share proportionally from effectiveTWD so that sum(shares) == effectiveTWD
+    // regardless of which FX rate was used when the expense was recorded.
+    const totalCustom = Object.values(e.customAmounts)
+      .reduce((s, v) => s + (Number(v) || 0), 0);
+    if (totalCustom <= 0) return 0;
+    return Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom);
   }
   // Equal split: distribute remainder to lexicographically earliest names
   const sortedSw = [...sw].sort();
@@ -229,7 +234,14 @@ export const computeMemberStats = (
         return s + sign * Math.ceil(eAmt * pct / 100);
       }
       if (e.splitMode === 'amount' && e.customAmounts && e.customAmounts[name] != null) {
-        return s + sign * toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency ?? 'JPY');
+        // Use proportional split from effectiveTWD — avoids FX-rate mismatch between
+        // the stored amountTWD (may use custom rate) and the fallback toTWDCalc table.
+        const totalCustom = Object.values(e.customAmounts)
+          .reduce((s2, v) => s2 + (Number(v) || 0), 0);
+        const share = totalCustom > 0
+          ? Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom)
+          : 0;
+        return s + sign * share;
       }
       const sortedSw = [...sw].sort();
       const myIdx = sortedSw.indexOf(name);
