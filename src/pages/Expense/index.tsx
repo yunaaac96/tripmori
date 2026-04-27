@@ -22,7 +22,7 @@ const CATEGORY_ICONS: Record<string, any> = {
 };
 
 type SplitMode = 'equal' | 'weighted' | 'amount';
-type SortMode = 'newest' | 'oldest' | 'largest';
+type SortMode = 'newest' | 'oldest' | 'largest' | 'date-asc' | 'date-desc';
 type Currency = string;
 
 const EMPTY_FORM = {
@@ -243,6 +243,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
   // Self-detail privacy tabs (only ever rendered for own card)
   const [detailTab, setDetailTab] = useState<'all' | 'shared' | 'private'>('all');
+  // Settlement breakdown detail modal (click 代墊/需還款 chip)
+  const [settlementDetailName, setSettlementDetailName] = useState<string | null>(null);
 
   // Member card scroll ref (for arrow nav)
   const memberScrollRef = useRef<HTMLDivElement>(null);
@@ -599,29 +601,36 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [adjustTarget, setAdjustTarget] = useState<any | null>(null);
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustNote, setAdjustNote]     = useState('');
+  const [adjustDir, setAdjustDir]       = useState<'expense' | 'refund'>('expense');
+  const [adjustCurrency, setAdjustCurrency] = useState<string>('JPY');
   const [adjustSaving, setAdjustSaving] = useState(false);
   const openAdjustForm = (original: any) => {
     setAdjustTarget(original);
     setAdjustAmount('');
     setAdjustNote('');
+    setAdjustDir('expense');
+    setAdjustCurrency(original.currency || 'JPY');
   };
   const closeAdjustForm = () => {
     setAdjustTarget(null);
     setAdjustAmount('');
     setAdjustNote('');
+    setAdjustDir('expense');
   };
   const handleAdjustSave = async () => {
     if (!adjustTarget || !adjustAmount || adjustSaving) return;
-    const amt = Number(adjustAmount);
-    if (!amt || Number.isNaN(amt)) return;
+    const absAmt = Number(adjustAmount);
+    if (!absAmt || Number.isNaN(absAmt) || absAmt <= 0) return;
     setAdjustSaving(true);
     try {
       const original = adjustTarget;
-      const currency = original.currency || 'JPY';
-      const amtTWD = toTWD(Math.abs(amt), currency) * (amt < 0 ? -1 : 1);
+      const currency = adjustCurrency || original.currency || 'JPY';
+      // Direction: 'refund' means the group gets money back → negative amount
+      const signedAmt = adjustDir === 'refund' ? -absAmt : absAmt;
+      const amtTWD = toTWD(absAmt, currency) * (adjustDir === 'refund' ? -1 : 1);
       const payload: any = {
         description: `${original.description}（補記）`,
-        amount: amt, currency, amountTWD: amtTWD,
+        amount: signedAmt, currency, amountTWD: amtTWD,
         category: original.category || 'other',
         payer: original.payer || '',
         paymentMethod: original.paymentMethod || 'cash',
@@ -763,6 +772,14 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         const diff = (a.createdAt?.seconds || 0) - (b.createdAt?.seconds || 0);
         return diff !== 0 ? diff : tieBreak;
       }
+      if (sortMode === 'date-asc') {
+        const diff = String(a.date || '').localeCompare(String(b.date || ''));
+        return diff !== 0 ? diff : tieBreak;
+      }
+      if (sortMode === 'date-desc') {
+        const diff = String(b.date || '').localeCompare(String(a.date || ''));
+        return diff !== 0 ? diff : tieBreak;
+      }
       // largest
       const aAmt = effectiveTWD(a);
       const bAmt = effectiveTWD(b);
@@ -782,8 +799,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     newest: '最新 ↓',
     oldest: '最舊 ↓',
     largest: '最大 ↓',
+    'date-asc': '日期最早 ↑',
+    'date-desc': '日期最晚 ↓',
   };
-  const nextSort: Record<SortMode, SortMode> = { newest: 'oldest', oldest: 'largest', largest: 'newest' };
+  const nextSort: Record<SortMode, SortMode> = { newest: 'oldest', oldest: 'largest', largest: 'date-asc', 'date-asc': 'date-desc', 'date-desc': 'newest' };
 
   const activePcts = getActivePcts();
 
@@ -861,12 +880,31 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               </p>
             </div>
             <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 14px', lineHeight: 1.6 }}>
-              為避免動到已結清的金額，輸入差額後會新增一筆 <b>補記</b>，付款人／分攤對象／分類與原筆相同。金額可輸入 <b>正數</b>（少收補收）或 <b>負數</b>（多收退款）。
+              為避免動到已結清的金額，輸入差額後會新增一筆 <b>補記</b>，付款人／分攤對象／分類與原筆相同。
             </p>
+            {/* Direction toggle */}
             <div style={{ marginBottom: 12 }}>
-              <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>差額金額 ({adjustTarget.currency || 'JPY'})</label>
-              <input type="number" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)}
-                placeholder="正數 = 補收；負數 = 退款"
+              <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>類型</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setAdjustDir('expense')}
+                  style={{ flex: 1, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${adjustDir === 'expense' ? C.earth : C.creamDark}`, background: adjustDir === 'expense' ? '#FFF2CC' : 'var(--tm-card-bg)', color: adjustDir === 'expense' ? C.earth : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                  ＋ 額外支出
+                </button>
+                <button onClick={() => setAdjustDir('refund')}
+                  style={{ flex: 1, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${adjustDir === 'refund' ? '#4A8A4A' : C.creamDark}`, background: adjustDir === 'refund' ? '#E8F5E0' : 'var(--tm-card-bg)', color: adjustDir === 'refund' ? '#4A8A4A' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                  － 退款折扣
+                </button>
+              </div>
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>幣別</label>
+              <CurrencyPicker value={adjustCurrency} onChange={setAdjustCurrency} projCurrency={projCurrency} />
+            </div>
+            <div style={{ marginBottom: 12 }}>
+              <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>差額金額</label>
+              <input type="number" inputMode="decimal" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)}
+                placeholder="請輸入正數金額"
+                min="0"
                 style={iStyle} />
             </div>
             <div style={{ marginBottom: 16 }}>
@@ -880,14 +918,83 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
                 取消
               </button>
-              <button onClick={handleAdjustSave} disabled={adjustSaving || !adjustAmount || !Number(adjustAmount)}
-                style={{ ...btnPrimary(), flex: 2, opacity: (adjustSaving || !adjustAmount || !Number(adjustAmount)) ? 0.6 : 1 }}>
+              <button onClick={handleAdjustSave} disabled={adjustSaving || !adjustAmount || Number(adjustAmount) <= 0}
+                style={{ ...btnPrimary(adjustDir === 'refund' ? '#4A8A4A' : undefined), flex: 2, opacity: (adjustSaving || !adjustAmount || Number(adjustAmount) <= 0) ? 0.6 : 1 }}>
                 {adjustSaving ? '建立中…' : <><FontAwesomeIcon icon={faPen} style={{ marginRight: 6 }} />建立補記</>}
               </button>
             </div>
           </div>
         </div>
       )}
+
+      {/* ── Settlement breakdown detail modal ── */}
+      {settlementDetailName && (() => {
+        const name = settlementDetailName;
+        const ms = memberStats.find(m => m.name === name);
+        if (!ms) return null;
+        const isCreditor = ms.net >= 0;
+        // Settlements where this person is involved
+        const mySettlements = settlements.filter(s => s.from === name || s.to === name);
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 560 }}
+            onClick={() => setSettlementDetailName(null)}>
+            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '80vh', overflowY: 'auto', boxSizing: 'border-box' }}
+              onClick={e => e.stopPropagation()}>
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+                <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
+                  <FontAwesomeIcon icon={faScaleBalanced} style={{ fontSize: 14 }} />
+                  {name} 的結算明細
+                </p>
+                <button onClick={() => setSettlementDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              </div>
+
+              {/* Summary chip */}
+              <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 14px', marginBottom: 16 }}>
+                <p style={{ fontSize: 11, fontWeight: 600, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px' }}>
+                  {isCreditor ? '代墊金額（應收回）' : '需還款金額（應支出）'}
+                </p>
+                <p style={{ fontSize: 20, fontWeight: 900, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
+                  NT$ {Math.abs(ms.net).toLocaleString()}
+                </p>
+              </div>
+
+              {/* Settlement rows */}
+              {mySettlements.length === 0 ? (
+                <p style={{ fontSize: 13, color: C.barkLight, textAlign: 'center', padding: '16px 0' }}>已結清，無待處理款項</p>
+              ) : (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {mySettlements.map((s, i) => {
+                    const isPayer = s.from === name;
+                    const otherName = isPayer ? s.to : s.from;
+                    const otherColor = getMemberColor(otherName);
+                    return (
+                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--tm-card-bg)', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${C.creamDark}` }}>
+                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(otherColor) }}>{otherName.slice(0, 1)}</span>
+                        </div>
+                        <div style={{ flex: 1 }}>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>
+                            {isPayer ? `還給 ${otherName}` : `${otherName} 還給你`}
+                          </p>
+                          <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0' }}>
+                            {isPayer ? `${name} → ${otherName}` : `${otherName} → ${name}`}
+                          </p>
+                        </div>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0 }}>
+                          {isPayer ? '-' : '+'}NT$ {s.amount.toLocaleString()}
+                        </p>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+              <p style={{ fontSize: 10, color: C.barkLight, textAlign: 'center', marginTop: 14 }}>
+                以上為建議結算方案，實際以雙方確認為準
+              </p>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Member Detail Modal — self only; private visible only to owner ── */}
       {memberDetailName && memberDetailName === currentUserName && (() => {
@@ -1089,7 +1196,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   { v: false, label: '支出', icon: faMoneyBill1, activeColor: C.earth },
                   { v: true,  label: '收入', icon: faCoins,      activeColor: '#4A8A4A' },
                 ] as { v: boolean; label: string; icon: any; activeColor: string }[]).map(({ v, label, icon, activeColor }) => (
-                  <button key={String(v)} onClick={() => set('isIncome', v)}
+                  <button key={String(v)} onClick={() => setForm(p => ({ ...p, isIncome: v, category: v ? 'income' : (p.category === 'income' ? 'food' : p.category) }))}
                     style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
                       background: form.isIncome === v ? activeColor : 'transparent',
                       color: form.isIncome === v ? 'white' : C.barkLight,
@@ -1197,11 +1304,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 </div>
               )}
 
-              {/* Category */}
+              {/* Category — hidden for income (auto-set to 'income') */}
+              {!form.isIncome && (
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
                 <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => (
+                  {Object.entries(EXPENSE_CATEGORY_MAP).filter(([key]) => key !== 'income').map(([key, info]) => (
                     <button key={key} onClick={() => set('category', key)}
                       className={form.category === key ? `tm-cat-active-${key}` : ''}
                       style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: form.category === key ? '#333' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
@@ -1211,6 +1319,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   ))}
                 </div>
               </div>
+              )}
 
               {/* Payer / 收款人 */}
               {!form.isPrivate && (
@@ -1479,9 +1588,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     <p style={{ fontSize: 9, color: C.barkLight, margin: '0 0 6px' }}>{isMe ? '點擊查看明細 ›' : '僅本人可查看明細'}</p>
                     <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
                     <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {ms.paid.toLocaleString()}</p>
-                    <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px' }}>
+                    <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'}
+                      onClick={e => { e.stopPropagation(); if (displayAmt > 0) setSettlementDetailName(ms.name); }}
+                      style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px', cursor: displayAmt > 0 ? 'pointer' : 'default' }}>
                       <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 1px', fontWeight: 600 }}>
-                        {isCreditor ? '代墊金額' : '需還款金額'}
+                        {isCreditor ? '代墊金額' : '需還款金額'}{displayAmt > 0 ? ' ›' : ''}
                       </p>
                       <p style={{ fontSize: 12, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
                         {displayAmt > 0 ? `NT$ ${displayAmt.toLocaleString()}` : '已結清 ✓'}
@@ -1633,7 +1744,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         {!isReadOnly && (
           <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
             <button onClick={() => setShowForm(true)} className="tm-btn-solid-earth" style={{ ...btnPrimary(C.earth), flex: 1 }}>
-              ＋ 新增支出
+              ＋ 新增
             </button>
           </div>
         )}

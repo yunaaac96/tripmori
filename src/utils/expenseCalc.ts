@@ -77,6 +77,7 @@ export interface Expense {
   payer: string;
   amount: number;
   currency?: string;
+  isIncome?: boolean;
   amountTWD?: number;                   // effective TWD at record time (rate × amount × card fee)
   splitWith?: string[];
   splitMode?: 'equal' | 'weighted' | 'amount';
@@ -173,7 +174,12 @@ export const getPersonalShare = (
     return Math.ceil(eAmt * e.percentages[name] / 100);
   }
   if (e.splitMode === 'amount' && e.customAmounts?.[name] != null) {
-    return toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency ?? 'JPY');
+    // Compute share proportionally from effectiveTWD so that sum(shares) == effectiveTWD
+    // regardless of which FX rate was used when the expense was recorded.
+    const totalCustom = Object.values(e.customAmounts)
+      .reduce((s, v) => s + (Number(v) || 0), 0);
+    if (totalCustom <= 0) return 0;
+    return Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom);
   }
   // Equal split: distribute remainder to lexicographically earliest names
   const sortedSw = [...sw].sort();
@@ -210,27 +216,38 @@ export const computeMemberStats = (
   });
 
   return memberNames.map(name => {
+    // Income entries: the payer "received" cash on behalf of the group, so we
+    // subtract income from their paid total (they now owe that money to others).
     const paid = active
       .filter(e => !e.isPrivate && e.payer === name)
-      .reduce((s, e) => s + effectiveTWD(e), 0);
+      .reduce((s, e) => e.isIncome ? s - effectiveTWD(e) : s + effectiveTWD(e), 0);
 
     const owed = active.reduce((s, e) => {
       if (e.isPrivate) return s;
       const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
       if (!sw.includes(name)) return s;
       const eAmt = effectiveTWD(e);
+      // Income entries reduce everyone's owed share (they all benefit from the refund/income).
+      const sign = e.isIncome ? -1 : 1;
       if (e.splitMode === 'weighted' && e.percentages && Object.keys(e.percentages).length > 0) {
         const pct = e.percentages[name] ?? Math.floor(100 / sw.length);
-        return s + Math.ceil(eAmt * pct / 100);
+        return s + sign * Math.ceil(eAmt * pct / 100);
       }
       if (e.splitMode === 'amount' && e.customAmounts && e.customAmounts[name] != null) {
-        return s + toTWDCalc(Number(e.customAmounts[name]) || 0, e.currency ?? 'JPY');
+        // Use proportional split from effectiveTWD — avoids FX-rate mismatch between
+        // the stored amountTWD (may use custom rate) and the fallback toTWDCalc table.
+        const totalCustom = Object.values(e.customAmounts)
+          .reduce((s2, v) => s2 + (Number(v) || 0), 0);
+        const share = totalCustom > 0
+          ? Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom)
+          : 0;
+        return s + sign * share;
       }
       const sortedSw = [...sw].sort();
       const myIdx = sortedSw.indexOf(name);
       const perPerson = Math.floor(eAmt / sortedSw.length);
       const remainder = eAmt - perPerson * sortedSw.length;
-      return s + perPerson + (myIdx < remainder ? 1 : 0);
+      return s + sign * (perPerson + (myIdx < remainder ? 1 : 0));
     }, 0);
 
     const net = paid - owed;

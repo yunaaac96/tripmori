@@ -956,9 +956,9 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px' }}>{rl.label}</span>
-                              {ended && <span style={{ fontSize: 10, fontWeight: 700, color: '#8A7060', background: '#EDE8DF', borderRadius: 6, padding: '2px 6px' }}>🏁 已結束</span>}
-                              {p.startDate && <span style={{ fontSize: 10, color: C.barkLight }}>{p.startDate}{p.endDate ? ` – ${p.endDate}` : ''}</span>}
+                              <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>{rl.label}</span>
+                              {ended && <span style={{ fontSize: 10, fontWeight: 700, color: '#8A7060', background: '#EDE8DF', borderRadius: 6, padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏁 已結束</span>}
+                              {p.startDate && <span style={{ fontSize: 10, color: C.barkLight, whiteSpace: 'nowrap' }}>{p.startDate}{p.endDate ? ` – ${p.endDate}` : ''}</span>}
                             </div>
                           </div>
                           {!isEditMode && <span style={{ fontSize: 20, color: C.barkLight }}>›</span>}
