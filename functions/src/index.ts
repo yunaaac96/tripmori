@@ -13,6 +13,43 @@ admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
 
+// ── Timezone utility ──────────────────────────────────────────────────────────
+/**
+ * Convert a local date + time string to UTC milliseconds using the given
+ * IANA timezone. Handles DST correctly via the Intl "round-trip" method:
+ * treats the input as UTC to get a reference point, measures the displayed
+ * local offset in the target tz, then shifts accordingly.
+ *
+ * @param date  "YYYY-MM-DD"
+ * @param time  "HH:MM"
+ * @param tz    IANA timezone, e.g. "Asia/Taipei" or "Asia/Tokyo"
+ * @returns     UTC milliseconds, or NaN on parse failure
+ */
+function localToUTCMs(date: string, time: string, tz: string): number {
+  if (!date || !time) return NaN;
+  // Step 1: parse as UTC to get a reference instant
+  const refUtc = new Date(`${date}T${time}:00Z`);
+  if (isNaN(refUtc.getTime())) return NaN;
+  // Step 2: what does the target tz show for that instant?
+  const fmt = new Intl.DateTimeFormat('en-CA', {
+    timeZone: tz,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+    hour: '2-digit', minute: '2-digit', second: '2-digit',
+    hour12: false,
+  });
+  const parts = Object.fromEntries(fmt.formatToParts(refUtc).map(p => [p.type, p.value]));
+  const tzMs = Date.UTC(
+    Number(parts.year), Number(parts.month) - 1, Number(parts.day),
+    Number(parts.hour === '24' ? 0 : parts.hour), Number(parts.minute),
+  );
+  // Step 3: desired local time as UTC
+  const [y, m, d] = date.split('-').map(Number);
+  const [h, min] = time.split(':').map(Number);
+  const wantMs = Date.UTC(y, m - 1, d, h, min);
+  // Step 4: shift reference by the difference
+  return refUtc.getTime() + (wantMs - tzMs);
+}
+
 // ── Helper: send FCM to a member by name ─────────────────────────────────────
 async function notifyMember(
   tripId: string,
@@ -218,7 +255,6 @@ export const preFlightReminder = onSchedule(
   { schedule: 'every 60 minutes', timeZone: 'Asia/Taipei' },
   async () => {
     const now = Date.now();
-
     const tripsSnap = await db.collection('trips').get();
 
     // Defence: a malformed departureTime or a single failing member notify
@@ -228,6 +264,23 @@ export const preFlightReminder = onSchedule(
         const trip = tripDoc.data();
         if (!trip.startDate) continue;
 
+        // ── Collect flights from both sources ──────────────────────────────
+        // Primary:  trip.staticFlights[]  (current schema — stored on trip doc)
+        // Legacy:   bookings sub-collection with type === 'flight'
+        type FlightEntry = { f: any; sourceKey: string };
+        const flightEntries: FlightEntry[] = [];
+
+        // 1. staticFlights on the trip document
+        const staticFlights: any[] = Array.isArray(trip.staticFlights) ? trip.staticFlights : [];
+        for (const f of staticFlights) {
+          const depDate = f.departureDate || f.date || '';
+          const depTime = f.departureTime || f.dep?.time || '';
+          if (depDate && depTime) {
+            flightEntries.push({ f, sourceKey: `static-${depDate}-${depTime}` });
+          }
+        }
+
+        // 2. Legacy bookings sub-collection
         const bookingsSnap = await db
           .collection('trips').doc(tripDoc.id)
           .collection('bookings')
@@ -235,81 +288,100 @@ export const preFlightReminder = onSchedule(
           .get();
 
         for (const bDoc of bookingsSnap.docs) {
+          const b = bDoc.data();
+          const legacyFlights: any[] = b.flights || (b.departureTime || b.date ? [b] : []);
+          for (const f of legacyFlights) {
+            const depDate = f.departureDate || f.date || '';
+            const depTime = f.departureTime || f.dep?.time || '';
+            if (depDate && depTime) {
+              flightEntries.push({ f, sourceKey: `booking-${bDoc.id}` });
+            }
+          }
+        }
+
+        if (flightEntries.length === 0) continue;
+
+        for (const { f, sourceKey } of flightEntries) {
           try {
-            const b = bDoc.data();
-            const flights: any[] = b.flights || (b.departureTime || b.date ? [b] : []);
+            const depDate = f.departureDate || f.date || '';
+            const depTime = f.departureTime || f.dep?.time || '';
+            if (!depDate || !depTime) continue;
 
-            for (const f of flights) {
-              // Support both legacy fields and current schema (f.date / f.dep.time)
-              const depDate = f.departureDate || f.date || '';
-              const depTime = f.departureTime || f.dep?.time || '';
-              if (!depDate || !depTime) continue;
+            // ── Determine direction ──────────────────────────────────────
+            let isReturn = false;
+            if (f.direction) {
+              isReturn = f.direction === '回程';
+            } else if (trip.startDate && depDate) {
+              isReturn = depDate !== trip.startDate;
+            }
 
-              // Use +08:00 (Taipei) as base. Expand window to ±1h to handle
-              // destinations in adjacent timezones (e.g. Japan +09:00).
-              const depMs = new Date(`${depDate}T${depTime}:00+08:00`).getTime();
-              if (Number.isNaN(depMs)) continue;
-              // Window: 3.0 – 5.0 hours ahead (covers +08:00 to +09:00 timezone gap)
-              const inWindow = depMs >= (now + 3.0 * 3600000) && depMs <= (now + 5.0 * 3600000);
-              if (!inWindow) continue;
+            // ── Pick departure-point timezone ────────────────────────────
+            // 去程: departs from Taiwan (Asia/Taipei, UTC+8)
+            // 回程: departs from destination (trip.locationTimezone, e.g. Asia/Tokyo UTC+9)
+            const depTz = isReturn
+              ? (trip.locationTimezone || 'Asia/Taipei')
+              : 'Asia/Taipei';
 
-              // Determine direction: 去程 (outbound) vs 回程 (return)
-              let isReturn = false;
-              if (f.direction) {
-                isReturn = f.direction === '回程';
-              } else if (trip.startDate && depDate) {
-                isReturn = depDate !== trip.startDate;
+            // ── UTC conversion (no hardcoded +08:00) ─────────────────────
+            const depMs = localToUTCMs(depDate, depTime, depTz);
+            if (Number.isNaN(depMs)) {
+              console.warn(`[preflight] localToUTCMs returned NaN for ${depDate} ${depTime} ${depTz}`);
+              continue;
+            }
+
+            // Window: 3.0 – 5.0 hours ahead of now
+            const inWindow = depMs >= (now + 3.0 * 3600000) && depMs <= (now + 5.0 * 3600000);
+            if (!inWindow) continue;
+
+            const flightNo  = f.flightNumber || f.flightNo || '';
+            const direction = isReturn ? '回程' : '去程';
+
+            const buildNotification = (memberName: string) => {
+              if (isReturn) {
+                return {
+                  title: '✈️ 準備回家囉！',
+                  body: `${flightNo ? flightNo + ' ' : ''}航班 4 小時後起飛，該前往機場囉。確認行李已封箱、護照隨身帶。Tripmori 陪你平安回家 🏠`,
+                };
+              } else {
+                return {
+                  title: '🛫 出發倒數 4 小時！',
+                  body: `嘿 ${memberName}，該前往機場囉！檢查好護照與行李，把工作放下，我們只負責享受旅行！祝一路順風 ✨`,
+                };
               }
+            };
 
-              const membersSnap = await db
-                .collection('trips').doc(tripDoc.id)
-                .collection('members').get();
+            const membersSnap = await db
+              .collection('trips').doc(tripDoc.id)
+              .collection('members').get();
 
-              const flightNo  = f.flightNumber || f.flightNo || '';
-              const direction = isReturn ? '回程' : '去程';
+            for (const mDoc of membersSnap.docs) {
+              try {
+                const m = mDoc.data();
+                if (!m.name) continue;
 
-              const buildNotification = (memberName: string) => {
-                if (isReturn) {
-                  return {
-                    title: '✈️ 準備回家囉！',
-                    body: `${flightNo ? flightNo + ' ' : ''}航班 4 小時後起飛，該前往機場囉。確認行李已封箱、護照隨身帶。Tripmori 陪你平安回家 🏠`,
-                  };
-                } else {
-                  return {
-                    title: '🛫 出發倒數 4 小時！',
-                    body: `嘿 ${memberName}，該前往機場囉！檢查好護照與行李，把工作放下，我們只負責享受旅行！祝一路順風 ✨`,
-                  };
-                }
-              };
+                // Dedup key: stable per flight direction (not per Firestore doc id)
+                const dedupTag = `flight-${sourceKey}-${direction}`;
+                const alreadySent = await db
+                  .collection('trips').doc(tripDoc.id)
+                  .collection('notifications')
+                  .where('recipientName', '==', m.name)
+                  .where('tag', '==', dedupTag)
+                  .limit(1)
+                  .get();
+                if (!alreadySent.empty) continue;
 
-              for (const mDoc of membersSnap.docs) {
-                try {
-                  const m = mDoc.data();
-                  if (!m.name) continue;
-
-                  const dedupTag = `flight-${bDoc.id}-${direction}`;
-                  const alreadySent = await db
-                    .collection('trips').doc(tripDoc.id)
-                    .collection('notifications')
-                    .where('recipientName', '==', m.name)
-                    .where('tag', '==', dedupTag)
-                    .limit(1)
-                    .get();
-                  if (!alreadySent.empty) continue;
-
-                  const { title, body } = buildNotification(m.name);
-                  await notifyMember(
-                    tripDoc.id, m.name,
-                    title, body,
-                    { tag: dedupTag, url: '/' }
-                  );
-                } catch (memberErr) {
-                  console.error(`[preflight] trip ${tripDoc.id} booking ${bDoc.id} member ${mDoc.id} failed`, memberErr);
-                }
+                const { title, body } = buildNotification(m.name);
+                await notifyMember(
+                  tripDoc.id, m.name,
+                  title, body,
+                  { tag: dedupTag, url: '/' }
+                );
+              } catch (memberErr) {
+                console.error(`[preflight] trip ${tripDoc.id} source ${sourceKey} member ${mDoc.id} failed`, memberErr);
               }
             }
-          } catch (bookingErr) {
-            console.error(`[preflight] trip ${tripDoc.id} booking ${bDoc.id} failed`, bookingErr);
+          } catch (flightErr) {
+            console.error(`[preflight] trip ${tripDoc.id} source ${sourceKey} failed`, flightErr);
           }
         }
       } catch (tripErr) {
