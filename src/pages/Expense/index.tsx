@@ -8,7 +8,7 @@ import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -18,6 +18,7 @@ const CATEGORY_ICONS: Record<string, any> = {
   hotel: faBed,
   other: faEllipsis,
   settlement: faArrowRightArrowLeft,
+  income: faCoins,
 };
 
 type SplitMode = 'equal' | 'weighted' | 'amount';
@@ -26,6 +27,7 @@ type Currency = string;
 
 const EMPTY_FORM = {
   description: '', amount: '', currency: 'JPY' as Currency,
+  isIncome: false,
   category: 'food', payer: '',
   paymentMethod: 'cash' as 'cash' | 'card',
   splitMode: 'equal' as SplitMode,
@@ -381,6 +383,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       notes: e.notes || '',
       receiptUrl: e.receiptUrl || '',
       isPrivate: e.isPrivate || false,
+      isIncome: e.isIncome || false,
       exchangeRate: e.exchangeRate != null ? String(e.exchangeRate) : '',
       cardFeePercent: e.cardFeePercent != null ? String(e.cardFeePercent) : '1.5',
       awaitCardStatement: !!e.awaitCardStatement,
@@ -460,6 +463,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       receiptUrl: form.receiptUrl || '',
       isPrivate: form.isPrivate || false,
       privateOwnerUid: form.isPrivate ? (googleUid || null) : null,
+      isIncome: form.isIncome || false,
       // Cross-currency bookkeeping
       exchangeRate: formExRate && formExRate > 0 ? formExRate : null,
       cardFeePercent: isForeignCard ? cardFee : null,
@@ -684,10 +688,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const nonSettlementExpenses = baseExpenses.filter((e: any) => e.category !== 'settlement');
 
   // 團隊總支出: non-private, non-settlement, excluding anything still awaiting
-  // a card statement (real TWD unknown). Uses effectiveTWD = actualTWD fallback to amountTWD.
+  // a card statement (real TWD unknown). Income entries subtract from the total.
   const teamTotalTWD = visibleExpenses
     .filter((e: any) => !e.isPrivate && e.category !== 'settlement' && !e.awaitCardStatement)
-    .reduce((s: number, e: any) => s + effectiveTWD(e), 0);
+    .reduce((s: number, e: any) => e.isIncome ? s - effectiveTWD(e) : s + effectiveTWD(e), 0);
 
   // 個人負擔總額 (與我有關 mode): my share of shared expenses + my own private expenses
   const myBurdenTWD = currentUserName
@@ -1066,20 +1070,45 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '93vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
-                {editingId ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 12, marginRight: 6 }} />修改支出</> : <><FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 12, marginRight: 6 }} />新增支出</>}
+                {editingId
+                  ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 12, marginRight: 6 }} />修改{form.isIncome ? '收入' : '支出'}</>
+                  : form.isIncome
+                    ? <><FontAwesomeIcon icon={faCoins} style={{ fontSize: 13, marginRight: 6, color: '#4A8A4A' }} />新增收入</>
+                    : <><FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 12, marginRight: 6 }} />新增支出</>}
               </p>
               <button onClick={closeForm}
                 style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
+
+            {/* 支出 / 收入 toggle */}
+            {!editingId && (
+              <div style={{ display: 'flex', background: 'var(--tm-input-bg)', borderRadius: 12, padding: 3, gap: 3, marginBottom: 16 }}>
+                {([
+                  { v: false, label: '支出', icon: faMoneyBill1, activeColor: C.earth },
+                  { v: true,  label: '收入', icon: faCoins,      activeColor: '#4A8A4A' },
+                ] as { v: boolean; label: string; icon: any; activeColor: string }[]).map(({ v, label, icon, activeColor }) => (
+                  <button key={String(v)} onClick={() => set('isIncome', v)}
+                    style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
+                      background: form.isIncome === v ? activeColor : 'transparent',
+                      color: form.isIncome === v ? 'white' : C.barkLight,
+                      fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                      transition: 'all 0.15s',
+                    }}>
+                    <FontAwesomeIcon icon={icon} style={{ fontSize: 11 }} />{label}
+                  </button>
+                ))}
+              </div>
+            )}
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
               {/* Description */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>名稱 *</label>
-                <input ref={descRef} style={iStyle} placeholder="例：藥妝店購物" value={form.description} onChange={e => set('description', e.target.value)} />
+                <input ref={descRef} style={iStyle} placeholder={form.isIncome ? '例：退稅、退款、換回台幣' : '例：藥妝店購物'} value={form.description} onChange={e => set('description', e.target.value)} />
               </div>
 
               {/* Amount */}
@@ -1106,8 +1135,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <CurrencyPicker value={form.currency} onChange={v => set('currency', v)} projCurrency={projCurrency} />
               </div>
 
-              {/* Payment Method */}
-              <div>
+              {/* Payment Method — hidden for income entries */}
+              {!form.isIncome && <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>付款方式</label>
                 <div style={{ display: 'flex', gap: 8 }}>
                   {(['cash', 'card'] as const).map(m => (
@@ -1117,10 +1146,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     </button>
                   ))}
                 </div>
-              </div>
+              </div>}
 
-              {/* FX rate + card fee (only non-TWD) */}
-              {form.currency !== 'TWD' && (
+              {/* FX rate + card fee (only non-TWD and non-income) */}
+              {!form.isIncome && form.currency !== 'TWD' && (
                 <div style={{ padding: '10px 12px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
                   <div>
                     <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
@@ -1183,10 +1212,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 </div>
               </div>
 
-              {/* Payer */}
+              {/* Payer / 收款人 */}
               {!form.isPrivate && (
               <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>誰付款 *</label>
+                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>
+                  {form.isIncome ? '收款人（代收者）*' : '誰付款 *'}
+                </label>
                 <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                   {displayMemberNames.map((name: string) => (
                     <button key={name} onClick={() => set('payer', name)}
@@ -1198,8 +1229,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               </div>
               )}
 
-              {/* Split Mode */}
-              {!form.isPrivate && <div>
+              {/* Split Mode — hidden for income (always split equally) */}
+              {!form.isPrivate && !form.isIncome && <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>分帳方式</label>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
                   {([
@@ -1326,7 +1357,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               </div>}
 
               {/* Private expense toggle */}
-              {googleUid && (
+              {googleUid && !form.isIncome && (
                 <div>
                   <button
                     type="button"
@@ -1386,9 +1417,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
                   取消
                 </button>
-                <button onClick={handleSave} disabled={saving || !form.description || !form.amount || (!form.isPrivate && !form.payer)}
-                  style={{ ...btnPrimary(form.isPrivate ? '#7A4AAA' : undefined), flex: 2, opacity: saving || !form.description || !form.amount || (!form.isPrivate && !form.payer) ? 0.6 : 1 }}>
-                  {saving ? '儲存中...' : editingId ? <><FontAwesomeIcon icon={faPen} style={{ marginRight: 6 }} />儲存修改</> : form.isPrivate ? <><FontAwesomeIcon icon={faLock} style={{ marginRight: 6 }} />新增私人支出</> : <><FontAwesomeIcon icon={faMoneyBill1} style={{ marginRight: 6 }} />新增</>}
+                <button onClick={handleSave} disabled={saving || !form.description || !form.amount || (!form.isPrivate && !form.isIncome && !form.payer)}
+                  style={{ ...btnPrimary(form.isIncome ? '#4A8A4A' : form.isPrivate ? '#7A4AAA' : undefined), flex: 2, opacity: saving || !form.description || !form.amount || (!form.isPrivate && !form.isIncome && !form.payer) ? 0.6 : 1 }}>
+                  {saving ? '儲存中...' : editingId ? <><FontAwesomeIcon icon={faPen} style={{ marginRight: 6 }} />儲存修改</> : form.isIncome ? <><FontAwesomeIcon icon={faCoins} style={{ marginRight: 6 }} />新增收入</> : form.isPrivate ? <><FontAwesomeIcon icon={faLock} style={{ marginRight: 6 }} />新增私人支出</> : <><FontAwesomeIcon icon={faMoneyBill1} style={{ marginRight: 6 }} />新增支出</>}
                 </button>
               </div>
             </div>
@@ -1642,6 +1673,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {filteredExpenses.map((e: any) => {
               const isSettlement = e.category === 'settlement';
+              const isIncome = !!e.isIncome;
               const cat = isSettlement ? null : (EXPENSE_CATEGORY_MAP[e.category] || EXPENSE_CATEGORY_MAP.other);
               const amtTWD = effectiveTWD(e);
               const hasSubItems = e.subItems && e.subItems.length > 0;
@@ -1652,7 +1684,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               const hasActual  = e.actualTWD != null;
               const isForeignCard = e.paymentMethod === 'card' && (e.currency || 'JPY') !== 'TWD';
               return (
-                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : undefined, opacity: isAwaiting ? 0.8 : 1 }}>
+                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : isIncome ? `3px solid #4A8A4A` : undefined, opacity: isAwaiting ? 0.8 : 1 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
                     {(() => {
@@ -1675,6 +1707,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         )}
                         {isSettlement ? (
                           <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
+                        ) : isIncome ? (
+                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faCoins} style={{ fontSize: 8 }} />收入</span>
                         ) : !isPrivateExpense && (
                           <span className={e.paymentMethod === 'card' ? 'tm-badge-sky-sm' : 'tm-badge-sage-sm'} style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: e.paymentMethod === 'card' ? '#D8EDF8' : '#EAF3DE', color: e.paymentMethod === 'card' ? '#2A6A9A' : '#4A7A35' }}>
                             {e.paymentMethod === 'card' ? '刷卡' : '現金'}
@@ -1703,7 +1737,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         )}
                       </div>
                       <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
-                        {e.payer} 付款 · {e.date || ''}
+                        {isIncome ? `${e.payer} 代收` : `${e.payer} 付款`} · {e.date || ''}
                       </p>
                       {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
@@ -1731,8 +1765,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         );
                       })() : (
                         <>
-                          <p style={{ fontSize: 15, fontWeight: 700, color: isSettlement ? C.sageDark : C.earth, margin: 0 }}>NT$ {amtTWD.toLocaleString()}</p>
-                          {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{e.currency} {e.amount?.toLocaleString()}</p>}
+                          <p style={{ fontSize: 15, fontWeight: 700, color: isIncome ? '#4A8A4A' : isSettlement ? C.sageDark : C.earth, margin: 0 }}>{isIncome ? '＋' : ''}NT$ {amtTWD.toLocaleString()}</p>
+                          {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
                         </>
                       )}
                       {!isReadOnly && (

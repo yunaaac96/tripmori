@@ -119,6 +119,7 @@ const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()
 
 function App() {
   const wasGoogleSignedIn = useRef(false);
+  const logoutTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [authUid, setAuthUid] = useState<string | null>(null);
 
   // ── Sync all trips for logged-in user from Firestore ─────────
@@ -223,6 +224,8 @@ function App() {
       setAuthUid(user && !user.isAnonymous ? user.uid : null);
       if (user && !user.isAnonymous && user.email) {
         wasGoogleSignedIn.current = true;
+        // Cancel any pending logout timer (auth came back — it was a transient refresh)
+        if (logoutTimerRef.current) { clearTimeout(logoutTimerRef.current); logoutTimerRef.current = null; }
 
         // ── Complete pending key upgrade if a validated key is waiting ──
         // Must run BEFORE claimOwnership/syncUserTrips to avoid a race where
@@ -259,9 +262,13 @@ function App() {
           return; // skip claimOwnership & checkOwnerRole for this event
         }
 
-        // Normal sign-in path: backfill ownerUid then sync all trips
+        // Normal sign-in path: backfill ownerUid then sync all trips.
+        // Race claimOwnership against a 6-second timeout so it fails fast when offline
+        // (iOS mobile hangs HTTP requests for 30-120s before giving up).
         const functions = getFunctions(undefined, 'us-central1');
-        httpsCallable(functions, 'claimOwnership')()
+        const ownershipTimeout = new Promise<never>((_, reject) =>
+          setTimeout(() => reject(new Error('claimOwnership timeout')), 6000));
+        Promise.race([httpsCallable(functions, 'claimOwnership')(), ownershipTimeout])
           .then(() => syncUserTrips(user.uid, user.email!))
           .catch(() => syncUserTrips(user.uid, user.email!));
 
@@ -302,16 +309,22 @@ function App() {
       } else if (wasGoogleSignedIn.current) {
         // 使用者主動或自動登出 → 清除所有專案，回到初始畫面
         // Guard: skip clearing when offline — auth null event may be transient (token refresh failure).
-        // Projects will be re-evaluated once network is restored.
+        // Note: navigator.onLine is unreliable on iOS (reports true even with no gateway),
+        // so we also add a 3-second debounce: if auth is restored within that window (e.g. token
+        // refresh completes), cancel the clear and treat it as a transient state change.
         if (!navigator.onLine) return;
-        wasGoogleSignedIn.current = false;
-        // Save last project ID so we can restore it after re-login
-        const lastId = localStorage.getItem('tripmori_active_project');
-        if (lastId) localStorage.setItem('tripmori_last_project', lastId);
-        localStorage.removeItem('tripmori_active_project');
-        localStorage.removeItem('tripmori_projects');
-        setSyncedProjects([]);
-        setActiveProjectState(null);
+        logoutTimerRef.current = setTimeout(() => {
+          logoutTimerRef.current = null;
+          // If auth has since been restored (wasGoogleSignedIn reset), skip clear.
+          if (wasGoogleSignedIn.current) return;
+          // Save last project ID so we can restore it after re-login
+          const lastId = localStorage.getItem('tripmori_active_project');
+          if (lastId) localStorage.setItem('tripmori_last_project', lastId);
+          localStorage.removeItem('tripmori_active_project');
+          localStorage.removeItem('tripmori_projects');
+          setSyncedProjects([]);
+          setActiveProjectState(null);
+        }, 3000);
       }
     });
     return unsub;
@@ -621,7 +634,16 @@ function App() {
         // 等 Firebase 從 localStorage 還原登入狀態完成後再判斷
         // （避免 refresh 時 auth.currentUser 瞬間是 null 導致蓋掉 Google 登入）
         await auth.authStateReady();
-        if (!auth.currentUser) await signInAnonymously(auth);
+        if (!auth.currentUser) {
+          try {
+            await signInAnonymously(auth);
+          } catch (anonErr) {
+            // signInAnonymously requires network — fails offline for brand-new sessions.
+            // Continue anyway: Firestore's persistent IndexedDB cache serves data without
+            // an active auth session. Writes will be queued once network is restored.
+            console.warn('[init] anonymous sign-in failed (likely offline):', (anonErr as Error)?.message);
+          }
+        }
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
           ['events', setEvents], ['bookings', setBookings],
