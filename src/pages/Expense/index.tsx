@@ -977,7 +977,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 </p>
                 <p style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.4 }}>
                   {item.date}
-                  {showPayer && item.splitWith.length > 0 && ` · ${item.splitWith[0] !== name ? item.splitWith[0] : (item.splitWith[1] || '')} 付`}
+                  {showPayer && item.payer && ` · ${item.payer} 付`}
                   {` · 共 ${sw.length} 人`}
                   {item.origCurrency !== 'TWD' && ` · ${item.origCurrency} ${item.origAmount.toLocaleString()}`}
                 </p>
@@ -1206,8 +1206,18 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
               {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
               {(() => {
-                const unpaidShares = stmt.myShares.filter(item => item.payer !== name);
-                const unpaidTotal = unpaidShares.reduce((sum, item) => sum + item.amount, 0);
+                // Find date of the most recent settlement involving this member
+                const lastSettlementDate = expenses
+                  .filter((e: any) => e.category === 'settlement' &&
+                    (e.payer === name || (e.splitWith && e.splitWith.includes(name))))
+                  .map((e: any) => e.date || '')
+                  .sort()
+                  .pop() || '';
+                // Show only: paid by someone else + after last settlement date
+                const unpaidShares = stmt.myShares.filter(item =>
+                  item.payer !== name && (!lastSettlementDate || item.date > lastSettlementDate)
+                );
+                const unpaidTotal = unpaidShares.reduce((sum, item) => sum + (item.myShare || 0), 0);
                 if (unpaidShares.length === 0) return null;
                 return (
                   <div style={{ marginBottom: 4, marginTop: 14 }}>
