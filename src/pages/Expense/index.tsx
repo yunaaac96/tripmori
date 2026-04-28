@@ -42,6 +42,9 @@ const EMPTY_FORM = {
   exchangeRate: '',          // per-expense override (blank → use trip rate → fallback table)
   cardFeePercent: '1.5',     // only used when paymentMethod === 'card' and currency !== 'TWD'
   awaitCardStatement: false, // credit-card row where user wants to wait for statement
+  // Income-specific: who benefits from this income entry
+  incomeScope: 'group' as 'group' | 'personal',  // 'group' = all members; 'personal' = one person
+  incomeBeneficiary: '',                          // used when incomeScope === 'personal'
 };
 
 // Currency display helpers
@@ -397,6 +400,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       exchangeRate: e.exchangeRate != null ? String(e.exchangeRate) : '',
       cardFeePercent: e.cardFeePercent != null ? String(e.cardFeePercent) : '1.5',
       awaitCardStatement: !!e.awaitCardStatement,
+      // Restore income scope: 'personal' when exactly one beneficiary stored
+      incomeScope: (e.isIncome && e.splitWith && e.splitWith.length === 1) ? 'personal' : 'group',
+      incomeBeneficiary: (e.isIncome && e.splitWith && e.splitWith.length === 1) ? e.splitWith[0] : '',
     });
     setEditingId(e.id);
     setShowForm(true);
@@ -452,6 +458,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
     let splitWith = form.isPrivate ? [] : memberNames;
     if (!form.isPrivate && form.splitMode === 'equal' && form.splitWith.length > 0) splitWith = form.splitWith;
+    // Income override: respect the chosen scope regardless of splitMode
+    if (form.isIncome && !form.isPrivate) {
+      splitWith = (form.incomeScope === 'personal' && form.incomeBeneficiary)
+        ? [form.incomeBeneficiary]
+        : []; // empty = all members (same as existing behaviour)
+    }
 
     const pcts = form.splitMode === 'weighted' ? getActivePcts() : {};
 
@@ -1367,7 +1379,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   { v: false, label: '支出', icon: faMoneyBill1, activeColor: C.earth },
                   { v: true,  label: '收入', icon: faCoins,      activeColor: '#4A8A4A' },
                 ] as { v: boolean; label: string; icon: any; activeColor: string }[]).map(({ v, label, icon, activeColor }) => (
-                  <button key={String(v)} onClick={() => setForm(p => ({ ...p, isIncome: v, category: v ? 'income' : (p.category === 'income' ? 'food' : p.category) }))}
+                  <button key={String(v)} onClick={() => setForm(p => ({ ...p, isIncome: v, category: v ? 'income' : (p.category === 'income' ? 'food' : p.category), incomeScope: 'group', incomeBeneficiary: '' }))}
                     style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: 'none',
                       background: form.isIncome === v ? activeColor : 'transparent',
                       color: form.isIncome === v ? 'white' : C.barkLight,
@@ -1507,6 +1519,56 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   ))}
                 </div>
               </div>
+              )}
+
+              {/* Income benefit scope — who gets the benefit of this income */}
+              {form.isIncome && !form.isPrivate && (
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>收益方式</label>
+                  <div style={{ display: 'flex', gap: 8, marginBottom: form.incomeScope === 'personal' ? 10 : 0 }}>
+                    {([
+                      ['group',    '👥 全體均分'] as const,
+                      ['personal', '👤 指定個人'] as const,
+                    ]).map(([scope, label]) => (
+                      <button key={scope}
+                        onClick={() => setForm(p => ({
+                          ...p,
+                          incomeScope: scope,
+                          // Auto-select payer as default beneficiary when first switching to personal
+                          incomeBeneficiary: scope === 'personal' && !p.incomeBeneficiary ? (p.payer || '') : p.incomeBeneficiary,
+                        }))}
+                        style={{ flex: 1, padding: '9px 8px', borderRadius: 12,
+                          border: `1.5px solid ${form.incomeScope === scope ? '#4A8A4A' : C.creamDark}`,
+                          background: form.incomeScope === scope ? '#E0F4D8' : 'var(--tm-card-bg)',
+                          color: form.incomeScope === scope ? '#2A6A2A' : C.bark,
+                          fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT,
+                        }}>
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {form.incomeScope === 'personal' && (
+                    <div>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>
+                        受益人（此筆收入僅影響該成員帳務，其他人不受影響）
+                      </p>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {displayMemberNames.map((name: string) => (
+                          <button key={name}
+                            onClick={() => setForm(p => ({ ...p, incomeBeneficiary: name }))}
+                            style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12,
+                              border: `1.5px solid ${form.incomeBeneficiary === name ? '#4A8A4A' : C.creamDark}`,
+                              background: form.incomeBeneficiary === name ? '#E0F4D8' : 'var(--tm-card-bg)',
+                              color: form.incomeBeneficiary === name ? '#2A6A2A' : C.bark,
+                              fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13,
+                            }}>
+                            {name}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
 
               {/* Split Mode — hidden for income (always split equally) */}
@@ -1697,8 +1759,8 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
                   取消
                 </button>
-                <button onClick={handleSave} disabled={saving || !form.description || !form.amount || (!form.isPrivate && !form.isIncome && !form.payer)}
-                  style={{ ...btnPrimary(form.isIncome ? '#4A8A4A' : form.isPrivate ? '#7A4AAA' : undefined), flex: 2, opacity: saving || !form.description || !form.amount || (!form.isPrivate && !form.isIncome && !form.payer) ? 0.6 : 1 }}>
+                <button onClick={handleSave} disabled={saving || !form.description || !form.amount || (!form.isPrivate && !form.isIncome && !form.payer) || (form.isIncome && form.incomeScope === 'personal' && !form.incomeBeneficiary)}
+                  style={{ ...btnPrimary(form.isIncome ? '#4A8A4A' : form.isPrivate ? '#7A4AAA' : undefined), flex: 2, opacity: saving || !form.description || !form.amount || (!form.isPrivate && !form.isIncome && !form.payer) || (form.isIncome && form.incomeScope === 'personal' && !form.incomeBeneficiary) ? 0.6 : 1 }}>
                   {saving ? '儲存中...' : editingId ? <><FontAwesomeIcon icon={faPen} style={{ marginRight: 6 }} />儲存修改</> : form.isIncome ? <><FontAwesomeIcon icon={faCoins} style={{ marginRight: 6 }} />新增收入</> : form.isPrivate ? <><FontAwesomeIcon icon={faLock} style={{ marginRight: 6 }} />新增私人支出</> : <><FontAwesomeIcon icon={faMoneyBill1} style={{ marginRight: 6 }} />新增支出</>}
                 </button>
               </div>
@@ -2024,7 +2086,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         )}
                       </div>
                       <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
-                        {isIncome ? `${e.payer} 代收` : `${e.payer} 付款`} · {e.date || ''}
+                        {isIncome
+                          ? `${e.payer} 代收 · ${e.splitWith && e.splitWith.length === 1 ? `${e.splitWith[0]} 受益` : '全體均分'}`
+                          : `${e.payer} 付款`
+                        } · {e.date || ''}
                       </p>
                       {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
