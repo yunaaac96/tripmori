@@ -1298,14 +1298,18 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   </div>
                 </div>
               )}
-              {ms && (
-                <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ marginBottom: 14, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
-                  <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>{ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
-                  <p style={{ fontSize: 15, fontWeight: 700, color: ms.net >= 0 ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
-                    {Math.abs(ms.net) > 0 ? `NT$ ${Math.abs(ms.net).toLocaleString()}` : '已結清 ✓'}
-                  </p>
-                </div>
-              )}
+              {ms && (() => {
+                const detailSettlements = settlements.filter(s => s.from === detailName || s.to === detailName);
+                const detailDisplayAmt = detailSettlements.reduce((sum, s) => sum + s.amount, 0);
+                return (
+                  <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ marginBottom: 14, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>{ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
+                    <p style={{ fontSize: 15, fontWeight: 700, color: ms.net >= 0 ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
+                      {detailDisplayAmt > 0 ? `NT$ ${detailDisplayAmt.toLocaleString()}` : '已結清 ✓'}
+                    </p>
+                  </div>
+                );
+              })()}
 
               {/* Tabs */}
               <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
@@ -1839,10 +1843,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 const ms = memberStats.find(m => m.name === name);
                 if (!ms) return null;
                 const isCreditor = ms.net >= 0;
-                // Use raw net (paid - owed) so card is consistent with detail modal formula:
-                // 目前花費 = (個人份額 + 代付金額) = ms.paid
-                // 代墊金額 = ms.net when positive; 需還款金額 = |ms.net| when negative
-                const displayAmt = Math.abs(ms.net);
+                // Use settlement totals so debtor and creditor always show identical amounts
+                // (avoids 1-NT$ mismatch caused by equal-split remainder rounding)
+                const memberSettlements = settlements.filter(s => s.from === name || s.to === name);
+                const displayAmt = memberSettlements.reduce((sum, s) => sum + s.amount, 0);
                 const isMe = name === currentUserName;
                 return (
                   <div key={ms.name}
