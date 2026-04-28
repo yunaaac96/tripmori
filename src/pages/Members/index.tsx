@@ -983,10 +983,11 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                     {m.googleUid && !isMyCard && <span className="tm-badge-sky-sm" style={{ fontSize: 10, fontWeight: 700, background: '#D8EDF8', color: '#2A6A9A', borderRadius: 6, padding: '1px 6px', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLink} style={{ fontSize: 8 }} /> 已綁定</span>}
                     {!m.googleUid && <span className="tm-badge-unbound" style={{ fontSize: 10, fontWeight: 600, background: '#F5F5F5', color: '#9A8A7A', borderRadius: 6, padding: '1px 6px' }}>未綁定</span>}
                   </div>
-                  {/* 擁有者可看到綁定的 Google 帳號 email */}
+                  {/* 擁有者可看到綁定的 Google 帳號 email — 超長 email 省略 */}
                   {firestore.role === 'owner' && m.googleEmail && (
-                    <p style={{ fontSize: 10, color: '#2A6A9A', margin: '2px 0 0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <FontAwesomeIcon icon={faEnvelope} style={{ fontSize: 9 }} /> {m.googleEmail}
+                    <p style={{ fontSize: 10, color: '#2A6A9A', margin: '2px 0 0', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4, overflow: 'hidden' }}>
+                      <FontAwesomeIcon icon={faEnvelope} style={{ fontSize: 9, flexShrink: 0 }} />
+                      <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{m.googleEmail}</span>
                     </p>
                   )}
                   <div style={{ margin: '3px 0 0', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -1005,28 +1006,31 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                       <FontAwesomeIcon icon={faLink} style={{ fontSize: 10, marginRight: 4 }} />綁定為我的成員卡
                     </button>
                   )}
-                  {/* 解除綁定：owner 可解除任何人，本人可解除自己 */}
-                  {m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly && (
-                    <button onClick={() => handleUnbindGoogle(m.id)} className="tm-btn-delete-soft"
-                      style={{ marginTop: 4, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
-                      <FontAwesomeIcon icon={faXmark} style={{ marginRight: 4 }} />解除綁定
-                    </button>
-                  )}
-                  {/* Owner-only 刪除成員 — moved from the top-right absolute overlay
-                      so it doesn't overlap the 留言 button on the right column. */}
-                  {firestore.role === 'owner' && canEdit && !isMyCard && (
-                    <button onClick={() => handleDeleteMember(m.id, m.name)} className="tm-btn-delete-soft"
-                      style={{ marginTop: 4, marginLeft: m.googleUid ? 6 : 0, fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
-                      <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 4 }} />刪除成員
-                    </button>
+                  {/* 解除綁定 + 刪除成員 — 同排顯示 */}
+                  {((m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly) ||
+                    (firestore.role === 'owner' && canEdit && !isMyCard)) && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                      {m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly && (
+                        <button onClick={() => handleUnbindGoogle(m.id)} className="tm-btn-delete-soft"
+                          style={{ fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                          <FontAwesomeIcon icon={faXmark} style={{ marginRight: 4 }} />解除綁定
+                        </button>
+                      )}
+                      {firestore.role === 'owner' && canEdit && !isMyCard && (
+                        <button onClick={() => handleDeleteMember(m.id, m.name)} className="tm-btn-delete-soft"
+                          style={{ fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                          <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 4 }} />刪除成員
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
-                {/* Board toggle */}
+                {/* Board toggle — 固定寬度避免有無留言時大小改變 */}
                 <button onClick={() => setExpandedBoard(isExpanded ? null : m.id)}
                   className={isExpanded ? 'tm-note-board-toggle-active' : undefined}
-                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, padding: '6px 10px', borderRadius: 12, border: `1.5px solid ${isExpanded ? C.sageDark : C.creamDark}`, background: isExpanded ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 2, padding: '6px 4px', borderRadius: 12, border: `1.5px solid ${isExpanded ? C.sageDark : C.creamDark}`, background: isExpanded ? C.sageLight : 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT, width: 52, flexShrink: 0 }}>
                   <span style={{ fontSize: 13, color: isExpanded ? C.sageDark : C.barkLight }}><FontAwesomeIcon icon={faNoteSticky} /></span>
-                  <span style={{ fontSize: 9, fontWeight: 700, color: isExpanded ? C.sageDark : C.barkLight }}>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: isExpanded ? C.sageDark : C.barkLight, whiteSpace: 'nowrap' }}>
                     留言{notes.length > 0 ? ` (${notes.length})` : ''}
                   </span>
                 </button>

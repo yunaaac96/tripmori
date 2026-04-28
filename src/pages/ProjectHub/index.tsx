@@ -940,7 +940,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                   const rl = ROLE_LABEL[p.role];
                   const ended = isTripEnded(p);
                   return (
-                    <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
+                    <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 0, boxShadow: ended ? C.shadowSm : 'none', borderRadius: ended ? 20 : 0 }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         {isEditMode && p.role === 'owner' && (
                           <button
@@ -964,9 +964,9 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                           {!isEditMode && <span style={{ fontSize: 20, color: C.barkLight }}>›</span>}
                         </button>
                       </div>
-                      {/* Ended trip: archive prompt bar */}
+                      {/* Ended trip: archive prompt bar — no shadow (outer wrapper carries it) */}
                       {ended && !isEditMode && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#F5F0E8', border: `2px solid #D0C4B0`, borderTop: 'none', borderRadius: '0 0 20px 20px', padding: '8px 16px', boxShadow: C.shadowSm }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--tm-section-bg)', border: `2px solid #D0C4B0`, borderTop: 'none', borderRadius: '0 0 20px 20px', padding: '8px 16px' }}>
                           <span style={{ fontSize: 11, color: C.barkLight }}>移至「已結束」區塊？</span>
                           <button onClick={() => archiveProject(p.id)}
                             style={{ fontSize: 11, fontWeight: 700, color: '#8A7060', background: '#EDE8DF', border: 'none', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
