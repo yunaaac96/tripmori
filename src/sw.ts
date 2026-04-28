@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
-import { cleanupOutdatedCaches, precacheAndRoute } from 'workbox-precaching';
-import { registerRoute } from 'workbox-routing';
+import { cleanupOutdatedCaches, precacheAndRoute, createHandlerBoundToURL } from 'workbox-precaching';
+import { registerRoute, NavigationRoute } from 'workbox-routing';
 import { NetworkOnly } from 'workbox-strategies';
 import { initializeApp } from 'firebase/app';
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
@@ -27,6 +27,12 @@ registerRoute(
 // ── Workbox precache for app shell ────────────────────────────────────────────
 precacheAndRoute(self.__WB_MANIFEST ?? []);
 cleanupOutdatedCaches();
+
+// ── SPA navigation fallback ───────────────────────────────────────────────────
+// Ensures all navigation requests (page loads, back/forward) are served from
+// the precached index.html even when offline. Without this, navigating to any
+// URL while offline would return a network error instead of loading the app.
+registerRoute(new NavigationRoute(createHandlerBoundToURL('/index.html')));
 
 // Firebase Messaging background handler
 // Guard: if any required env var is missing, skip FCM setup silently rather than throwing.

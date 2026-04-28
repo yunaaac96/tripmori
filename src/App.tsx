@@ -425,6 +425,15 @@ function App() {
   const [tripNotifications, setTripNotifications] = useState<any[]>([]);
   const [activeTab, setActiveTab]   = useState('行程');
   const [loading, setLoading]       = useState(false);
+  // ── Online / offline detection ─────────────────────────────────────────────
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  useEffect(() => {
+    const toOnline  = () => setIsOnline(true);
+    const toOffline = () => setIsOnline(false);
+    window.addEventListener('online',  toOnline);
+    window.addEventListener('offline', toOffline);
+    return () => { window.removeEventListener('online', toOnline); window.removeEventListener('offline', toOffline); };
+  }, []);
   // 啟動 Splash：每次 App mount（含桌機首次開啟）都先顯示動畫
   const [splashDone, setSplashDone] = useState(false);
   const [notifications, setNotifications] = useState<Record<string, boolean>>({ '成員': false, '日誌': false });
@@ -1063,6 +1072,14 @@ function App() {
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
       <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', backgroundAttachment: 'local', minHeight: '100vh', position: 'relative', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
+
+        {/* ── Offline banner ── */}
+        {!isOnline && (
+          <div style={{ position: 'sticky', top: 0, zIndex: 1000, background: '#3A3A3A', color: 'white', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
+            <span style={{ fontSize: 14 }}>📡</span>
+            <span style={{ flex: 1, lineHeight: 1.4 }}>離線模式・資料來自本機快取・編輯將於恢復連線後自動同步</span>
+          </div>
+        )}
 
         {/* ── Visitor read-only banner ── */}
         {isReadOnly && (
