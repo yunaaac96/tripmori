@@ -515,6 +515,18 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   const handleDelete = async (id: string, expense: any) => {
     if (!canDeleteExpense(expense)) return;
+    // If deleting a settlement, clear settledByRef on all expenses it marked
+    if (expense.category === 'settlement') {
+      const linked = (expenses as any[]).filter((e: any) => e.settledByRef === id);
+      if (linked.length > 0) {
+        await Promise.all(linked.map((e: any) =>
+          updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
+            settledAt: deleteField(),
+            settledByRef: deleteField(),
+          })
+        ));
+      }
+    }
     await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
   };
 
@@ -556,7 +568,40 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const handleQuickSettle = async (from: string, to: string, amount: number) => {
     const key = `${from}-${to}`;
     setSettlingId(key);
-    await handleAddSettlement(from, to, String(amount), 'TWD');
+    // 1. Record the settlement expense and capture its doc ID
+    const settlementRef = await (async () => {
+      const amt = amount;
+      const payload = {
+        description: '結清款項',
+        amount: amt, currency: 'TWD', amountTWD: amt,
+        category: 'settlement',
+        payer: from,
+        paymentMethod: 'cash',
+        splitMode: 'equal',
+        splitWith: [to],
+        percentages: {}, customAmounts: {}, subItems: [],
+        date: new Date().toISOString().slice(0, 10),
+        notes: `${from} → ${to}`,
+        createdAt: Timestamp.now(),
+      };
+      return addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
+    })();
+    // 2. Batch-mark all outstanding expenses: creditor (to) paid, debtor (from) has a share
+    const today = new Date().toISOString().slice(0, 10);
+    const toMark = (expenses as any[]).filter((e: any) => {
+      if (e.category === 'settlement' || e.isPrivate || e.settledAt) return false;
+      if (e.payer !== to) return false;
+      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      return sw.includes(from);
+    });
+    if (toMark.length > 0) {
+      await Promise.all(toMark.map((e: any) =>
+        updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
+          settledAt: today,
+          settledByRef: settlementRef.id,
+        })
+      ));
+    }
     setSettlingId(null);
   };
 
@@ -1206,16 +1251,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
               {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
               {(() => {
-                // Find date of the most recent settlement involving this member
-                const lastSettlementDate = expenses
-                  .filter((e: any) => e.category === 'settlement' &&
-                    (e.payer === name || (e.splitWith && e.splitWith.includes(name))))
-                  .map((e: any) => e.date || '')
-                  .sort()
-                  .pop() || '';
-                // Show only: paid by someone else + after last settlement date
+                // Show only: paid by someone else + not yet settled
                 const unpaidShares = stmt.myShares.filter(item =>
-                  item.payer !== name && (!lastSettlementDate || item.date > lastSettlementDate)
+                  item.payer !== name && !item.settledAt
                 );
                 const unpaidTotal = unpaidShares.reduce((sum, item) => sum + (item.myShare || 0), 0);
                 if (unpaidShares.length === 0) return null;
