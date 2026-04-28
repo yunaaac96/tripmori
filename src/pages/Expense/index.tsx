@@ -1104,31 +1104,39 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 const faint  = isCreditor ? '#C5DFB8' : '#F5C8C8';
                 return (
                   <div style={{ background: bg, borderRadius: 14, padding: '14px 16px', marginBottom: 14, border: `1px solid ${border}` }}>
-                    {/* 我的支出 vs 我的應付 */}
+                    {/* 我付出的金額 vs 我應分攤的金額 */}
                     <div style={{ display: 'flex', marginBottom: 10 }}>
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: 10, color: accent, margin: '0 0 3px', fontWeight: 600 }}>我的支出</p>
+                        <p style={{ fontSize: 10, color: accent, margin: '0 0 1px', fontWeight: 600 }}>我實際付出</p>
+                        <p style={{ fontSize: 9, color: accent, opacity: 0.7, margin: '0 0 4px', fontWeight: 400 }}>我自己掏的錢</p>
                         <p style={{ fontSize: 15, fontWeight: 700, color: accent, margin: 0 }}>NT$ {stmt.myPaymentsTotal.toLocaleString()}</p>
                       </div>
                       <div style={{ width: 1, background: faint, margin: '2px 14px', alignSelf: 'stretch' }} />
                       <div style={{ flex: 1 }}>
-                        <p style={{ fontSize: 10, color: accent, margin: '0 0 3px', fontWeight: 600 }}>我的應付</p>
+                        <p style={{ fontSize: 10, color: accent, margin: '0 0 1px', fontWeight: 600 }}>我應分攤</p>
+                        <p style={{ fontSize: 9, color: accent, opacity: 0.7, margin: '0 0 4px', fontWeight: 400 }}>我該付的份額</p>
                         <p style={{ fontSize: 15, fontWeight: 700, color: accent, margin: 0 }}>NT$ {stmt.mySharesTotal.toLocaleString()}</p>
                       </div>
                     </div>
                     {/* Calculation chain */}
                     <div style={{ borderTop: `1px dashed ${faint}`, paddingTop: 9 }}>
                       {/* Gross balance */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: hasSettled ? 5 : 0 }}>
-                        <span style={{ fontSize: 10, fontWeight: 600, color: accent }}>帳目差額</span>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: hasSettled ? 5 : 0 }}>
+                        <div>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: accent }}>{isCreditor ? '多付了' : '少付了'}</span>
+                          <span style={{ fontSize: 9, color: accent, opacity: 0.7, marginLeft: 4 }}>（付出 − 應分攤）</span>
+                        </div>
                         <span style={{ fontSize: 13, fontWeight: 700, color: accent }}>
                           {isCreditor ? '+' : '−'} NT$ {grossAbs.toLocaleString()}
                         </span>
                       </div>
                       {/* Already-settled adjustment (only shown if non-trivial) */}
                       {hasSettled && (
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
-                          <span style={{ fontSize: 10, fontWeight: 600, color: accent }}>{isCreditor ? '已收回' : '已付結算'}</span>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 5 }}>
+                          <div>
+                            <span style={{ fontSize: 10, fontWeight: 600, color: accent }}>{isCreditor ? '已收回還款' : '已還款項'}</span>
+                            <span style={{ fontSize: 9, color: accent, opacity: 0.7, marginLeft: 4 }}>（已記錄結算）</span>
+                          </div>
                           <span style={{ fontSize: 12, fontWeight: 600, color: accent }}>
                             {isCreditor ? '−' : '+'} NT$ {settledAbs.toLocaleString()}
                           </span>
@@ -1136,14 +1144,14 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       )}
                       {/* Current balance — most prominent */}
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1.5px solid ${border}`, paddingTop: 9, marginTop: hasSettled ? 5 : 9 }}>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>{isCreditor ? '目前可收回' : '目前需支付'}</span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>{isCreditor ? '還可收回' : '還需還款'}</span>
                         <span style={{ fontSize: 22, fontWeight: 900, color: accent }}>NT$ {currentAbs.toLocaleString()}</span>
                       </div>
                     </div>
                     {/* Advanced-for-others sub-note */}
                     {stmt.myAdvancedTotal > 0 && (
                       <p style={{ fontSize: 10, color: accent, margin: '8px 0 0', borderTop: `1px solid ${faint}`, paddingTop: 6 }}>
-                        ↑ 其中代墊他人份額 NT$ {stmt.myAdvancedTotal.toLocaleString()}
+                        含代墊其他人 NT$ {stmt.myAdvancedTotal.toLocaleString()}（已計入上方付出金額）
                       </p>
                     )}
                   </div>
@@ -1564,9 +1572,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>收益方式</label>
                   <div style={{ display: 'flex', gap: 8, marginBottom: form.incomeScope === 'personal' ? 10 : 0 }}>
                     {([
-                      ['group',    '👥 全體均分'] as const,
-                      ['personal', '👤 指定個人'] as const,
-                    ]).map(([scope, label]) => (
+                      ['group',    faUsers, '全體均分'] as const,
+                      ['personal', faUser,  '指定個人'] as const,
+                    ]).map(([scope, icon, label]) => (
                       <button key={scope}
                         onClick={() => setForm(p => ({
                           ...p,
@@ -1579,7 +1587,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                           background: form.incomeScope === scope ? '#E0F4D8' : 'var(--tm-card-bg)',
                           color: form.incomeScope === scope ? '#2A6A2A' : C.bark,
                           fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
                         }}>
+                        <FontAwesomeIcon icon={icon} style={{ fontSize: 12 }} />
                         {label}
                       </button>
                     ))}
