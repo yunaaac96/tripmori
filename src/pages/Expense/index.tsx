@@ -1166,54 +1166,46 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 </div>
               )}
 
-              {/* ── ③ Section 1: My Payments ── */}
-              <div style={{ marginBottom: 10 }}>
-                <SectionToggle
-                  label="我的支出"
-                  count={stmt.myPayments.length}
-                  total={stmt.myPaymentsTotal}
-                  isOpen={stmtPaymentsOpen}
-                  onToggle={() => setStmtPaymentsOpen(v => !v)}
-                  accent={C.earth}
-                  note={stmt.myPayments.filter(i => i.isIncome).length > 0
-                    ? `含 ${stmt.myPayments.filter(i => i.isIncome).length} 筆收入`
-                    : undefined}
-                />
-                {stmtPaymentsOpen && (
-                  <div style={{ paddingLeft: 2, paddingRight: 2 }}>
-                    {stmt.myPayments.length === 0
-                      ? <p style={{ fontSize: 12, color: C.barkLight, padding: '12px 0', textAlign: 'center' }}>無付款記錄</p>
-                      : stmt.myPayments.map(item => <StmtRow key={item.id} item={item} showPayer={false} />)
-                    }
+              {/* ── ③ 待辦結算項目 ── */}
+              <div style={{ marginBottom: 4 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', letterSpacing: 0.3 }}>待辦結算</p>
+                {mySettlements.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '14px 0' }}>
+                    <p style={{ fontSize: 13, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 帳目已結清，無待辦項目</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {mySettlements.map((s, i) => {
+                      const isPayer = s.from === name;
+                      const other = isPayer ? s.to : s.from;
+                      const otherColor = getMemberColor(other);
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: isPayer ? '#FAE0E0' : '#EAF3DE', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${isPayer ? '#F0C0C0' : '#B5CFA7'}` }}>
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                            {getMemberAvatar(other)
+                              ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <span style={{ fontSize: 12, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0 }}>
+                              {isPayer ? `付給 ${other}` : `收自 ${other}`}
+                            </p>
+                            <p style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.7, margin: '2px 0 0' }}>
+                              {isPayer ? '尚未完成付款' : '等待對方付款'}
+                            </p>
+                          </div>
+                          <p style={{ fontSize: 16, fontWeight: 800, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0, flexShrink: 0 }}>
+                            {isPayer ? '−' : '＋'}NT$ {s.amount.toLocaleString()}
+                          </p>
+                        </div>
+                      );
+                    })}
                   </div>
                 )}
               </div>
 
-              {/* ── ④ Section 2: My Shares ── */}
-              <div style={{ marginBottom: 14 }}>
-                <SectionToggle
-                  label="我的應付"
-                  count={stmt.myShares.length}
-                  total={stmt.mySharesTotal}
-                  isOpen={stmtSharesOpen}
-                  onToggle={() => setStmtSharesOpen(v => !v)}
-                  accent={C.sage}
-                  note={stmt.myShares.filter(i => i.isIncome).length > 0
-                    ? `含 ${stmt.myShares.filter(i => i.isIncome).length} 筆收入抵扣`
-                    : undefined}
-                />
-                {stmtSharesOpen && (
-                  <div style={{ paddingLeft: 2, paddingRight: 2 }}>
-                    {stmt.myShares.length === 0
-                      ? <p style={{ fontSize: 12, color: C.barkLight, padding: '12px 0', textAlign: 'center' }}>無應付記錄</p>
-                      : stmt.myShares.map(item => <StmtRow key={item.id} item={item} showPayer={true} />)
-                    }
-                  </div>
-                )}
-              </div>
-
-              <p style={{ fontSize: 10, color: C.barkLight, textAlign: 'center', margin: 0 }}>
-                以上為建議結算方案，實際以雙方確認為準
+              <p style={{ fontSize: 10, color: C.barkLight, textAlign: 'center', margin: '12px 0 0' }}>
+                建議結算方案，實際以雙方確認為準
               </p>
             </div>
           </div>
