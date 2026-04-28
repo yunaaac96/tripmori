@@ -1008,10 +1008,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
         // ── Section toggle button ────────────────────────────────────────
         const SectionToggle = ({
-          label, count, total, isOpen, onToggle, accent,
+          label, count, total, isOpen, onToggle, accent, note,
         }: {
           label: string; count: number; total: number;
-          isOpen: boolean; onToggle: () => void; accent: string;
+          isOpen: boolean; onToggle: () => void; accent: string; note?: string;
         }) => (
           <button onClick={onToggle} style={{
             display: 'flex', alignItems: 'center', justifyContent: 'space-between',
@@ -1023,7 +1023,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
             <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, display: 'flex', alignItems: 'center', gap: 6 }}>
               <span style={{ width: 8, height: 8, borderRadius: '50%', background: accent, display: 'inline-block' }} />
               {label}
-              <span style={{ fontSize: 11, fontWeight: 400, color: C.barkLight }}>（{count} 筆）</span>
+              <span style={{ fontSize: 11, fontWeight: 400, color: C.barkLight }}>（{count} 筆{note ? `，${note}` : ''}）</span>
             </span>
             <span style={{ fontSize: 12, fontWeight: 700, color: isOpen ? accent : C.earth, display: 'flex', alignItems: 'center', gap: 6 }}>
               NT$ {total < 0 ? `−${Math.abs(total).toLocaleString()}` : total.toLocaleString()}
@@ -1053,46 +1053,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <button onClick={() => setSettlementDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight, lineHeight: 1 }}>✕</button>
               </div>
 
-              {/* ── Section 3 (shown first): Net Summary ── */}
-              <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 14, padding: '14px 16px', marginBottom: 14, border: `1px solid ${isCreditor ? '#B5CFA7' : '#F0C0C0'}` }}>
-                {/* Equation row */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px', fontWeight: 600 }}>支出總額</p>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>NT$ {stmt.myPaymentsTotal.toLocaleString()}</p>
-                  </div>
-                  <span style={{ fontSize: 14, color: isCreditor ? '#4A7A35' : '#9A3A3A', fontWeight: 700 }}>−</span>
-                  <div style={{ flex: 1, textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px', fontWeight: 600 }}>應付份額</p>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>NT$ {stmt.mySharesTotal.toLocaleString()}</p>
-                  </div>
-                  <span style={{ fontSize: 14, color: isCreditor ? '#4A7A35' : '#9A3A3A', fontWeight: 700 }}>=</span>
-                  <div style={{ flex: 1.2, textAlign: 'center' }}>
-                    <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px', fontWeight: 600 }}>
-                      {isCreditor ? '可收回' : '需支付'}
-                    </p>
-                    <p style={{ fontSize: 16, fontWeight: 900, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
-                      NT$ {Math.abs(stmt.net).toLocaleString()}
-                    </p>
-                  </div>
-                </div>
-                {/* Advanced-for-others sub-note */}
-                {stmt.myAdvancedTotal > 0 && (
-                  <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0, borderTop: `1px solid ${isCreditor ? '#B5CFA7' : '#F0C0C0'}`, paddingTop: 8 }}>
-                    ↑ 其中代墊他人份額 NT$ {stmt.myAdvancedTotal.toLocaleString()}
-                  </p>
-                )}
-              </div>
-
-              {/* ── Awaiting card-statement warning ── */}
-              {stmt.hasAwaitingItems && (
-                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 12px', borderRadius: 10, background: '#FFE8CC', border: '1px solid #E8B96A', marginBottom: 12 }}>
-                  <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 11, color: '#9A6800', marginTop: 1, flexShrink: 0 }} />
-                  <span style={{ fontSize: 11, color: '#9A6800', lineHeight: 1.5 }}>部分費用等待卡單確認中（⏳），尚未納入上方計算</span>
-                </div>
-              )}
-
-              {/* ── Related settlement suggestions ── */}
+              {/* ── ① 結算建議（頂部，最重要的行動項目）── */}
               {mySettlements.length > 0 && (
                 <div style={{ marginBottom: 14 }}>
                   <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>結算建議</p>
@@ -1131,7 +1092,73 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 </div>
               )}
 
-              {/* ── Section 1: My Payments ── */}
+              {/* ── ② 帳目摘要（垂直計算鏈：毛差額 → 已結清 → 目前餘額）── */}
+              {(() => {
+                const grossAbs   = Math.abs(stmt.net);   // raw balance excl. settlements
+                const currentAbs = Math.abs(ms.net);     // current balance incl. settlements
+                const settledAbs = grossAbs - currentAbs; // already-settled portion
+                const hasSettled = settledAbs > 1;
+                const accent = isCreditor ? '#4A7A35' : '#9A3A3A';
+                const bg     = isCreditor ? '#EAF3DE' : '#FAE0E0';
+                const border = isCreditor ? '#B5CFA7' : '#F0C0C0';
+                const faint  = isCreditor ? '#C5DFB8' : '#F5C8C8';
+                return (
+                  <div style={{ background: bg, borderRadius: 14, padding: '14px 16px', marginBottom: 14, border: `1px solid ${border}` }}>
+                    {/* 我的支出 vs 我的應付 */}
+                    <div style={{ display: 'flex', marginBottom: 10 }}>
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 10, color: accent, margin: '0 0 3px', fontWeight: 600 }}>我的支出</p>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: accent, margin: 0 }}>NT$ {stmt.myPaymentsTotal.toLocaleString()}</p>
+                      </div>
+                      <div style={{ width: 1, background: faint, margin: '2px 14px', alignSelf: 'stretch' }} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 10, color: accent, margin: '0 0 3px', fontWeight: 600 }}>我的應付</p>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: accent, margin: 0 }}>NT$ {stmt.mySharesTotal.toLocaleString()}</p>
+                      </div>
+                    </div>
+                    {/* Calculation chain */}
+                    <div style={{ borderTop: `1px dashed ${faint}`, paddingTop: 9 }}>
+                      {/* Gross balance */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: hasSettled ? 5 : 0 }}>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: accent }}>帳目差額</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: accent }}>
+                          {isCreditor ? '+' : '−'} NT$ {grossAbs.toLocaleString()}
+                        </span>
+                      </div>
+                      {/* Already-settled adjustment (only shown if non-trivial) */}
+                      {hasSettled && (
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 5 }}>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: accent }}>{isCreditor ? '已收回' : '已付結算'}</span>
+                          <span style={{ fontSize: 12, fontWeight: 600, color: accent }}>
+                            {isCreditor ? '−' : '+'} NT$ {settledAbs.toLocaleString()}
+                          </span>
+                        </div>
+                      )}
+                      {/* Current balance — most prominent */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: `1.5px solid ${border}`, paddingTop: 9, marginTop: hasSettled ? 5 : 9 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: accent }}>{isCreditor ? '目前可收回' : '目前需支付'}</span>
+                        <span style={{ fontSize: 22, fontWeight: 900, color: accent }}>NT$ {currentAbs.toLocaleString()}</span>
+                      </div>
+                    </div>
+                    {/* Advanced-for-others sub-note */}
+                    {stmt.myAdvancedTotal > 0 && (
+                      <p style={{ fontSize: 10, color: accent, margin: '8px 0 0', borderTop: `1px solid ${faint}`, paddingTop: 6 }}>
+                        ↑ 其中代墊他人份額 NT$ {stmt.myAdvancedTotal.toLocaleString()}
+                      </p>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* ── Awaiting card-statement warning ── */}
+              {stmt.hasAwaitingItems && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 12px', borderRadius: 10, background: '#FFE8CC', border: '1px solid #E8B96A', marginBottom: 12 }}>
+                  <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 11, color: '#9A6800', marginTop: 1, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: '#9A6800', lineHeight: 1.5 }}>部分費用等待卡單確認中（⏳），尚未納入上方計算</span>
+                </div>
+              )}
+
+              {/* ── ③ Section 1: My Payments ── */}
               <div style={{ marginBottom: 10 }}>
                 <SectionToggle
                   label="我的支出"
@@ -1140,6 +1167,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   isOpen={stmtPaymentsOpen}
                   onToggle={() => setStmtPaymentsOpen(v => !v)}
                   accent={C.earth}
+                  note={stmt.myPayments.filter(i => i.isIncome).length > 0
+                    ? `含 ${stmt.myPayments.filter(i => i.isIncome).length} 筆收入`
+                    : undefined}
                 />
                 {stmtPaymentsOpen && (
                   <div style={{ paddingLeft: 2, paddingRight: 2 }}>
@@ -1151,7 +1181,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 )}
               </div>
 
-              {/* ── Section 2: My Shares ── */}
+              {/* ── ④ Section 2: My Shares ── */}
               <div style={{ marginBottom: 14 }}>
                 <SectionToggle
                   label="我的應付"
@@ -1160,6 +1190,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   isOpen={stmtSharesOpen}
                   onToggle={() => setStmtSharesOpen(v => !v)}
                   accent={C.sage}
+                  note={stmt.myShares.filter(i => i.isIncome).length > 0
+                    ? `含 ${stmt.myShares.filter(i => i.isIncome).length} 筆收入抵扣`
+                    : undefined}
                 />
                 {stmtSharesOpen && (
                   <div style={{ paddingLeft: 2, paddingRight: 2 }}>
