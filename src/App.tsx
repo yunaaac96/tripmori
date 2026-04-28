@@ -45,7 +45,7 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
   return (
     <div style={{ margin: margin ?? '4px 0 0' }}>
       <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-        <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7 }}><FontAwesomeIcon icon={faLightbulb} /></span>
+        <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7, marginTop: 2 }}><FontAwesomeIcon icon={faLightbulb} /></span>
         <span style={{
           fontSize: 11, color, fontStyle: 'italic', lineHeight: 1.5,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere',
