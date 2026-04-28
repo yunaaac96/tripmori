@@ -194,6 +194,14 @@ function App() {
       });
 
       const updated = Array.from(map.values());
+      // Guard: if the default trip was lost from Firestore queries (e.g. ownerUid
+      // not set on a legacy doc), restore it as a visitor-role fallback so the
+      // user never loses it due to a brief auth reset → projects-clear cycle.
+      if (!updated.find(p => p.id === TRIP_ID)) {
+        ensureDefaultProject(); // writes visitor entry to localStorage
+        const restored = loadProjects().find(p => p.id === TRIP_ID);
+        if (restored) updated.push(restored);
+      }
       localStorage.setItem('tripmori_projects', JSON.stringify(updated));
       // Directly update React state — reliable regardless of mount timing
       setSyncedProjects(updated);
