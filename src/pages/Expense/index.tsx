@@ -9,7 +9,7 @@ import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -1095,7 +1095,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               {/* ── ② 帳目摘要（垂直計算鏈：毛差額 → 已結清 → 目前餘額）── */}
               {(() => {
                 const grossAbs   = Math.abs(stmt.net);   // raw balance excl. settlements
-                const currentAbs = Math.abs(ms.net);     // current balance incl. settlements
+                const currentAbs = mySettlements.reduce((sum, s) => sum + s.amount, 0); // use settlement total to match member card & suggestion
                 const settledAbs = grossAbs - currentAbs; // already-settled portion
                 const hasSettled = settledAbs > 1;
                 const accent = isCreditor ? '#4A7A35' : '#9A3A3A';
@@ -1204,7 +1204,36 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 )}
               </div>
 
-              <p style={{ fontSize: 10, color: C.barkLight, textAlign: 'center', margin: '12px 0 0' }}>
+              {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
+              {(() => {
+                const unpaidShares = stmt.myShares.filter(item => item.payer !== name);
+                const unpaidTotal = unpaidShares.reduce((sum, item) => sum + item.amount, 0);
+                if (unpaidShares.length === 0) return null;
+                return (
+                  <div style={{ marginBottom: 4, marginTop: 14 }}>
+                    <button
+                      onClick={() => setStmtSharesOpen(v => !v)}
+                      style={{ width: '100%', background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 12, padding: '11px 14px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ width: 8, height: 8, borderRadius: '50%', background: C.earth, flexShrink: 0, display: 'inline-block' }} />
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.bark }}>應分攤費用明細</span>
+                        <span style={{ fontSize: 11, color: C.barkLight }}>（{unpaidShares.length} 筆）</span>
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: C.earth }}>NT$ {unpaidTotal.toLocaleString()}</span>
+                        <FontAwesomeIcon icon={stmtSharesOpen ? faChevronUp : faChevronDown} style={{ fontSize: 11, color: C.barkLight }} />
+                      </div>
+                    </button>
+                    {stmtSharesOpen && (
+                      <div style={{ paddingLeft: 2, paddingRight: 2, marginTop: 2 }}>
+                        {unpaidShares.map(item => <StmtRow key={item.id} item={item} showPayer={true} />)}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              <p style={{ fontSize: 10, color: C.barkLight, textAlign: 'center', margin: '14px 0 0' }}>
                 建議結算方案，實際以雙方確認為準
               </p>
             </div>
