@@ -308,6 +308,8 @@ export interface StatementLineItem {
   isIncome: boolean;
   origAmount: number;
   origCurrency: string;
+  /** Who paid for this expense. */
+  payer: string;
   /** Effective TWD of the whole expense (effectiveTWD priority chain). */
   effectiveTWD: number;
   /** This member's personal share in TWD for this expense. */
@@ -365,6 +367,7 @@ export const buildPersonalStatement = (
       isIncome: !!e.isIncome,
       origAmount: e.amount || 0,
       origCurrency: e.currency || 'JPY',
+      payer: e.payer || '',
       effectiveTWD: effectiveTWD(e),
       myShare: getPersonalShare(e, memberName, memberNames),
       splitMode: e.splitMode || 'equal',
