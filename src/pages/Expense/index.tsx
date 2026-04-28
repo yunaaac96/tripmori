@@ -2,7 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, ExpandableNotes, SmartText } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
-import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD } from '../../utils/expenseCalc';
+import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD, buildPersonalStatement } from '../../utils/expenseCalc';
+import type { StatementLineItem } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
@@ -243,8 +244,15 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
   // Self-detail privacy tabs (only ever rendered for own card)
   const [detailTab, setDetailTab] = useState<'all' | 'shared' | 'private'>('all');
-  // Settlement breakdown detail modal (click 代墊/需還款 chip)
+  // Personal Statement modal (click 代墊/需還款 chip, or member name in settlement list)
   const [settlementDetailName, setSettlementDetailName] = useState<string | null>(null);
+  // Collapsible sections inside the Personal Statement modal
+  const [stmtPaymentsOpen, setStmtPaymentsOpen] = useState(false);
+  const [stmtSharesOpen, setStmtSharesOpen] = useState(false);
+  // Reset section state whenever a different person's statement is opened
+  useEffect(() => {
+    if (settlementDetailName) { setStmtPaymentsOpen(false); setStmtSharesOpen(false); }
+  }, [settlementDetailName]);
 
   // Member card scroll ref (for arrow nav)
   const memberScrollRef = useRef<HTMLDivElement>(null);
@@ -927,68 +935,231 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         </div>
       )}
 
-      {/* ── Settlement breakdown detail modal ── */}
+      {/* ── Personal Statement Modal ── */}
       {settlementDetailName && (() => {
         const name = settlementDetailName;
         const ms = memberStats.find(m => m.name === name);
         if (!ms) return null;
         const isCreditor = ms.net >= 0;
-        // Settlements where this person is involved
+        const stmt = buildPersonalStatement(expenses, name, memberNames);
         const mySettlements = settlements.filter(s => s.from === name || s.to === name);
+        const memberColor = getMemberColor(name);
+
+        // ── Shared helper: one expense row (used in both sections) ──────
+        const StmtRow = ({ item, showPayer }: { item: StatementLineItem; showPayer?: boolean }) => {
+          const cat = EXPENSE_CATEGORY_MAP[item.category] || EXPENSE_CATEGORY_MAP.other;
+          const isAwaiting = item.awaitCardStatement;
+          const sw = item.splitWith;
+          return (
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: `1px solid var(--tm-cream-dark, #EDE8DF)`, opacity: isAwaiting ? 0.55 : 1 }}>
+              {/* Category icon */}
+              <div style={{ width: 34, height: 34, borderRadius: 10, background: cat?.bg || '#EEE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <FontAwesomeIcon icon={CATEGORY_ICONS[item.category] || CATEGORY_ICONS.other} style={{ fontSize: 13, color: avatarTextColor(cat?.bg || '#EEE'), opacity: 0.85 }} />
+              </div>
+              {/* Text */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 13, fontWeight: 600, color: item.isIncome ? '#4A8A4A' : C.bark, margin: '0 0 3px', wordBreak: 'break-word', lineHeight: 1.35 }}>
+                  {isAwaiting && <span style={{ fontSize: 9, fontWeight: 700, background: '#FFE8CC', color: '#9A6800', borderRadius: 4, padding: '1px 4px', marginRight: 4, verticalAlign: 'middle' }}>⏳</span>}
+                  {item.isIncome && <span style={{ fontSize: 9, fontWeight: 700, background: '#E0F4D8', color: '#4A7A35', borderRadius: 4, padding: '1px 4px', marginRight: 4, verticalAlign: 'middle' }}>收入</span>}
+                  {item.description || '（無說明）'}
+                </p>
+                <p style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.4 }}>
+                  {item.date}
+                  {showPayer && item.splitWith.length > 0 && ` · ${item.splitWith[0] !== name ? item.splitWith[0] : (item.splitWith[1] || '')} 付`}
+                  {` · 共 ${sw.length} 人`}
+                  {item.origCurrency !== 'TWD' && ` · ${item.origCurrency} ${item.origAmount.toLocaleString()}`}
+                </p>
+              </div>
+              {/* Amounts */}
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                {showPayer ? (
+                  // Section 2: show my share prominently
+                  <>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: item.isIncome ? '#4A8A4A' : C.earth, margin: '0 0 1px' }}>
+                      {item.isIncome ? '−' : ''}NT$ {item.myShare.toLocaleString()}
+                    </p>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {item.effectiveTWD.toLocaleString()}</p>
+                  </>
+                ) : (
+                  // Section 1: show total paid, then my share below
+                  <>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: item.isIncome ? '#4A8A4A' : C.earth, margin: '0 0 1px' }}>
+                      {item.isIncome ? '＋' : ''}NT$ {item.effectiveTWD.toLocaleString()}
+                    </p>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>我分 NT$ {item.myShare.toLocaleString()}</p>
+                  </>
+                )}
+              </div>
+            </div>
+          );
+        };
+
+        // ── Section toggle button ────────────────────────────────────────
+        const SectionToggle = ({
+          label, count, total, isOpen, onToggle, accent,
+        }: {
+          label: string; count: number; total: number;
+          isOpen: boolean; onToggle: () => void; accent: string;
+        }) => (
+          <button onClick={onToggle} style={{
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+            width: '100%', padding: '10px 12px', borderRadius: 10, boxSizing: 'border-box',
+            background: isOpen ? `${accent}22` : 'var(--tm-card-bg)',
+            border: `1.5px solid ${isOpen ? accent : C.creamDark}`,
+            cursor: 'pointer', fontFamily: FONT, marginBottom: isOpen ? 2 : 0,
+          }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, display: 'flex', alignItems: 'center', gap: 6 }}>
+              <span style={{ width: 8, height: 8, borderRadius: '50%', background: accent, display: 'inline-block' }} />
+              {label}
+              <span style={{ fontSize: 11, fontWeight: 400, color: C.barkLight }}>（{count} 筆）</span>
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: isOpen ? accent : C.earth, display: 'flex', alignItems: 'center', gap: 6 }}>
+              NT$ {total < 0 ? `−${Math.abs(total).toLocaleString()}` : total.toLocaleString()}
+              <span style={{ fontSize: 11 }}>{isOpen ? '▲' : '▼'}</span>
+            </span>
+          </button>
+        );
+
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 560 }}
             onClick={() => setSettlementDetailName(null)}>
-            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '80vh', overflowY: 'auto', boxSizing: 'border-box' }}
+            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '88vh', overflowY: 'auto', boxSizing: 'border-box' }}
               onClick={e => e.stopPropagation()}>
+
+              {/* ── Header ── */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-                <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
-                  <FontAwesomeIcon icon={faScaleBalanced} style={{ fontSize: 14 }} />
-                  {name} 的結算明細
-                </p>
-                <button onClick={() => setSettlementDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: memberColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                    {getMemberAvatar(name)
+                      ? <img src={getMemberAvatar(name)!} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontSize: 13, fontWeight: 700, color: avatarTextColor(memberColor) }}>{name[0]?.toUpperCase()}</span>}
+                  </div>
+                  <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>
+                    {name} 的個人對帳單
+                  </p>
+                </div>
+                <button onClick={() => setSettlementDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight, lineHeight: 1 }}>✕</button>
               </div>
 
-              {/* Summary chip */}
-              <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 14px', marginBottom: 16 }}>
-                <p style={{ fontSize: 11, fontWeight: 600, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px' }}>
-                  {isCreditor ? '代墊金額（應收回）' : '需還款金額（應支出）'}
-                </p>
-                <p style={{ fontSize: 20, fontWeight: 900, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
-                  NT$ {Math.abs(ms.net).toLocaleString()}
-                </p>
+              {/* ── Section 3 (shown first): Net Summary ── */}
+              <div style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 14, padding: '14px 16px', marginBottom: 14, border: `1px solid ${isCreditor ? '#B5CFA7' : '#F0C0C0'}` }}>
+                {/* Equation row */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px', fontWeight: 600 }}>支出總額</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>NT$ {stmt.myPaymentsTotal.toLocaleString()}</p>
+                  </div>
+                  <span style={{ fontSize: 14, color: isCreditor ? '#4A7A35' : '#9A3A3A', fontWeight: 700 }}>−</span>
+                  <div style={{ flex: 1, textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px', fontWeight: 600 }}>應付份額</p>
+                    <p style={{ fontSize: 14, fontWeight: 700, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>NT$ {stmt.mySharesTotal.toLocaleString()}</p>
+                  </div>
+                  <span style={{ fontSize: 14, color: isCreditor ? '#4A7A35' : '#9A3A3A', fontWeight: 700 }}>=</span>
+                  <div style={{ flex: 1.2, textAlign: 'center' }}>
+                    <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: '0 0 2px', fontWeight: 600 }}>
+                      {isCreditor ? '可收回' : '需支付'}
+                    </p>
+                    <p style={{ fontSize: 16, fontWeight: 900, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
+                      NT$ {Math.abs(stmt.net).toLocaleString()}
+                    </p>
+                  </div>
+                </div>
+                {/* Advanced-for-others sub-note */}
+                {stmt.myAdvancedTotal > 0 && (
+                  <p style={{ fontSize: 10, color: isCreditor ? '#4A7A35' : '#9A3A3A', margin: 0, borderTop: `1px solid ${isCreditor ? '#B5CFA7' : '#F0C0C0'}`, paddingTop: 8 }}>
+                    ↑ 其中代墊他人份額 NT$ {stmt.myAdvancedTotal.toLocaleString()}
+                  </p>
+                )}
               </div>
 
-              {/* Settlement rows */}
-              {mySettlements.length === 0 ? (
-                <p style={{ fontSize: 13, color: C.barkLight, textAlign: 'center', padding: '16px 0' }}>已結清，無待處理款項</p>
-              ) : (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {mySettlements.map((s, i) => {
-                    const isPayer = s.from === name;
-                    const otherName = isPayer ? s.to : s.from;
-                    const otherColor = getMemberColor(otherName);
-                    return (
-                      <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--tm-card-bg)', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${C.creamDark}` }}>
-                        <div style={{ width: 32, height: 32, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(otherColor) }}>{otherName.slice(0, 1)}</span>
-                        </div>
-                        <div style={{ flex: 1 }}>
-                          <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>
-                            {isPayer ? `還給 ${otherName}` : `${otherName} 還給你`}
-                          </p>
-                          <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0' }}>
-                            {isPayer ? `${name} → ${otherName}` : `${otherName} → ${name}`}
-                          </p>
-                        </div>
-                        <p style={{ fontSize: 15, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0 }}>
-                          {isPayer ? '-' : '+'}NT$ {s.amount.toLocaleString()}
-                        </p>
-                      </div>
-                    );
-                  })}
+              {/* ── Awaiting card-statement warning ── */}
+              {stmt.hasAwaitingItems && (
+                <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7, padding: '8px 12px', borderRadius: 10, background: '#FFE8CC', border: '1px solid #E8B96A', marginBottom: 12 }}>
+                  <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 11, color: '#9A6800', marginTop: 1, flexShrink: 0 }} />
+                  <span style={{ fontSize: 11, color: '#9A6800', lineHeight: 1.5 }}>部分費用等待卡單確認中（⏳），尚未納入上方計算</span>
                 </div>
               )}
-              <p style={{ fontSize: 10, color: C.barkLight, textAlign: 'center', marginTop: 14 }}>
+
+              {/* ── Related settlement suggestions ── */}
+              {mySettlements.length > 0 && (
+                <div style={{ marginBottom: 14 }}>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>結算建議</p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {mySettlements.map((s, i) => {
+                      const isPayer = s.from === name;
+                      const other = isPayer ? s.to : s.from;
+                      const otherColor = getMemberColor(other);
+                      return (
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--tm-card-bg)', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${C.creamDark}` }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                            {getMemberAvatar(other)
+                              ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
+                          </div>
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>
+                              {isPayer ? `付給 ${other}` : `收自 ${other}`}
+                            </p>
+                            <p style={{ fontSize: 10, color: C.barkLight, margin: '1px 0 0' }}>
+                              {isPayer ? `${name} → ${other}` : `${other} → ${name}`}
+                            </p>
+                          </div>
+                          <p style={{ fontSize: 15, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0, flexShrink: 0 }}>
+                            {isPayer ? '−' : '＋'}NT$ {s.amount.toLocaleString()}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+              {ms.net === 0 && mySettlements.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '10px 0 14px' }}>
+                  <p style={{ fontSize: 13, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 已結清，帳目平衡</p>
+                </div>
+              )}
+
+              {/* ── Section 1: My Payments ── */}
+              <div style={{ marginBottom: 10 }}>
+                <SectionToggle
+                  label="我的支出"
+                  count={stmt.myPayments.length}
+                  total={stmt.myPaymentsTotal}
+                  isOpen={stmtPaymentsOpen}
+                  onToggle={() => setStmtPaymentsOpen(v => !v)}
+                  accent={C.earth}
+                />
+                {stmtPaymentsOpen && (
+                  <div style={{ paddingLeft: 2, paddingRight: 2 }}>
+                    {stmt.myPayments.length === 0
+                      ? <p style={{ fontSize: 12, color: C.barkLight, padding: '12px 0', textAlign: 'center' }}>無付款記錄</p>
+                      : stmt.myPayments.map(item => <StmtRow key={item.id} item={item} showPayer={false} />)
+                    }
+                  </div>
+                )}
+              </div>
+
+              {/* ── Section 2: My Shares ── */}
+              <div style={{ marginBottom: 14 }}>
+                <SectionToggle
+                  label="我的應付"
+                  count={stmt.myShares.length}
+                  total={stmt.mySharesTotal}
+                  isOpen={stmtSharesOpen}
+                  onToggle={() => setStmtSharesOpen(v => !v)}
+                  accent={C.sage}
+                />
+                {stmtSharesOpen && (
+                  <div style={{ paddingLeft: 2, paddingRight: 2 }}>
+                    {stmt.myShares.length === 0
+                      ? <p style={{ fontSize: 12, color: C.barkLight, padding: '12px 0', textAlign: 'center' }}>無應付記錄</p>
+                      : stmt.myShares.map(item => <StmtRow key={item.id} item={item} showPayer={true} />)
+                    }
+                  </div>
+                )}
+              </div>
+
+              <p style={{ fontSize: 10, color: C.barkLight, textAlign: 'center', margin: 0 }}>
                 以上為建議結算方案，實際以雙方確認為準
               </p>
             </div>
@@ -1649,7 +1820,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                         ? <img src={getMemberAvatar(creditor)!} alt={creditor} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                         : creditor[0]?.toUpperCase()}
                     </div>
-                    <p className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1 }}>
+                    <p className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'}
+                      onClick={() => setSettlementDetailName(creditor)}
+                      style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
                       {creditor}{isMyGroup ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
                     </p>
                     <span className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
@@ -1667,7 +1840,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                               : debt.from[0]?.toUpperCase()}
                           </div>
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0 }}>{debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
+                            <p onClick={() => setSettlementDetailName(debt.from)}
+                              style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3, display: 'inline-block' }}>
+                              {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
+                            </p>
                             <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
                           </div>
                           {!isReadOnly && (

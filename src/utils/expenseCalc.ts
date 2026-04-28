@@ -86,6 +86,9 @@ export interface Expense {
   category?: string;
   isPrivate?: boolean;
   privateOwnerUid?: string;
+  // Display fields (stored in Firestore, used in Personal Statement)
+  description?: string;
+  date?: string;
   // ── Cross-currency / settlement helpers ─────────────────────────────
   // Per-expense FX rate override entered by the user at record time. Takes
   // priority over the trip-level rate; when absent we fall back to
@@ -292,4 +295,126 @@ export const computeSettlements = (memberStats: MemberStat[]): Settlement[] => {
     if (debtors[di].amt < 1) di++;
   }
   return result;
+};
+
+// ── Personal Statement ────────────────────────────────────────────────────────
+
+/** A single line in the "My Payments" or "My Shares" section. */
+export interface StatementLineItem {
+  id: string;
+  date: string;
+  description: string;
+  category: string;
+  isIncome: boolean;
+  origAmount: number;
+  origCurrency: string;
+  /** Effective TWD of the whole expense (effectiveTWD priority chain). */
+  effectiveTWD: number;
+  /** This member's personal share in TWD for this expense. */
+  myShare: number;
+  splitMode: 'equal' | 'weighted' | 'amount';
+  /** Names of everyone in the split, including this member. */
+  splitWith: string[];
+  /** Grayed-out in UI; excluded from totals (same rule as computeMemberStats). */
+  awaitCardStatement: boolean;
+}
+
+/**
+ * Per-member breakdown: what they paid, what they owe, and the resulting net.
+ * Excludes settlement and private expenses from the item lists; totals
+ * are computed from active (non-awaitCardStatement) items only so they
+ * match computeMemberStats numbers exactly when no settlements are recorded.
+ */
+export interface PersonalStatement {
+  memberName: string;
+  // ── Section 1: My Payments ──────────────────────────────────────────
+  /** Non-private, non-settlement expenses where this member is the payer. */
+  myPayments: StatementLineItem[];
+  /** Sum of effectiveTWD for active payment items (income subtracts). */
+  myPaymentsTotal: number;
+  /** Portion of myPaymentsTotal paid on behalf of others (= total − own share). */
+  myAdvancedTotal: number;
+  // ── Section 2: My Shares ────────────────────────────────────────────
+  /** Non-private, non-settlement expenses where this member is a participant. */
+  myShares: StatementLineItem[];
+  /** Sum of myShare for active share items (income subtracts). */
+  mySharesTotal: number;
+  // ── Section 3: Net ──────────────────────────────────────────────────
+  /** myPaymentsTotal − mySharesTotal. Positive = creditor, negative = debtor. */
+  net: number;
+  /** True if any item is still awaiting a credit-card statement. */
+  hasAwaitingItems: boolean;
+}
+
+/**
+ * Build the Personal Statement for one member from the raw expense list.
+ * Pure function — no side effects, safe to call in render.
+ */
+export const buildPersonalStatement = (
+  expenses: Expense[],
+  memberName: string,
+  memberNames: string[],
+): PersonalStatement => {
+  const toLineItem = (e: Expense): StatementLineItem => {
+    const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+    return {
+      id: e.id || '',
+      date: e.date || '',
+      description: e.description || '',
+      category: e.category || 'other',
+      isIncome: !!e.isIncome,
+      origAmount: e.amount || 0,
+      origCurrency: e.currency || 'JPY',
+      effectiveTWD: effectiveTWD(e),
+      myShare: getPersonalShare(e, memberName, memberNames),
+      splitMode: e.splitMode || 'equal',
+      splitWith: sw,
+      awaitCardStatement: !!e.awaitCardStatement,
+    };
+  };
+
+  // Only non-private, non-settlement expenses appear in the statement sections.
+  const relevant = expenses.filter(e => !e.isPrivate && e.category !== 'settlement');
+
+  // Section 1: expenses where this member is the payer, sorted by date.
+  const myPayments = relevant
+    .filter(e => e.payer === memberName)
+    .map(toLineItem)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description));
+
+  // Section 2: expenses where this member is a participant (includes self-paid).
+  const myShares = relevant
+    .filter(e => {
+      const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      return sw.includes(memberName);
+    })
+    .map(toLineItem)
+    .sort((a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description));
+
+  // Totals — exclude awaitCardStatement rows (mirrors computeMemberStats behaviour).
+  const activePayments = myPayments.filter(i => !i.awaitCardStatement);
+  const activeShares   = myShares.filter(i => !i.awaitCardStatement);
+
+  const myPaymentsTotal = activePayments.reduce(
+    (s, i) => s + (i.isIncome ? -i.effectiveTWD : i.effectiveTWD), 0,
+  );
+  const myOwnShareInPayments = activePayments.reduce(
+    (s, i) => s + (i.isIncome ? -i.myShare : i.myShare), 0,
+  );
+  const mySharesTotal = activeShares.reduce(
+    (s, i) => s + (i.isIncome ? -i.myShare : i.myShare), 0,
+  );
+
+  return {
+    memberName,
+    myPayments,
+    myPaymentsTotal,
+    myAdvancedTotal: myPaymentsTotal - myOwnShareInPayments,
+    myShares,
+    mySharesTotal,
+    net: myPaymentsTotal - mySharesTotal,
+    hasAwaitingItems:
+      myPayments.some(i => i.awaitCardStatement) ||
+      myShares.some(i => i.awaitCardStatement),
+  };
 };
