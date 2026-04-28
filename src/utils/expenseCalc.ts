@@ -319,6 +319,8 @@ export interface StatementLineItem {
   splitWith: string[];
   /** Grayed-out in UI; excluded from totals (same rule as computeMemberStats). */
   awaitCardStatement: boolean;
+  /** Date this expense was marked settled (ISO date string). Undefined = not yet settled. */
+  settledAt?: string;
 }
 
 /**
@@ -373,6 +375,7 @@ export const buildPersonalStatement = (
       splitMode: e.splitMode || 'equal',
       splitWith: sw,
       awaitCardStatement: !!e.awaitCardStatement,
+      settledAt: e.settledAt,
     };
   };
 
