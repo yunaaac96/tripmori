@@ -235,6 +235,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [filterCat, setFilterCat] = useState<string>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [expenseView, setExpenseView] = useState<'all' | 'mine'>('all');
+  const [hideSettled, setHideSettled] = useState(false);
 
   // Pie chart — auto-expand for visitors
   const [showPie, setShowPie] = useState(false);
@@ -512,6 +513,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     setSaving(false);
     closeForm();
   };
+
+  const canEditExpense = (e: any) =>
+    !isReadOnly && e.category !== 'settlement' && !e.settledAt;
 
   const canDeleteExpense = (e: any) => {
     if (isReadOnly) return false;
@@ -856,6 +860,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // the same second / identical amount don't flip positions on re-render.
   const filteredExpenses = baseExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
+    .filter((e: any) => !hideSettled || (!e.settledAt && !e.receivedAt) || e.category === 'settlement')
     .sort((a: any, b: any) => {
       const tieBreak = String(a.id || '').localeCompare(String(b.id || ''));
       if (sortMode === 'newest') {
@@ -2195,19 +2200,30 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
         {/* ── Filter / Sort bar (hidden for visitors) ── */}
         {!isVisitor && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
-            {FILTER_CATS.map(fc => (
-              <button key={fc.key} onClick={() => setFilterCat(fc.key)}
-                style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${filterCat === fc.key ? C.sageDark : C.creamDark}`, background: filterCat === fc.key ? C.sage : 'var(--tm-card-bg)', color: filterCat === fc.key ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-                {fc.label}
+          <>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6, overflowX: 'auto', paddingBottom: 4 }}>
+              {FILTER_CATS.map(fc => (
+                <button key={fc.key} onClick={() => setFilterCat(fc.key)}
+                  style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${filterCat === fc.key ? C.sageDark : C.creamDark}`, background: filterCat === fc.key ? C.sage : 'var(--tm-card-bg)', color: filterCat === fc.key ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+                  {fc.label}
+                </button>
+              ))}
+              <button onClick={() => setSortMode(nextSort[sortMode])}
+                className="tm-sort-btn"
+                style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                {sortLabels[sortMode]}
               </button>
-            ))}
-            <button onClick={() => setSortMode(nextSort[sortMode])}
-              className="tm-sort-btn"
-              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-              {sortLabels[sortMode]}
-            </button>
-          </div>
+            </div>
+            {/* 剔除已結清 toggle — only shown if any settled expense exists */}
+            {(expenses as any[]).some((e: any) => e.settledAt || e.receivedAt) && (
+              <button
+                onClick={() => setHideSettled(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${hideSettled ? C.sageDark : C.creamDark}`, background: hideSettled ? '#EAF3DE' : 'var(--tm-card-bg)', color: hideSettled ? C.sageDark : C.barkLight, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                <FontAwesomeIcon icon={hideSettled ? faCheck : faLock} style={{ fontSize: 10 }} />
+                {hideSettled ? '已結清項目已隱藏' : '顯示全部（含已結清）'}
+              </button>
+            )}
+          </>
         )}
 
         {/* ── Expense list (hidden for visitors) ── */}
@@ -2326,7 +2342,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       )}
                       {!isReadOnly && (
                         <div style={{ display: 'flex', gap: 4 }}>
-                          {!isSettlement && (
+                          {canEditExpense(e) && (
                             <button onClick={() => openEdit(e)}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faPen} />

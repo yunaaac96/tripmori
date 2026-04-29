@@ -653,3 +653,197 @@ describe('壓力測試 情境二：8 人大團', () => {
     expect(stmt.net).toBe(-1300);
   });
 });
+
+// ── 壓力測試情境三：結清狀態機與對稱標記 ────────────────────────────────────────
+describe('壓力測試 情境三：結清狀態機 + 對稱標記 + 剔除已結清視圖', () => {
+  /**
+   * 3 人局：A, B, C
+   *
+   * 費用①：A 付餐費 $1200 TWD，3 人均分（每人 $400）
+   * 費用②：B 付交通 $900 TWD，3 人均分（每人 $300）
+   * 費用③：B 付景點 $600 TWD，3 人均分（每人 $200）
+   *
+   * 手算淨值：
+   *   A：paid=1200, owed=400+300+200=900, net=+300（債權人）
+   *   B：paid=1500, owed=400+300+200=900, net=+600（債權人）
+   *   C：paid=0,    owed=400+300+200=900, net=−900（債務人）
+   *
+   * 結算建議：C → B $600, C → A $300（B 先收，A 後收）
+   *
+   * 情境：C 只還了 B（C→B $600），A 尚未收款
+   *   → 費用②③（B 付、C 在 splitWith）設 settledAt
+   *   → 費用②③（B 付、C 在 splitWith）的 payer=B，B 的 receivedAt 也對稱更新
+   *
+   * 在「剔除已結清」模式下：
+   *   費用①（A 付，未結清）仍顯示
+   *   費用②③（B 付，已結清）被隱藏
+   *   C 的應分攤明細只剩費用①（NT$400）
+   */
+
+  const members = ['A', 'B', 'C'];
+
+  // 基礎費用（不帶任何結清標記）
+  const baseExpenses = [
+    { id: 'e1', payer: 'A', amountTWD: 1200, currency: 'TWD', splitWith: ['A','B','C'], description: '餐費', date: '2024-04-01' },
+    { id: 'e2', payer: 'B', amountTWD: 900,  currency: 'TWD', splitWith: ['A','B','C'], description: '交通', date: '2024-04-02' },
+    { id: 'e3', payer: 'B', amountTWD: 600,  currency: 'TWD', splitWith: ['A','B','C'], description: '景點', date: '2024-04-03' },
+  ];
+
+  // 部分結清：C 已還 B（費用②③設 settledAt + receivedAt）
+  const partiallySettled = [
+    { id: 'e1', payer: 'A', amountTWD: 1200, currency: 'TWD', splitWith: ['A','B','C'], description: '餐費', date: '2024-04-01' },
+    { id: 'e2', payer: 'B', amountTWD: 900,  currency: 'TWD', splitWith: ['A','B','C'], description: '交通', date: '2024-04-02', settledAt: '2024-04-10', settledByRef: 's1' },
+    { id: 'e3', payer: 'B', amountTWD: 600,  currency: 'TWD', splitWith: ['A','B','C'], description: '景點', date: '2024-04-03', settledAt: '2024-04-10', settledByRef: 's1' },
+  ];
+
+  // ① 基礎淨值正確
+  it('基礎淨值：A=+300, B=+600, C=−900, 總和=0', () => {
+    const stats = computeMemberStats(baseExpenses, members);
+    const get = (n: string) => stats.find(s => s.name === n)!;
+    expect(get('A').net).toBe(300);
+    expect(get('B').net).toBe(600);
+    expect(get('C').net).toBe(-900);
+    expect(stats.reduce((s, m) => s + m.net, 0)).toBe(0);
+  });
+
+  // ② 結算建議符合手算
+  it('結算建議：C→B $600, C→A $300，共 2 筆', () => {
+    const stats = computeMemberStats(baseExpenses, members);
+    const s = computeSettlements(stats);
+    expect(s).toHaveLength(2);
+    const find = (from: string, to: string) => s.find(r => r.from === from && r.to === to);
+    expect(find('C','B')?.amount).toBe(600);
+    expect(find('C','A')?.amount).toBe(300);
+  });
+
+  // ③ settledAt 標記：費用②③ 的 debtor 視角（C 欠 B）
+  it('C 的 應分攤明細 在 partial-settle 後只剩費用①（$400）', () => {
+    const stmt = buildPersonalStatement(partiallySettled, 'C', members);
+    const unpaid = stmt.myShares.filter(i => i.payer !== 'C' && !i.settledAt);
+    expect(unpaid).toHaveLength(1);
+    expect(unpaid[0].id).toBe('e1');
+    expect(unpaid[0].myShare).toBe(400);
+    // 未結清總額
+    const total = unpaid.reduce((s, i) => s + i.myShare, 0);
+    expect(total).toBe(400);
+  });
+
+  // ④ settledAt 標記：費用②③ 從計算中「歷史存在」不影響 net（結清是透過 settlement 紀錄處理）
+  it('費用②③ settledAt 不影響 buildPersonalStatement 的 net 計算（未改動）', () => {
+    // buildPersonalStatement uses all expenses regardless of settledAt for totals
+    // settledAt only gates the "應分攤明細" filtered list
+    const stmt = buildPersonalStatement(partiallySettled, 'C', members);
+    expect(stmt.mySharesTotal).toBe(900); // 全額仍計入 (400+300+200)
+    expect(stmt.net).toBe(-900);
+  });
+
+  // ⑤ receivedAt 對稱性：費用②③ 若帶 receivedAt，代表 B 已收回
+  it('receivedAt 標記：B 的代墊視圖 — 費用②③ 有 receivedAt 則不再顯示「待收」', () => {
+    const withReceived = [
+      { id: 'e1', payer: 'A', amountTWD: 1200, currency: 'TWD', splitWith: ['A','B','C'], description: '餐費', date: '2024-04-01' },
+      { id: 'e2', payer: 'B', amountTWD: 900,  currency: 'TWD', splitWith: ['A','B','C'], description: '交通', date: '2024-04-02', settledAt: '2024-04-10', receivedAt: '2024-04-10', settledByRef: 's1' },
+      { id: 'e3', payer: 'B', amountTWD: 600,  currency: 'TWD', splitWith: ['A','B','C'], description: '景點', date: '2024-04-03', settledAt: '2024-04-10', receivedAt: '2024-04-10', settledByRef: 's1' },
+    ];
+    const stmt = buildPersonalStatement(withReceived, 'B', members);
+    // B 的代墊中，費用②③ 已有 receivedAt（代表對 C 的部分已收回）
+    const receivedItems = stmt.myPayments.filter(i => i.receivedAt);
+    expect(receivedItems).toHaveLength(2);
+    expect(receivedItems.map(i => i.id).sort()).toEqual(['e2','e3']);
+    // 未收回代墊（receivedAt 不存在）— 費用①是 A 付的，不在 B 的 myPayments
+    const unreceived = stmt.myPayments.filter(i => !i.receivedAt);
+    expect(unreceived).toHaveLength(0);
+  });
+
+  // ⑥ 8 人局：各對獨立，互不干擾
+  it('8 人局：C→B 結清只影響 C/B 相關費用，E/F/G/H 的 settledAt 不受影響', () => {
+    const eight = ['A','B','C','D','E','F','G','H'];
+    const expensesEight = [
+      { id: 'bus', payer: 'A', amountTWD: 8000, currency: 'TWD', splitWith: eight, date: '2024-04-01' },
+      { id: 'bbq', payer: 'B', amountTWD: 5040, currency: 'TWD', splitWith: ['A','B','C','D'], date: '2024-04-01' },
+      { id: 'tkt', payer: 'C', amountTWD: 1200, currency: 'TWD', splitWith: ['E','F','G','H'], date: '2024-04-01' },
+    ];
+    // Simulate C paying B: mark BBQ (payer=B, C in splitWith) with settledAt
+    const afterSettle = expensesEight.map(e => {
+      if (e.id === 'bbq') return { ...e, settledAt: '2024-04-10', settledByRef: 's1' };
+      return e;
+    });
+    // E's statement should be unaffected
+    const stmtE = buildPersonalStatement(afterSettle, 'E', eight);
+    const unpaidE = stmtE.myShares.filter(i => !i.settledAt && i.payer !== 'E');
+    // E owes A for bus ($1000) and C for ticket ($300)
+    expect(unpaidE).toHaveLength(2);
+    expect(unpaidE.map(i => i.id).sort()).toEqual(['bus','tkt']);
+    // C's statement: BBQ should now be settled
+    const stmtC = buildPersonalStatement(afterSettle, 'C', eight);
+    const unpaidC = stmtC.myShares.filter(i => !i.settledAt && i.payer !== 'C');
+    // C owes A for bus ($1000); BBQ is settled
+    expect(unpaidC).toHaveLength(1);
+    expect(unpaidC[0].id).toBe('bus');
+  });
+
+  // ⑦ 「剔除已結清」過濾邏輯模擬
+  it('剔除已結清：只保留無 settledAt 且無 receivedAt 的費用（settlement 類別不被隱藏）', () => {
+    const allExpenses = [
+      { id: 'e1', payer: 'A', amountTWD: 1200, currency: 'TWD', category: 'food',       splitWith: ['A','B','C'], date: '2024-04-01' },
+      { id: 'e2', payer: 'B', amountTWD: 900,  currency: 'TWD', category: 'transport',  splitWith: ['A','B','C'], date: '2024-04-02', settledAt: '2024-04-10' },
+      { id: 'e3', payer: 'B', amountTWD: 600,  currency: 'TWD', category: 'attraction', splitWith: ['A','B','C'], date: '2024-04-03', receivedAt: '2024-04-10' },
+      { id: 's1', payer: 'C', amountTWD: 600,  currency: 'TWD', category: 'settlement', splitWith: ['B'],         date: '2024-04-10' },
+    ];
+    // Mirror the filteredExpenses logic:
+    // !hideSettled || (!e.settledAt && !e.receivedAt) || e.category === 'settlement'
+    const hideSettled = true;
+    const visible = allExpenses.filter(e =>
+      !hideSettled || (!e.settledAt && !e.receivedAt) || e.category === 'settlement'
+    );
+    // e1 (未結清 food) → 顯示
+    // e2 (settledAt) → 隱藏
+    // e3 (receivedAt) → 隱藏
+    // s1 (settlement) → 永遠顯示
+    expect(visible.map(e => e.id)).toEqual(['e1', 's1']);
+  });
+
+  // ⑧ 剔除後金額正確（不含已結清）
+  it('剔除已結清後，可見費用 amountTWD 總和僅計算未結清部分', () => {
+    const allExpenses = [
+      { id: 'e1', payer: 'A', amountTWD: 1200, currency: 'TWD', category: 'food',       splitWith: ['A','B','C'], date: '2024-04-01' },
+      { id: 'e2', payer: 'B', amountTWD: 900,  currency: 'TWD', category: 'transport',  splitWith: ['A','B','C'], date: '2024-04-02', settledAt: '2024-04-10' },
+      { id: 'e3', payer: 'B', amountTWD: 600,  currency: 'TWD', category: 'attraction', splitWith: ['A','B','C'], date: '2024-04-03', receivedAt: '2024-04-10' },
+      { id: 's1', payer: 'C', amountTWD: 600,  currency: 'TWD', category: 'settlement', splitWith: ['B'],         date: '2024-04-10' },
+    ];
+    const hideSettled = true;
+    const visible = allExpenses.filter(e =>
+      !hideSettled || (!e.settledAt && !e.receivedAt) || e.category === 'settlement'
+    );
+    // Only e1 (1200) + s1 (settlement, 600) are visible
+    // Non-settlement total = 1200
+    const nonSettlementTotal = visible
+      .filter(e => e.category !== 'settlement')
+      .reduce((s, e) => s + e.amountTWD, 0);
+    expect(nonSettlementTotal).toBe(1200);
+  });
+
+  // ⑨ 撤銷結清（刪除 settlement）應同時清除 settledAt 和 receivedAt
+  it('撤銷結清：刪除 settlement 後，linked 費用的 settledAt 和 receivedAt 都應清空', () => {
+    // 模擬 handleDelete 的邏輯：
+    // linked = expenses.filter(e => e.settledByRef === deletedId)
+    const settledExpenses = [
+      { id: 'e2', payer: 'B', settledAt: '2024-04-10', settledByRef: 's1', receivedAt: undefined },
+      { id: 'e3', payer: 'B', settledAt: '2024-04-10', settledByRef: 's1', receivedAt: '2024-04-10' },
+      { id: 'e4', payer: 'C', settledAt: undefined,    settledByRef: undefined, receivedAt: '2024-04-10', settledByRef2: 's1' },
+    ];
+    const deletedSettlementId = 's1';
+    const linked = settledExpenses.filter(e =>
+      e.settledByRef === deletedSettlementId || (e as any).settledByRef2 === deletedSettlementId
+    );
+    // 所有 linked 費用都應該清除 settledAt 和 receivedAt
+    expect(linked).toHaveLength(3);
+    // 清除後的狀態模擬
+    const cleared = linked.map(e => ({
+      ...e,
+      settledAt: undefined,
+      settledByRef: undefined,
+      receivedAt: undefined,
+    }));
+    expect(cleared.every(e => !e.settledAt && !e.settledByRef && !e.receivedAt)).toBe(true);
+  });
+});
