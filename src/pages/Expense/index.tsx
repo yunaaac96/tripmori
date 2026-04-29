@@ -9,7 +9,7 @@ import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -210,7 +210,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const isOwner = role === 'owner';
 
   const projCurrency = (project?.currency || 'JPY') as Currency;
-  const defaultForm = { ...EMPTY_FORM, currency: projCurrency };
+  const defaultForm = { ...EMPTY_FORM, currency: projCurrency, date: new Date().toISOString().slice(0, 10) };
 
   const darkMode = useDarkMode();
   const PIE_COLORS = darkMode ? PIE_COLORS_DARK : PIE_COLORS_LIGHT;
@@ -235,6 +235,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [filterCat, setFilterCat] = useState<string>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [expenseView, setExpenseView] = useState<'all' | 'mine'>('all');
+  const [hideSettled, setHideSettled] = useState(false);
 
   // Pie chart — auto-expand for visitors
   const [showPie, setShowPie] = useState(false);
@@ -243,6 +244,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  // Settlement deletion confirm modal
+  const [settlementDeleteTarget, setSettlementDeleteTarget] = useState<any | null>(null);
+  const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
   const [settlementExpanded, setSettlementExpanded] = useState(false);
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
   // Self-detail privacy tabs (only ever rendered for own card)
@@ -510,12 +514,24 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     closeForm();
   };
 
-  const canDeleteExpense = (e: any) =>
-    !isReadOnly && (isOwner || (currentUserName && e.createdBy === currentUserName));
+  const canEditExpense = (e: any) =>
+    !isReadOnly && e.category !== 'settlement' && !e.settledAt && !e.receivedAt;
+
+  const canDeleteExpense = (e: any) => {
+    if (isReadOnly) return false;
+    // Regular settled expenses are locked — delete the settlement record to undo
+    if (e.category !== 'settlement' && (e.settledAt || e.receivedAt)) return false;
+    if (e.category === 'settlement') {
+      // Only parties involved (payer or receiver) or owner can delete settlements
+      const parties = [e.payer, ...(e.splitWith || [])];
+      return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
+    }
+    return isOwner || (currentUserName && e.createdBy === currentUserName);
+  };
 
   const handleDelete = async (id: string, expense: any) => {
     if (!canDeleteExpense(expense)) return;
-    // If deleting a settlement, clear settledByRef on all expenses it marked
+    // If deleting a settlement, clear settledAt/settledByRef AND receivedAt on all linked expenses
     if (expense.category === 'settlement') {
       const linked = (expenses as any[]).filter((e: any) => e.settledByRef === id);
       if (linked.length > 0) {
@@ -523,6 +539,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
           updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
             settledAt: deleteField(),
             settledByRef: deleteField(),
+            receivedAt: deleteField(),
           })
         ));
       }
@@ -598,6 +615,22 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       await Promise.all(toMark.map((e: any) =>
         updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
           settledAt: today,
+          settledByRef: settlementRef.id,
+        })
+      ));
+    }
+    // 3. Symmetric: mark the debtor's (from) own expenses where creditor (to) is a co-payer
+    //    → receivedAt means "代墊方已收回這筆帳"
+    const toReceive = (expenses as any[]).filter((e: any) => {
+      if (e.category === 'settlement' || e.isPrivate || e.receivedAt) return false;
+      if (e.payer !== from) return false;
+      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      return sw.includes(to);
+    });
+    if (toReceive.length > 0) {
+      await Promise.all(toReceive.map((e: any) =>
+        updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
+          receivedAt: today,
           settledByRef: settlementRef.id,
         })
       ));
@@ -827,6 +860,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // the same second / identical amount don't flip positions on re-render.
   const filteredExpenses = baseExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
+    .filter((e: any) => !hideSettled || (!e.settledAt && !e.receivedAt) || e.category === 'settlement')
     .sort((a: any, b: any) => {
       const tieBreak = String(a.id || '').localeCompare(String(b.id || ''));
       if (sortMode === 'newest') {
@@ -1458,6 +1492,59 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         );
       })()}
 
+      {/* ── Settlement Delete Confirm Modal ── */}
+      {settlementDeleteTarget && (() => {
+        const t = settlementDeleteTarget;
+        const payer: string = t.payer || '';
+        const receiver: string = (t.splitWith && t.splitWith[0]) || '';
+        const parties = [payer, receiver].filter(Boolean);
+        const linkedCount = (expenses as any[]).filter((e: any) => e.settledByRef === t.id).length;
+        const inputTrimmed = settlementDeleteInput.trim();
+        const isConfirmed = parties.some(p => p === inputTrimmed);
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 500 }}>
+            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: '#9A3A3A', margin: '0 0 6px' }}>
+                <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />撤銷結清
+              </p>
+              <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 16px', lineHeight: 1.6 }}>
+                刪除後將撤銷此次結算，並清除 {linkedCount} 筆費用的結清標記。
+              </p>
+              <div style={{ background: 'var(--tm-section-bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: C.bark, fontWeight: 600 }}>{payer} → {receiver}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#9A3A3A' }}>NT$ {(t.amountTWD || t.amount || 0).toLocaleString()}</span>
+              </div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>
+                輸入 <strong style={{ color: C.bark }}>{payer}</strong> 或 <strong style={{ color: C.bark }}>{receiver}</strong> 以確認
+              </label>
+              <input
+                style={{ ...inputStyle, fontSize: 15, marginBottom: 14 }}
+                placeholder="輸入付款方或收款方名稱"
+                value={settlementDeleteInput}
+                onChange={e => setSettlementDeleteInput(e.target.value)}
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setSettlementDeleteTarget(null)}
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  取消
+                </button>
+                <button
+                  disabled={!isConfirmed}
+                  onClick={async () => {
+                    await handleDelete(t.id, t);
+                    setSettlementDeleteTarget(null);
+                    setSettlementDeleteInput('');
+                  }}
+                  style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: isConfirmed ? '#9A3A3A' : '#E0C0C0', color: 'white', fontWeight: 700, cursor: isConfirmed ? 'pointer' : 'default', fontFamily: FONT, fontSize: 14 }}>
+                  確認撤銷結清
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Settlement Form Modal ── */}
       {showSettleForm && (
         <SettlementForm
@@ -1509,364 +1596,362 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
 
-              {/* Description */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>名稱 *</label>
-                <input ref={descRef} style={iStyle} placeholder={form.isIncome ? '例：退稅、退款、換回台幣' : '例：藥妝店購物'} value={form.description} onChange={e => set('description', e.target.value)} />
-              </div>
+              {/* ── Block 1：基本資訊 ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 14px', background: 'var(--tm-section-bg)', borderRadius: 14 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>基本資訊</p>
 
-              {/* Amount */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
-                <input ref={amtRef} style={{ ...iStyle, textAlign: 'right' }} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
-                {form.amount && (
-                  <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0', textAlign: 'right' }}>
-                    ≈ NT$ {form.currency === 'IDR' && liveIdrRate
-                      ? Math.round(Number(form.amount) * liveIdrRate).toLocaleString()
-                      : toTWD(Number(form.amount), form.currency).toLocaleString()}
-                    {form.currency === 'IDR' && (
-                      <span style={{ fontSize: 10, marginLeft: 4, color: liveIdrRate ? C.sageDark : C.barkLight }}>
-                        {liveIdrRate ? '(即時匯率)' : '(參考匯率)'}
-                      </span>
-                    )}
-                  </p>
+                {/* Description */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>名稱 *</label>
+                  <input ref={descRef} style={iStyle} placeholder={form.isIncome ? '例：退稅、退款、換回台幣' : '例：藥妝店購物'} value={form.description} onChange={e => set('description', e.target.value)} />
+                </div>
+
+                {/* Date — 緊接名稱後，避免被忽略 */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 5, marginBottom: 4 }}>
+                    <FontAwesomeIcon icon={faCalendarDays} style={{ fontSize: 10 }} />日期
+                  </label>
+                  <input style={iStyle} type="date" value={form.date} onChange={e => set('date', e.target.value)} />
+                </div>
+
+                {/* Category — hidden for income */}
+                {!form.isIncome && (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                      {Object.entries(EXPENSE_CATEGORY_MAP).filter(([key]) => key !== 'income').map(([key, info]) => (
+                        <button key={key} onClick={() => set('category', key)}
+                          className={form.category === key ? `tm-cat-active-${key}` : ''}
+                          style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: form.category === key ? '#333' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                          <FontAwesomeIcon icon={CATEGORY_ICONS[key] || CATEGORY_ICONS.other} style={{ fontSize: 11 }} />
+                          {info.label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
                 )}
               </div>
 
-              {/* Currency */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
-                <CurrencyPicker value={form.currency} onChange={v => set('currency', v)} projCurrency={projCurrency} />
-              </div>
+              {/* ── Block 2：費用明細 ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 14px', background: 'var(--tm-section-bg)', borderRadius: 14 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>費用明細</p>
 
-              {/* Payment Method — hidden for income entries */}
-              {!form.isIncome && <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>付款方式</label>
-                <div style={{ display: 'flex', gap: 8 }}>
-                  {(['cash', 'card'] as const).map(m => (
-                    <button key={m} onClick={() => set('paymentMethod', m)}
-                      style={{ flex: 1, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.paymentMethod === m ? C.sageDark : C.creamDark}`, background: form.paymentMethod === m ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
-                      {m === 'cash' ? <><FontAwesomeIcon icon={faMoneyBill1} style={{ marginRight: 5 }} />現金</> : <><FontAwesomeIcon icon={faCreditCard} style={{ marginRight: 5 }} />刷卡</>}
-                    </button>
-                  ))}
+                {/* Amount */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
+                  <input ref={amtRef} style={{ ...iStyle, textAlign: 'right' }} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
+                  {form.amount && (
+                    <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0', textAlign: 'right' }}>
+                      ≈ NT$ {form.currency === 'IDR' && liveIdrRate
+                        ? Math.round(Number(form.amount) * liveIdrRate).toLocaleString()
+                        : toTWD(Number(form.amount), form.currency).toLocaleString()}
+                      {form.currency === 'IDR' && (
+                        <span style={{ fontSize: 10, marginLeft: 4, color: liveIdrRate ? C.sageDark : C.barkLight }}>
+                          {liveIdrRate ? '(即時匯率)' : '(參考匯率)'}
+                        </span>
+                      )}
+                    </p>
+                  )}
                 </div>
-              </div>}
 
-              {/* FX rate + card fee (only non-TWD and non-income) */}
-              {!form.isIncome && form.currency !== 'TWD' && (
-                <div style={{ padding: '10px 12px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  <div>
-                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
-                      匯率（1 {form.currency} = __ TWD）
-                    </label>
-                    <input style={{ ...inputStyle, fontSize: 14 }} type="number" step="0.0001" inputMode="decimal"
-                      placeholder={`預設 ${resolvedRate.rate}（${resolvedRate.source}）`}
-                      value={form.exchangeRate}
-                      onChange={ev => set('exchangeRate', ev.target.value)} />
-                  </div>
-                  {form.paymentMethod === 'card' && (
+                {/* Currency */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>幣別</label>
+                  <CurrencyPicker value={form.currency} onChange={v => set('currency', v)} projCurrency={projCurrency} />
+                </div>
+
+                {/* FX rate + card fee (only non-TWD and non-income) */}
+                {!form.isIncome && form.currency !== 'TWD' && (
+                  <div style={{ padding: '10px 12px', background: 'var(--tm-card-bg)', borderRadius: 12, border: `1px solid ${C.creamDark}`, display: 'flex', flexDirection: 'column', gap: 10 }}>
                     <div>
                       <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
-                        海外刷卡手續費（%）
+                        匯率（1 {form.currency} = __ TWD）
                       </label>
-                      <input style={{ ...inputStyle, fontSize: 14 }} type="number" step="0.1" inputMode="decimal"
-                        placeholder="預設 1.5"
-                        value={form.cardFeePercent}
-                        onChange={ev => set('cardFeePercent', ev.target.value)} />
+                      <input style={{ ...inputStyle, fontSize: 14 }} type="number" step="0.0001" inputMode="decimal"
+                        placeholder={`預設 ${resolvedRate.rate}（${resolvedRate.source}）`}
+                        value={form.exchangeRate}
+                        onChange={ev => set('exchangeRate', ev.target.value)} />
                     </div>
-                  )}
-                  {mainAmt > 0 && (
-                    <p style={{ fontSize: 11, color: C.sageDark, margin: 0, fontWeight: 600 }}>
-                      <FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 10, marginRight: 4 }} />
-                      {form.paymentMethod === 'card' ? '預估 TWD' : '換算 TWD'}：NT$ {mainAmtTWD.toLocaleString()}
-                      <span style={{ color: C.barkLight, fontWeight: 400, marginLeft: 6, fontSize: 10 }}>
-                        = {form.currency} {mainAmt.toLocaleString()} × {formExchangeRate || resolvedRate.rate}
-                        {form.paymentMethod === 'card' && ` × (1 + ${formCardFee}%)`}
-                      </span>
-                    </p>
-                  )}
-                  {form.paymentMethod === 'card' && (
-                    <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
-                      <input type="checkbox" checked={form.awaitCardStatement}
-                        onChange={ev => set('awaitCardStatement', ev.target.checked)}
-                        style={{ marginTop: 2 }} />
+                    {form.paymentMethod === 'card' && (
                       <div>
-                        <p style={{ fontSize: 12, color: C.bark, fontWeight: 600, margin: 0 }}>等卡單下來再結算</p>
-                        <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0', lineHeight: 1.5 }}>
-                          勾選後此筆暫不納入結算建議，等刷卡單下來用「補實際金額」填入實際 TWD 即自動納入
-                        </p>
+                        <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>
+                          海外刷卡手續費（%）
+                        </label>
+                        <input style={{ ...inputStyle, fontSize: 14 }} type="number" step="0.1" inputMode="decimal"
+                          placeholder="預設 1.5"
+                          value={form.cardFeePercent}
+                          onChange={ev => set('cardFeePercent', ev.target.value)} />
                       </div>
-                    </label>
-                  )}
-                </div>
-              )}
+                    )}
+                    {mainAmt > 0 && (
+                      <p style={{ fontSize: 11, color: C.sageDark, margin: 0, fontWeight: 600 }}>
+                        <FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 10, marginRight: 4 }} />
+                        {form.paymentMethod === 'card' ? '預估 TWD' : '換算 TWD'}：NT$ {mainAmtTWD.toLocaleString()}
+                        <span style={{ color: C.barkLight, fontWeight: 400, marginLeft: 6, fontSize: 10 }}>
+                          = {form.currency} {mainAmt.toLocaleString()} × {formExchangeRate || resolvedRate.rate}
+                          {form.paymentMethod === 'card' && ` × (1 + ${formCardFee}%)`}
+                        </span>
+                      </p>
+                    )}
+                    {form.paymentMethod === 'card' && (
+                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                        <input type="checkbox" checked={form.awaitCardStatement}
+                          onChange={ev => set('awaitCardStatement', ev.target.checked)}
+                          style={{ marginTop: 2 }} />
+                        <div>
+                          <p style={{ fontSize: 12, color: C.bark, fontWeight: 600, margin: 0 }}>等卡單下來再結算</p>
+                          <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0', lineHeight: 1.5 }}>
+                            勾選後此筆暫不納入結算建議，等刷卡單下來用「補實際金額」填入實際 TWD 即自動納入
+                          </p>
+                        </div>
+                      </label>
+                    )}
+                  </div>
+                )}
 
-              {/* Category — hidden for income (auto-set to 'income') */}
-              {!form.isIncome && (
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
-                <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                  {Object.entries(EXPENSE_CATEGORY_MAP).filter(([key]) => key !== 'income').map(([key, info]) => (
-                    <button key={key} onClick={() => set('category', key)}
-                      className={form.category === key ? `tm-cat-active-${key}` : ''}
-                      style={{ padding: '6px 12px', borderRadius: 10, border: `1.5px solid ${form.category === key ? C.sageDark : C.creamDark}`, background: form.category === key ? info.bg : 'var(--tm-card-bg)', color: form.category === key ? '#333' : C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                      <FontAwesomeIcon icon={CATEGORY_ICONS[key] || CATEGORY_ICONS.other} style={{ fontSize: 11 }} />
-                      {info.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              )}
-
-              {/* Payer / 收款人 */}
-              {!form.isPrivate && (
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>
-                  {form.isIncome ? '收款人（代收者）*' : '誰付款 *'}
-                </label>
-                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                  {displayMemberNames.map((name: string) => (
-                    <button key={name} onClick={() => set('payer', name)}
-                      style={{ flex: 1, minWidth: 60, padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${form.payer === name ? C.sageDark : C.creamDark}`, background: form.payer === name ? C.sage : 'var(--tm-card-bg)', color: form.payer === name ? 'white' : C.bark, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
-                      {name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              )}
-
-              {/* Income benefit scope — who gets the benefit of this income */}
-              {form.isIncome && !form.isPrivate && (
-                <div>
-                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>收益方式</label>
-                  <div style={{ display: 'flex', gap: 8, marginBottom: form.incomeScope === 'personal' ? 10 : 0 }}>
-                    {([
-                      ['group',    faUsers, '全體均分'] as const,
-                      ['personal', faUser,  '指定個人'] as const,
-                    ]).map(([scope, icon, label]) => (
-                      <button key={scope}
-                        onClick={() => setForm(p => ({
-                          ...p,
-                          incomeScope: scope,
-                          // Auto-select payer as default beneficiary when first switching to personal
-                          incomeBeneficiary: scope === 'personal' && !p.incomeBeneficiary ? (p.payer || '') : p.incomeBeneficiary,
-                        }))}
-                        style={{ flex: 1, padding: '9px 8px', borderRadius: 12,
-                          border: `1.5px solid ${form.incomeScope === scope ? '#4A8A4A' : C.creamDark}`,
-                          background: form.incomeScope === scope ? '#E0F4D8' : 'var(--tm-card-bg)',
-                          color: form.incomeScope === scope ? '#2A6A2A' : C.bark,
-                          fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-                        }}>
-                        <FontAwesomeIcon icon={icon} style={{ fontSize: 12 }} />
-                        {label}
+                {/* Payment Method — hidden for income entries */}
+                {!form.isIncome && <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>付款方式</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    {(['cash', 'card'] as const).map(m => (
+                      <button key={m} onClick={() => set('paymentMethod', m)}
+                        style={{ flex: 1, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${form.paymentMethod === m ? C.sageDark : C.creamDark}`, background: form.paymentMethod === m ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                        {m === 'cash' ? <><FontAwesomeIcon icon={faMoneyBill1} style={{ marginRight: 5 }} />現金</> : <><FontAwesomeIcon icon={faCreditCard} style={{ marginRight: 5 }} />刷卡</>}
                       </button>
                     ))}
                   </div>
-                  {form.incomeScope === 'personal' && (
-                    <div>
-                      <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>
-                        受益人（此筆收入僅影響該成員帳務，其他人不受影響）
-                      </p>
-                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
-                        {displayMemberNames.map((name: string) => (
-                          <button key={name}
-                            onClick={() => setForm(p => ({ ...p, incomeBeneficiary: name }))}
-                            style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12,
-                              border: `1.5px solid ${form.incomeBeneficiary === name ? '#4A8A4A' : C.creamDark}`,
-                              background: form.incomeBeneficiary === name ? '#E0F4D8' : 'var(--tm-card-bg)',
-                              color: form.incomeBeneficiary === name ? '#2A6A2A' : C.bark,
-                              fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13,
-                            }}>
-                            {name}
-                          </button>
-                        ))}
+                </div>}
+
+                {/* Payer / 收款人 */}
+                {!form.isPrivate && (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>
+                      {form.isIncome ? '收款人（代收者）*' : '誰付款 *'}
+                    </label>
+                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                      {displayMemberNames.map((name: string) => (
+                        <button key={name} onClick={() => set('payer', name)}
+                          style={{ flex: 1, minWidth: 60, padding: '10px 8px', borderRadius: 12, border: `1.5px solid ${form.payer === name ? C.sageDark : C.creamDark}`, background: form.payer === name ? C.sage : 'var(--tm-card-bg)', color: form.payer === name ? 'white' : C.bark, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13 }}>
+                          {name}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Income benefit scope */}
+                {form.isIncome && !form.isPrivate && (
+                  <div>
+                    <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>收益方式</label>
+                    <div style={{ display: 'flex', gap: 8, marginBottom: form.incomeScope === 'personal' ? 10 : 0 }}>
+                      {([
+                        ['group',    faUsers, '全體均分'] as const,
+                        ['personal', faUser,  '指定個人'] as const,
+                      ]).map(([scope, icon, label]) => (
+                        <button key={scope}
+                          onClick={() => setForm(p => ({
+                            ...p,
+                            incomeScope: scope,
+                            incomeBeneficiary: scope === 'personal' && !p.incomeBeneficiary ? (p.payer || '') : p.incomeBeneficiary,
+                          }))}
+                          style={{ flex: 1, padding: '9px 8px', borderRadius: 12,
+                            border: `1.5px solid ${form.incomeScope === scope ? '#4A8A4A' : C.creamDark}`,
+                            background: form.incomeScope === scope ? '#E0F4D8' : 'var(--tm-card-bg)',
+                            color: form.incomeScope === scope ? '#2A6A2A' : C.bark,
+                            fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
+                          }}>
+                          <FontAwesomeIcon icon={icon} style={{ fontSize: 12 }} />
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                    {form.incomeScope === 'personal' && (
+                      <div>
+                        <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>受益人（此筆收入僅影響該成員帳務）</p>
+                        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                          {displayMemberNames.map((name: string) => (
+                            <button key={name}
+                              onClick={() => setForm(p => ({ ...p, incomeBeneficiary: name }))}
+                              style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12,
+                                border: `1.5px solid ${form.incomeBeneficiary === name ? '#4A8A4A' : C.creamDark}`,
+                                background: form.incomeBeneficiary === name ? '#E0F4D8' : 'var(--tm-card-bg)',
+                                color: form.incomeBeneficiary === name ? '#2A6A2A' : C.bark,
+                                fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 13,
+                              }}>
+                              {name}
+                            </button>
+                          ))}
+                        </div>
                       </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Split Mode */}
+                {!form.isPrivate && !form.isIncome && <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>分帳方式</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
+                    {([
+                      ['equal',    <FontAwesomeIcon icon={faScaleBalanced} />, '均分'],
+                      ['weighted', <FontAwesomeIcon icon={faPercent} />,       '比例'],
+                      ['amount',   <FontAwesomeIcon icon={faPen} />,           '自訂金額'],
+                    ] as [SplitMode, React.ReactNode, string][]).map(([mode, icon, label]) => (
+                      <button key={mode} onClick={() => set('splitMode', mode)}
+                        style={{ padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${form.splitMode === mode ? C.sageDark : C.creamDark}`, background: form.splitMode === mode ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                        {icon} {label}
+                      </button>
+                    ))}
+                  </div>
+                  {form.splitMode === 'equal' && (
+                    <div>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>點擊成員以剔除（預設全員分攤）</p>
+                      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                        {displayMemberNames.map((name: string) => {
+                          const selected = isMemberSelected(name);
+                          return (
+                            <button key={name} onClick={() => toggleSplitMember(name)}
+                              style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${selected ? C.sageDark : C.creamDark}`, background: selected ? C.sage : 'var(--tm-card-bg)', color: selected ? 'white' : C.barkLight, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, fontSize: 13, opacity: selected ? 1 : 0.55, textDecoration: selected ? 'none' : 'line-through' }}>
+                              {name}
+                            </button>
+                          );
+                        })}
+                      </div>
+                      {mainAmt > 0 && activeSplitMembers.length > 0 && (
+                        <p style={{ fontSize: 12, color: C.barkLight, marginTop: 6 }}>
+                          每人 NT$ {Math.round(mainAmtTWD / activeSplitMembers.length).toLocaleString()}
+                        </p>
+                      )}
                     </div>
                   )}
-                </div>
-              )}
-
-              {/* Split Mode — hidden for income (always split equally) */}
-              {!form.isPrivate && !form.isIncome && <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>分帳方式</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 6, marginBottom: 8 }}>
-                  {([
-                    ['equal',    <FontAwesomeIcon icon={faScaleBalanced} />, '均分'],
-                    ['weighted', <FontAwesomeIcon icon={faPercent} />,       '比例'],
-                    ['amount',   <FontAwesomeIcon icon={faPen} />,           '自訂金額'],
-                  ] as [SplitMode, React.ReactNode, string][]).map(([mode, icon, label]) => (
-                    <button key={mode} onClick={() => set('splitMode', mode)}
-                      style={{ padding: '9px 4px', borderRadius: 12, border: `1.5px solid ${form.splitMode === mode ? C.sageDark : C.creamDark}`, background: form.splitMode === mode ? C.sageLight : 'var(--tm-card-bg)', color: C.bark, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
-                      {icon} {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Equal split: member selector — default all-selected, click to deselect */}
-                {form.splitMode === 'equal' && (
-                  <div>
-                    <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 6px' }}>點擊成員以剔除（預設全員分攤）</p>
-                    <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {form.splitMode === 'weighted' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>以百分比分帳（總和須為 100%）</p>
                       {displayMemberNames.map((name: string) => {
-                        const selected = isMemberSelected(name);
+                        const pct = activePcts[name] ?? Math.floor(100 / memberNames.length / 5) * 5;
+                        const share = Math.round(mainAmtTWD * pct / 100);
                         return (
-                          <button key={name} onClick={() => toggleSplitMember(name)}
-                            style={{ flex: 1, minWidth: 60, padding: '9px 8px', borderRadius: 12, border: `1.5px solid ${selected ? C.sageDark : C.creamDark}`, background: selected ? C.sage : 'var(--tm-card-bg)', color: selected ? 'white' : C.barkLight, fontWeight: 600, cursor: 'pointer', fontFamily: FONT, fontSize: 13, opacity: selected ? 1 : 0.55, textDecoration: selected ? 'none' : 'line-through' }}>
-                            {name}
-                          </button>
+                          <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.cream, borderRadius: 12, padding: '8px 12px' }}>
+                            <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>{name}</span>
+                            <button onClick={() => setPercentage(name, -5)}
+                              style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
+                            <span style={{ minWidth: 38, textAlign: 'center', fontSize: 14, fontWeight: 700, color: C.bark }}>{pct}%</span>
+                            <button onClick={() => setPercentage(name, 5)}
+                              style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
+                            <span style={{ minWidth: 70, textAlign: 'right', fontSize: 12, color: C.earth, fontWeight: 600 }}>NT$ {share.toLocaleString()}</span>
+                          </div>
                         );
                       })}
-                    </div>
-                    {mainAmt > 0 && activeSplitMembers.length > 0 && (
-                      <p style={{ fontSize: 12, color: C.barkLight, marginTop: 6 }}>
-                        每人 NT$ {Math.round(mainAmtTWD / activeSplitMembers.length).toLocaleString()}
+                      <p style={{ fontSize: 11, color: Object.values(activePcts).reduce((s, v) => s + v, 0) === 100 ? C.sageDark : '#9A3A3A', margin: 0, fontWeight: 600 }}>
+                        總計：{Object.values(activePcts).reduce((s, v) => s + v, 0)}%
                       </p>
-                    )}
-                  </div>
-                )}
-
-                {/* Percentage split */}
-                {form.splitMode === 'weighted' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>以百分比分帳（總和須為 100%）</p>
-                    {displayMemberNames.map((name: string) => {
-                      const pct = activePcts[name] ?? Math.floor(100 / memberNames.length / 5) * 5;
-                      const share = Math.round(mainAmtTWD * pct / 100);
-                      return (
-                        <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8, background: C.cream, borderRadius: 12, padding: '8px 12px' }}>
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>{name}</span>
-                          <button onClick={() => setPercentage(name, -5)}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                          <span style={{ minWidth: 38, textAlign: 'center', fontSize: 14, fontWeight: 700, color: C.bark }}>{pct}%</span>
-                          <button onClick={() => setPercentage(name, 5)}
-                            style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
-                          <span style={{ minWidth: 70, textAlign: 'right', fontSize: 12, color: C.earth, fontWeight: 600 }}>NT$ {share.toLocaleString()}</span>
+                    </div>
+                  )}
+                  {form.splitMode === 'amount' && (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {displayMemberNames.map((name: string) => (
+                        <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <span style={{ width: 60, fontSize: 13, fontWeight: 600, color: C.bark, flexShrink: 0 }}>{name}</span>
+                          <input
+                            style={{ ...iStyle, flex: 1 }}
+                            type="number" inputMode="decimal" placeholder="0"
+                            value={form.customAmounts[name] ?? ''}
+                            onChange={e => setCustomAmount(name, e.target.value)}
+                          />
+                          <span style={{ fontSize: 11, color: C.barkLight, flexShrink: 0 }}>{form.currency}</span>
                         </div>
-                      );
-                    })}
-                    <p style={{ fontSize: 11, color: Object.values(activePcts).reduce((s, v) => s + v, 0) === 100 ? C.sageDark : '#9A3A3A', margin: 0, fontWeight: 600 }}>
-                      總計：{Object.values(activePcts).reduce((s, v) => s + v, 0)}%
-                    </p>
-                  </div>
-                )}
-
-                {/* Custom amount split */}
-                {form.splitMode === 'amount' && (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {displayMemberNames.map((name: string) => (
-                      <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        <span style={{ width: 60, fontSize: 13, fontWeight: 600, color: C.bark, flexShrink: 0 }}>{name}</span>
-                        <input
-                          style={{ ...iStyle, flex: 1 }}
-                          type="number" inputMode="decimal" placeholder="0"
-                          value={form.customAmounts[name] ?? ''}
-                          onChange={e => setCustomAmount(name, e.target.value)}
-                        />
-                        <span style={{ fontSize: 11, color: C.barkLight, flexShrink: 0 }}>{form.currency}</span>
+                      ))}
+                      <div style={{ background: Math.abs(customRemaining) < 1 ? 'var(--tm-status-ok-bg)' : 'var(--tm-status-warn-bg)', borderRadius: 10, padding: '8px 12px' }}>
+                        <p style={{ fontSize: 12, fontWeight: 600, color: Math.abs(customRemaining) < 1 ? 'var(--tm-status-ok-text)' : 'var(--tm-status-warn-text)', margin: 0 }}>
+                          總計：{customTotal.toLocaleString()} / 剩餘：{customRemaining.toLocaleString()} {form.currency}
+                        </p>
                       </div>
-                    ))}
-                    <div style={{ background: Math.abs(customRemaining) < 1 ? 'var(--tm-status-ok-bg)' : 'var(--tm-status-warn-bg)', borderRadius: 10, padding: '8px 12px' }}>
-                      <p style={{ fontSize: 12, fontWeight: 600, color: Math.abs(customRemaining) < 1 ? 'var(--tm-status-ok-text)' : 'var(--tm-status-warn-text)', margin: 0 }}>
-                        總計：{customTotal.toLocaleString()} / 剩餘：{customRemaining.toLocaleString()} {form.currency}
-                      </p>
                     </div>
-                  </div>
-                )}
-              </div>}
+                  )}
+                </div>}
 
-              {/* Sub-items */}
-              {!isReadOnly && <div>
-                <button onClick={() => setShowSubItems(v => !v)}
-                  style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: C.sageDark, fontWeight: 600, fontFamily: FONT, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
-                  {showSubItems ? '▾' : '▸'} ＋ 新增細項
-                </button>
-                {showSubItems && (
-                  <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {form.subItems.map((si, idx) => (
-                      <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                        <input
-                          style={{ ...iStyle, flex: 2 }}
-                          placeholder="細項名稱"
-                          value={si.name}
-                          onChange={e => updateSubItem(idx, 'name', e.target.value)}
-                        />
-                        <input
-                          style={{ ...iStyle, flex: 1 }}
-                          type="number" inputMode="decimal" placeholder="金額"
-                          value={si.amount}
-                          onChange={e => updateSubItem(idx, 'amount', e.target.value)}
-                        />
-                        <button onClick={() => removeSubItem(idx)}
-                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', cursor: 'pointer', fontSize: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
-                      </div>
-                    ))}
-                    <button onClick={addSubItem}
-                      style={{ padding: '7px 0', borderRadius: 10, border: `1.5px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
-                      ＋ 新增一筆
+                {/* Private expense toggle */}
+                {googleUid && !form.isIncome && (
+                  <div>
+                    <button
+                      type="button"
+                      onClick={() => set('isPrivate', !form.isPrivate)}
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${form.isPrivate ? '#9A5AC8' : C.creamDark}`, background: form.isPrivate ? '#F0E8FF' : 'var(--tm-card-bg)', color: form.isPrivate ? '#6A2A9A' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 私人支出（僅自己可見）</span>
+                      <span style={{ width: 36, height: 20, borderRadius: 10, background: form.isPrivate ? '#9A5AC8' : C.creamDark, position: 'relative', display: 'inline-block', flexShrink: 0, transition: 'background 0.2s' }}>
+                        <span style={{ position: 'absolute', top: 2, left: form.isPrivate ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
+                      </span>
                     </button>
-                    {form.subItems.length > 0 && (
-                      <p style={{ fontSize: 12, color: C.barkLight, margin: 0 }}>
-                        細項合計：{subItemTotal.toLocaleString()} / 總額：{mainAmt.toLocaleString()} {form.currency}
-                      </p>
+                    {form.isPrivate && (
+                      <p style={{ fontSize: 11, color: '#6A2A9A', margin: '4px 0 0', paddingLeft: 2 }}>此筆支出不計入分帳結算，僅記錄個人花費</p>
                     )}
                   </div>
                 )}
-              </div>}
+              </div>
 
-              {/* Private expense toggle */}
-              {googleUid && !form.isIncome && (
-                <div>
-                  <button
-                    type="button"
-                    onClick={() => set('isPrivate', !form.isPrivate)}
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${form.isPrivate ? '#9A5AC8' : C.creamDark}`, background: form.isPrivate ? '#F0E8FF' : 'var(--tm-card-bg)', color: form.isPrivate ? '#6A2A9A' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 私人支出（僅自己可見）</span>
-                    <span style={{ width: 36, height: 20, borderRadius: 10, background: form.isPrivate ? '#9A5AC8' : C.creamDark, position: 'relative', display: 'inline-block', flexShrink: 0, transition: 'background 0.2s' }}>
-                      <span style={{ position: 'absolute', top: 2, left: form.isPrivate ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
-                    </span>
+              {/* ── Block 3：補充資訊 ── */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 14px', background: 'var(--tm-section-bg)', borderRadius: 14 }}>
+                <p style={{ fontSize: 10, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>補充資訊</p>
+
+                {/* Sub-items */}
+                {!isReadOnly && <div>
+                  <button onClick={() => setShowSubItems(v => !v)}
+                    style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: C.sageDark, fontWeight: 600, fontFamily: FONT, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                    {showSubItems ? '▾' : '▸'} ＋ 新增細項
                   </button>
-                  {form.isPrivate && (
-                    <p style={{ fontSize: 11, color: '#6A2A9A', margin: '4px 0 0', paddingLeft: 2 }}>此筆支出不計入分帳結算，僅記錄個人花費</p>
+                  {showSubItems && (
+                    <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                      {form.subItems.map((si, idx) => (
+                        <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                          <input style={{ ...iStyle, flex: 2 }} placeholder="細項名稱" value={si.name} onChange={e => updateSubItem(idx, 'name', e.target.value)} />
+                          <input style={{ ...iStyle, flex: 1 }} type="number" inputMode="decimal" placeholder="金額" value={si.amount} onChange={e => updateSubItem(idx, 'amount', e.target.value)} />
+                          <button onClick={() => removeSubItem(idx)}
+                            style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', cursor: 'pointer', fontSize: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
+                        </div>
+                      ))}
+                      <button onClick={addSubItem}
+                        style={{ padding: '7px 0', borderRadius: 10, border: `1.5px dashed ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 600, fontSize: 12, cursor: 'pointer', fontFamily: FONT }}>
+                        ＋ 新增一筆
+                      </button>
+                      {form.subItems.length > 0 && (
+                        <p style={{ fontSize: 12, color: C.barkLight, margin: 0 }}>
+                          細項合計：{subItemTotal.toLocaleString()} / 總額：{mainAmt.toLocaleString()} {form.currency}
+                        </p>
+                      )}
+                    </div>
+                  )}
+                </div>}
+
+                {/* Notes */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>備註（支援網址自動連結）</label>
+                  <input style={iStyle} placeholder="備忘、訂單連結..." value={form.notes} onChange={e => set('notes', e.target.value)} />
+                </div>
+
+                {/* Receipt photo attachment */}
+                <div>
+                  <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}><FontAwesomeIcon icon={faPaperclip} style={{ marginRight: 4 }} />附件（發票／收據）</label>
+                  <input ref={receiptRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                    onChange={e => { if (e.target.files?.[0]) handleReceiptUpload(e.target.files[0]); e.target.value = ''; }} />
+                  {form.receiptUrl ? (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <img src={form.receiptUrl} alt="附件預覽" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }}
+                        onClick={() => setLightboxUrl(form.receiptUrl)} />
+                      <div style={{ flex: 1 }}>
+                        <p style={{ fontSize: 11, color: C.sageDark, fontWeight: 600, margin: '0 0 4px' }}>✓ 附件已上傳</p>
+                        <button onClick={() => set('receiptUrl', '')}
+                          style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
+                          ✕ 移除
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button onClick={() => receiptRef.current?.click()} disabled={receiptUploading}
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-input-bg)', color: receiptUploading ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: receiptUploading ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                      {receiptUploading ? '上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />拍照 / 上傳附件</>}
+                    </button>
                   )}
                 </div>
-              )}
-
-              {/* Notes */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>備註</label>
-                <input style={iStyle} placeholder="備忘..." value={form.notes} onChange={e => set('notes', e.target.value)} />
-              </div>
-
-              {/* Date */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>日期</label>
-                <input style={iStyle} type="date" value={form.date} onChange={e => set('date', e.target.value)} />
-              </div>
-
-              {/* Receipt photo attachment */}
-              <div>
-                <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}><FontAwesomeIcon icon={faPaperclip} style={{ marginRight: 4 }} />附件（發票／收據）</label>
-                <input ref={receiptRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
-                  onChange={e => { if (e.target.files?.[0]) handleReceiptUpload(e.target.files[0]); e.target.value = ''; }} />
-                {form.receiptUrl ? (
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    <img src={form.receiptUrl} alt="附件預覽" style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, cursor: 'pointer' }}
-                      onClick={() => setLightboxUrl(form.receiptUrl)} />
-                    <div style={{ flex: 1 }}>
-                      <p style={{ fontSize: 11, color: C.sageDark, fontWeight: 600, margin: '0 0 4px' }}>✓ 附件已上傳</p>
-                      <button onClick={() => set('receiptUrl', '')}
-                        style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
-                        ✕ 移除
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <button onClick={() => receiptRef.current?.click()} disabled={receiptUploading}
-                    style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-input-bg)', color: receiptUploading ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: receiptUploading ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                    {receiptUploading ? '上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />拍照 / 上傳附件</>}
-                  </button>
-                )}
               </div>
 
               {/* Action buttons */}
@@ -2024,7 +2109,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                             </p>
                             <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
                           </div>
-                          {!isReadOnly && (
+                          {!isReadOnly && (isOwner || (currentUserName && (currentUserName === debt.from || currentUserName === debt.to))) && (
                             <button
                               onClick={() => handleQuickSettle(debt.from, debt.to, debt.amount)}
                               disabled={settlingId === sKey}
@@ -2113,19 +2198,30 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
         {/* ── Filter / Sort bar (hidden for visitors) ── */}
         {!isVisitor && (
-          <div style={{ display: 'flex', gap: 6, marginBottom: 10, overflowX: 'auto', paddingBottom: 4 }}>
-            {FILTER_CATS.map(fc => (
-              <button key={fc.key} onClick={() => setFilterCat(fc.key)}
-                style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${filterCat === fc.key ? C.sageDark : C.creamDark}`, background: filterCat === fc.key ? C.sage : 'var(--tm-card-bg)', color: filterCat === fc.key ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
-                {fc.label}
+          <>
+            <div style={{ display: 'flex', gap: 6, marginBottom: 6, overflowX: 'auto', paddingBottom: 4 }}>
+              {FILTER_CATS.map(fc => (
+                <button key={fc.key} onClick={() => setFilterCat(fc.key)}
+                  style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${filterCat === fc.key ? C.sageDark : C.creamDark}`, background: filterCat === fc.key ? C.sage : 'var(--tm-card-bg)', color: filterCat === fc.key ? 'white' : C.bark, fontSize: 12, fontWeight: 600, cursor: 'pointer', fontFamily: FONT }}>
+                  {fc.label}
+                </button>
+              ))}
+              <button onClick={() => setSortMode(nextSort[sortMode])}
+                className="tm-sort-btn"
+                style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                {sortLabels[sortMode]}
               </button>
-            ))}
-            <button onClick={() => setSortMode(nextSort[sortMode])}
-              className="tm-sort-btn"
-              style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-              {sortLabels[sortMode]}
-            </button>
-          </div>
+            </div>
+            {/* 剔除已結清 toggle — only shown if any settled expense exists */}
+            {(expenses as any[]).some((e: any) => e.settledAt || e.receivedAt) && (
+              <button
+                onClick={() => setHideSettled(v => !v)}
+                style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${hideSettled ? C.sageDark : C.creamDark}`, background: hideSettled ? '#EAF3DE' : 'var(--tm-card-bg)', color: hideSettled ? C.sageDark : C.barkLight, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                <FontAwesomeIcon icon={hideSettled ? faCheck : faLock} style={{ fontSize: 10 }} />
+                {hideSettled ? '已結清項目已隱藏' : '顯示全部（含已結清）'}
+              </button>
+            )}
+          </>
         )}
 
         {/* ── Expense list (hidden for visitors) ── */}
@@ -2210,11 +2306,21 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
                           {splitModeLabel(e)}
-                          {e.notes ? ` · ${e.notes}` : ''}
+                          {e.notes ? <> · <SmartText text={e.notes} /></> : ''}
+                          {e.settledAt && (
+                            <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
+                              <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已結清
+                            </span>
+                          )}
+                          {!e.settledAt && e.receivedAt && (
+                            <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
+                              <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已收回
+                            </span>
+                          )}
                         </p>
                       )}
                       {isSettlement && e.notes && (
-                        <p style={{ fontSize: 11, color: C.sageDark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{e.notes}</p>
+                        <p style={{ fontSize: 11, color: C.sageDark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={e.notes} /></p>
                       )}
                     </div>
                     {/* Amount + actions */}
@@ -2239,28 +2345,37 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       )}
                       {!isReadOnly && (
                         <div style={{ display: 'flex', gap: 4 }}>
-                          {!isSettlement && (
+                          {canEditExpense(e) && (
                             <button onClick={() => openEdit(e)}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faPen} />
                             </button>
                           )}
                           {/* 補實際金額 — foreign-card expense, whether awaiting or already estimated */}
-                          {!isSettlement && isForeignCard && (
+                          {!isSettlement && isForeignCard && !e.settledAt && !e.receivedAt && (
                             <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faReceipt} />
                             </button>
                           )}
-                          {/* 補記差額 — only for shared (non-settlement, non-private) rows */}
-                          {!isSettlement && !isPrivateExpense && !isAdjustment && (
+                          {/* 補記差額 — only for shared (non-settlement, non-private, non-settled) rows */}
+                          {!isSettlement && !isPrivateExpense && !isAdjustment && !e.settledAt && !e.receivedAt && (
                             <button onClick={() => openAdjustForm(e)} title="補記差額"
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faArrowRightArrowLeft} />
                             </button>
                           )}
                           {canDeleteExpense(e) && (
-                            <button onClick={() => handleDelete(e.id, e)} className="tm-btn-delete-soft"
+                            <button
+                              onClick={() => {
+                                if (isSettlement) {
+                                  setSettlementDeleteTarget(e);
+                                  setSettlementDeleteInput('');
+                                } else {
+                                  handleDelete(e.id, e);
+                                }
+                              }}
+                              className="tm-btn-delete-soft"
                               style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faTrashCan} />
                             </button>
