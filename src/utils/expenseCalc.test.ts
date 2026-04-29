@@ -19,6 +19,8 @@ import {
   getPersonalShare,
   computeMemberStats,
   computeSettlements,
+  computeAmountTWD,
+  buildPersonalStatement,
   CURRENCY_TO_TWD,
 } from './expenseCalc';
 
@@ -199,27 +201,36 @@ describe('getPersonalShare', () => {
   });
 
   describe('自訂金額模式（amount）', () => {
-    it('各人金額獨立（TWD 直接用，不再換算）', () => {
+    it('各人金額獨立（TWD 直接用）：比例由 effectiveTWD 決定', () => {
+      // amount 模式：customAmounts 是「原幣各人分配金額」，
+      // 程式以 Math.round(effectiveTWD × customAmt/totalCustom) 計算，
+      // 確保各人份額加總 == effectiveTWD（而非直接用 customAmount 值）。
+      // 測試必須提供 amountTWD，否則 effectiveTWD=0，全員份額都是 0。
       const e = {
-        payer: 'Alice', amount: 0, currency: 'TWD',
+        payer: 'Alice', amount: 2300, currency: 'TWD',
+        amountTWD: 2300, // 1500 + 800
         splitMode: 'amount' as const,
         customAmounts: { Alice: '1500', Bob: '800' },
         splitWith: ['Alice', 'Bob'],
       };
+      // Alice: Math.round(2300 × 1500/2300) = 1500
+      // Bob:   Math.round(2300 × 800/2300)  = 800
       expect(getPersonalShare(e, 'Alice', members)).toBe(1500);
       expect(getPersonalShare(e, 'Bob', members)).toBe(800);
     });
 
-    it('自訂金額支援外幣換算', () => {
-      // Alice pays 1000 JPY custom
+    it('自訂金額模式（JPY）：比例換算正確', () => {
+      // customAmounts 以原幣紀錄（1000 JPY），amountTWD 是 effectiveTWD 的來源
+      const jpyTWD = toTWDCalc(1000, 'JPY'); // 218
       const e = {
-        payer: 'Bob', amount: 0, currency: 'JPY',
+        payer: 'Bob', amount: 1000, currency: 'JPY',
+        amountTWD: jpyTWD, // 總額 218 TWD，Alice 佔全部
         splitMode: 'amount' as const,
         customAmounts: { Alice: '1000' },
         splitWith: ['Alice'],
       };
-      const expected = toTWDCalc(1000, 'JPY');
-      expect(getPersonalShare(e, 'Alice', members)).toBe(expected);
+      // Alice: Math.round(218 × 1000/1000) = 218
+      expect(getPersonalShare(e, 'Alice', members)).toBe(jpyTWD);
     });
   });
 });
@@ -431,5 +442,214 @@ describe('整合情境', () => {
     expect(alice.net).toBe(300);
     expect(bob.owed).toBe(300);
     expect(bob.net).toBe(-300);
+  });
+});
+
+// ── 壓力測試情境一：兩人簡單對沖（匯率 + 刷卡手續費）────────────────────────
+describe('壓力測試 情境一：兩人匯率 + 手續費', () => {
+  /**
+   * 成員：A, B
+   * 費用①：A 代墊午餐 $1,000 TWD，兩人均分
+   * 費用②：B 代墊藥妝 $10,000 JPY，匯率 0.21，刷卡手續費 1.5%，兩人均分
+   *
+   * 手算推導：
+   *   費用② amountTWD = Math.round(10000 × 0.21 × 1.015) = Math.round(2131.5) = 2132
+   *   均分後每人 = floor(2132/2) = 1066，餘數 0，A 份 = 1066，B 份 = 1066
+   *
+   *   A: paid=1000, owed=500+1066=1566, net = 1000-1566 = -566（欠 B）
+   *   B: paid=2132, owed=500+1066=1566, net = 2132-1566 = +566（B 是債權人）
+   *   結算：A → B  NT$566
+   */
+  const members = ['A', 'B'];
+
+  // computeAmountTWD 正確算出含手續費 TWD
+  it('費用② amountTWD = 2132（刷卡手續費含入）', () => {
+    const amtTWD = computeAmountTWD(10000, 'JPY', {
+      exchangeRate: 0.21,
+      paymentMethod: 'card',
+      cardFeePercent: 1.5,
+    });
+    expect(amtTWD).toBe(2132);
+  });
+
+  it('費用② 均分：A 份 = B 份 = 1066，總和等於 2132', () => {
+    const e = { payer: 'B', amountTWD: 2132, currency: 'JPY', splitWith: ['A', 'B'] };
+    const aShare = getPersonalShare(e, 'A', members);
+    const bShare = getPersonalShare(e, 'B', members);
+    expect(aShare).toBe(1066);
+    expect(bShare).toBe(1066);
+    expect(aShare + bShare).toBe(2132);
+  });
+
+  it('memberStats：A net = -566，B net = +566', () => {
+    const expenses = [
+      { payer: 'A', amountTWD: 1000, currency: 'TWD', splitWith: ['A', 'B'] },
+      { payer: 'B', amountTWD: 2132, currency: 'JPY', splitWith: ['A', 'B'] },
+    ];
+    const stats = computeMemberStats(expenses, members);
+    const a = stats.find(s => s.name === 'A')!;
+    const b = stats.find(s => s.name === 'B')!;
+    expect(a.net).toBe(-566);
+    expect(b.net).toBe(566);
+    // net 總和為 0
+    expect(a.net + b.net).toBe(0);
+  });
+
+  it('結算建議：A → B  NT$566', () => {
+    const expenses = [
+      { payer: 'A', amountTWD: 1000, currency: 'TWD', splitWith: ['A', 'B'] },
+      { payer: 'B', amountTWD: 2132, currency: 'JPY', splitWith: ['A', 'B'] },
+    ];
+    const stats = computeMemberStats(expenses, members);
+    const settlements = computeSettlements(stats);
+    expect(settlements).toHaveLength(1);
+    expect(settlements[0].from).toBe('A');
+    expect(settlements[0].to).toBe('B');
+    expect(settlements[0].amount).toBe(566);
+  });
+
+  it('Personal Statement A：代墊 1000，應付 1566，淨值 -566', () => {
+    const expenses = [
+      { id: 'e1', payer: 'A', amountTWD: 1000, currency: 'TWD', splitWith: ['A', 'B'], description: '午餐', date: '2024-04-01' },
+      { id: 'e2', payer: 'B', amountTWD: 2132, currency: 'JPY', splitWith: ['A', 'B'], description: '藥妝', date: '2024-04-01' },
+    ];
+    const stmt = buildPersonalStatement(expenses, 'A', members);
+    expect(stmt.myPaymentsTotal).toBe(1000);
+    expect(stmt.mySharesTotal).toBe(1566);
+    expect(stmt.net).toBe(-566);
+    expect(stmt.myAdvancedTotal).toBe(500); // A 代墊給 B 的 500
+  });
+});
+
+// ── 壓力測試情境二：8 人複雜大團（多人分攤與債務對沖）─────────────────────────
+describe('壓力測試 情境二：8 人大團', () => {
+  /**
+   * 成員：A, B, C, D, E, F, G, H
+   * 費用①：A 代墊大巴 $8,000 TWD，全員 8 人均分 → 每人 1000
+   * 費用②：B 代墊燒肉 $24,000 JPY，匯率 0.21（per-expense），splitWith [A,B,C,D]
+   *         amountTWD = Math.round(24000×0.21) = 5040
+   *         每人 = 5040/4 = 1260（整除）
+   * 費用③：C 代墊門票 $1,200 TWD，splitWith [E,F,G,H] → 每人 300
+   *
+   * 手算淨值：
+   *   A：paid=8000, owed=1000+1260=2260, net=+5740
+   *   B：paid=5040, owed=1000+1260=2260, net=+2780
+   *   C：paid=1200, owed=1000+1260=2260, net=−1060
+   *   D：paid=0,    owed=1000+1260=2260, net=−2260
+   *   E：paid=0,    owed=1000+300=1300,  net=−1300
+   *   F：paid=0,    owed=1000+300=1300,  net=−1300
+   *   G：paid=0,    owed=1000+300=1300,  net=−1300
+   *   H：paid=0,    owed=1000+300=1300,  net=−1300
+   *   總和= 5740+2780−1060−2260−1300×4 = 8520−8520 = 0 ✓
+   *
+   * 結算建議（貪心，債務人降冪）：
+   *   D(2260)→A, E(1300)→A, F(1300)→A, G(880)→A,
+   *   G 剩 420→B, H(1300)→B, C(1060)→B
+   */
+  const members = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+  const expenses = [
+    {
+      id: 'bus', payer: 'A', amountTWD: 8000, currency: 'TWD',
+      splitWith: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
+      description: '大巴', date: '2024-04-01',
+    },
+    {
+      id: 'bbq', payer: 'B', amountTWD: 5040, currency: 'JPY',
+      splitWith: ['A', 'B', 'C', 'D'],
+      description: '燒肉', date: '2024-04-01',
+    },
+    {
+      id: 'tkt', payer: 'C', amountTWD: 1200, currency: 'TWD',
+      splitWith: ['E', 'F', 'G', 'H'],
+      description: '門票', date: '2024-04-01',
+    },
+  ];
+
+  it('費用② amountTWD：24000 × 0.21 = 5040', () => {
+    const amtTWD = computeAmountTWD(24000, 'JPY', { exchangeRate: 0.21 });
+    expect(amtTWD).toBe(5040);
+  });
+
+  it('費用② 均分：每人 1260，4 人總和 = 5040', () => {
+    const e = { payer: 'B', amountTWD: 5040, currency: 'JPY', splitWith: ['A', 'B', 'C', 'D'] };
+    const shares = ['A', 'B', 'C', 'D'].map(n => getPersonalShare(e, n, members));
+    expect(shares).toEqual([1260, 1260, 1260, 1260]);
+    expect(shares.reduce((s, v) => s + v, 0)).toBe(5040);
+  });
+
+  it('每位成員 net 值正確', () => {
+    const stats = computeMemberStats(expenses, members);
+    const get = (name: string) => stats.find(s => s.name === name)!;
+
+    expect(get('A').net).toBe(5740);
+    expect(get('B').net).toBe(2780);
+    expect(get('C').net).toBe(-1060);
+    expect(get('D').net).toBe(-2260);
+    expect(get('E').net).toBe(-1300);
+    expect(get('F').net).toBe(-1300);
+    expect(get('G').net).toBe(-1300);
+    expect(get('H').net).toBe(-1300);
+  });
+
+  it('所有成員 net 總和等於 0', () => {
+    const stats = computeMemberStats(expenses, members);
+    const netSum = stats.reduce((s, m) => s + m.net, 0);
+    expect(netSum).toBe(0);
+  });
+
+  it('結算建議：最多 7 筆，且總還款額等於總債務 8520', () => {
+    const stats = computeMemberStats(expenses, members);
+    const settlements = computeSettlements(stats);
+    // 最大筆數 = (債權人數 × 債務人數) = 2 × 6 = 12；貪心應產出更少
+    expect(settlements.length).toBeLessThanOrEqual(7);
+    const totalTransferred = settlements.reduce((s, r) => s + r.amount, 0);
+    expect(totalTransferred).toBe(8520);
+  });
+
+  it('結算建議：所有還款方向正確（只流向 A 或 B）', () => {
+    const stats = computeMemberStats(expenses, members);
+    const settlements = computeSettlements(stats);
+    expect(settlements.every(s => s.to === 'A' || s.to === 'B')).toBe(true);
+    expect(settlements.every(s => ['C', 'D', 'E', 'F', 'G', 'H'].includes(s.from))).toBe(true);
+  });
+
+  it('結算建議：貪心結果符合手算（7 筆）', () => {
+    const stats = computeMemberStats(expenses, members);
+    const settlements = computeSettlements(stats);
+    // 轉成 map 方便查詢
+    const find = (from: string, to: string) =>
+      settlements.find(s => s.from === from && s.to === to);
+
+    expect(find('D', 'A')?.amount).toBe(2260);
+    expect(find('E', 'A')?.amount).toBe(1300);
+    expect(find('F', 'A')?.amount).toBe(1300);
+    expect(find('G', 'A')?.amount).toBe(880);
+    expect(find('G', 'B')?.amount).toBe(420);
+    expect(find('H', 'B')?.amount).toBe(1300);
+    expect(find('C', 'B')?.amount).toBe(1060);
+  });
+
+  it('Personal Statement B：paid=5040，owed=2260，net=+2780，代墊 3780', () => {
+    const stmt = buildPersonalStatement(expenses, 'B', members);
+    expect(stmt.myPaymentsTotal).toBe(5040);
+    expect(stmt.mySharesTotal).toBe(2260);
+    expect(stmt.net).toBe(2780);
+    // myAdvancedTotal = myPaymentsTotal − B自己份額 = 5040 − 1260 = 3780
+    expect(stmt.myAdvancedTotal).toBe(3780);
+  });
+
+  it('Personal Statement D（全欠款方）：paid=0，owed=2260，net=−2260', () => {
+    const stmt = buildPersonalStatement(expenses, 'D', members);
+    expect(stmt.myPaymentsTotal).toBe(0);
+    expect(stmt.mySharesTotal).toBe(2260);
+    expect(stmt.net).toBe(-2260);
+  });
+
+  it('Personal Statement H（只參與大巴 + 門票）：paid=0，owed=1300，net=−1300', () => {
+    const stmt = buildPersonalStatement(expenses, 'H', members);
+    expect(stmt.myPaymentsTotal).toBe(0);
+    expect(stmt.mySharesTotal).toBe(1300);
+    expect(stmt.net).toBe(-1300);
   });
 });
