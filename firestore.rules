@@ -124,22 +124,26 @@ service cloud.firestore {
           resource.data.privateOwnerUid == request.auth.uid
         );
 
-        // Create: editor/owner, and if private must be own UID
+        // Create: editor/owner, and if private must be own UID (or owner helping another member)
         allow create: if canWrite(tripId) && (
           !request.resource.data.get('isPrivate', false) ||
-          request.resource.data.privateOwnerUid == request.auth.uid
+          request.resource.data.privateOwnerUid == request.auth.uid ||
+          isOwner(tripId)
         );
 
         // Update: editor/owner, and cannot change privateOwnerUid to someone else
+        // Exception: trip owner can set private on behalf of any member
         allow update: if canWrite(tripId) && (
           !request.resource.data.get('isPrivate', false) ||
-          request.resource.data.privateOwnerUid == request.auth.uid
+          request.resource.data.privateOwnerUid == request.auth.uid ||
+          isOwner(tripId)
         );
 
-        // Delete: only if shared expense OR it's your own private expense
+        // Delete: only if shared expense OR it's your own private expense (or owner)
         allow delete: if canWrite(tripId) && (
           !resource.data.get('isPrivate', false) ||
-          resource.data.privateOwnerUid == request.auth.uid
+          resource.data.privateOwnerUid == request.auth.uid ||
+          isOwner(tripId)
         );
       }
     }
