@@ -509,10 +509,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         payload.createdBy = currentUserName; // track creator for delete permissions
         await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
       }
-    } catch (e) {
+    } catch (e: any) {
       console.error(e);
       setSaving(false);
-      alert('儲存失敗，請檢查網路連線後再試');
+      alert(`儲存失敗：${e?.code || e?.message || '請檢查網路連線後再試'}`);
       return;
     }
     setSaving(false);
