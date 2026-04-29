@@ -488,7 +488,12 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       notes: form.notes,
       receiptUrl: form.receiptUrl || '',
       isPrivate: form.isPrivate || false,
-      privateOwnerUid: form.isPrivate ? (googleUid || null) : null,
+      privateOwnerUid: form.isPrivate
+        ? (() => {
+            const payerMember = (members as any[]).find((m: any) => m.name === form.payer);
+            return payerMember?.googleUid || googleUid || null;
+          })()
+        : null,
       isIncome: form.isIncome || false,
       // Cross-currency bookkeeping
       exchangeRate: formExRate && formExRate > 0 ? formExRate : null,
@@ -1877,13 +1882,22 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       type="button"
                       onClick={() => set('isPrivate', !form.isPrivate)}
                       style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${form.isPrivate ? '#9A5AC8' : C.creamDark}`, background: form.isPrivate ? '#F0E8FF' : 'var(--tm-card-bg)', color: form.isPrivate ? '#6A2A9A' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
-                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 私人支出（僅自己可見）</span>
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} />
+                        {form.payer && form.payer !== currentUserName
+                          ? `私人支出（僅 ${form.payer} 可見）`
+                          : '私人支出（僅自己可見）'}
+                      </span>
                       <span style={{ width: 36, height: 20, borderRadius: 10, background: form.isPrivate ? '#9A5AC8' : C.creamDark, position: 'relative', display: 'inline-block', flexShrink: 0, transition: 'background 0.2s' }}>
                         <span style={{ position: 'absolute', top: 2, left: form.isPrivate ? 18 : 2, width: 16, height: 16, borderRadius: '50%', background: 'white', transition: 'left 0.2s', boxShadow: '0 1px 3px rgba(0,0,0,0.2)' }} />
                       </span>
                     </button>
                     {form.isPrivate && (
-                      <p style={{ fontSize: 11, color: '#6A2A9A', margin: '4px 0 0', paddingLeft: 2 }}>此筆支出不計入分帳結算，僅記錄個人花費</p>
+                      <p style={{ fontSize: 11, color: '#6A2A9A', margin: '4px 0 0', paddingLeft: 2 }}>
+                        {form.payer && form.payer !== currentUserName
+                          ? `此筆支出不計入分帳結算，僅 ${form.payer} 本人可見`
+                          : '此筆支出不計入分帳結算，僅記錄個人花費'}
+                      </p>
                     )}
                   </div>
                 )}
