@@ -236,6 +236,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [expenseView, setExpenseView] = useState<'all' | 'mine'>('all');
   const [hideSettled, setHideSettled] = useState(false);
+  const [privateSuggestion, setPrivateSuggestion] = useState(false);
 
   // Pie chart — auto-expand for visitors
   const [showPie, setShowPie] = useState(false);
@@ -381,6 +382,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     setShowSubItems(false);
     setForm({ ...defaultForm });
     setEditingId(null);
+    setPrivateSuggestion(false);
   };
 
   const openEdit = (e: any) => {
@@ -444,11 +446,22 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const subItemTotal = form.subItems.reduce((s, si) => s + (Number(si.amount) || 0), 0);
 
   // ── Save / Update ────────────────────────────────────────────────────────
-  const handleSave = async () => {
+  const handleSave = async (forcePublic = false) => {
     if (isReadOnly) return;
     if (!form.description || !form.amount) return;
     // Private expense doesn't require payer
-    if (!form.isPrivate && !form.payer) return;
+    if (!form.isPrivate && !form.isIncome && !form.payer) return;
+
+    // Smart detection: if only the payer is in the split, suggest switching to private
+    if (!forcePublic && !form.isPrivate && !form.isIncome && form.payer) {
+      const effectiveSplit = form.splitMode === 'equal' && form.splitWith.length > 0
+        ? form.splitWith : memberNames;
+      if (effectiveSplit.length === 1 && effectiveSplit[0] === form.payer) {
+        setPrivateSuggestion(true);
+        return;
+      }
+    }
+    setPrivateSuggestion(false);
     setSaving(true);
     const amt = Number(form.amount);
     const formExRate = form.exchangeRate.trim() ? Number(form.exchangeRate) : null;
@@ -1399,20 +1412,28 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 <FontAwesomeIcon icon={faLock} style={{ fontSize: 9 }} /> 私人花費僅你本人可見
               </p>
 
-              {/* Header stats — split shared vs private */}
+              {/* Header stats */}
               {ms && (
-                <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                  <div className="tm-stat-paid-box" style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>目前花費（不含私人）</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {sharedBurdenTWD.toLocaleString()}</p>
+                <>
+                  {/* 總支出 */}
+                  <div style={{ background: 'var(--tm-section-bg)', borderRadius: 14, padding: '12px 14px', border: `1px solid ${C.creamDark}`, marginBottom: 8 }}>
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>總支出（分攤 ＋ 私人）</p>
+                    <p style={{ fontSize: 20, fontWeight: 800, color: C.bark, margin: 0 }}>NT$ {(sharedBurdenTWD + privateTotalTWD).toLocaleString()}</p>
                   </div>
-                  <div style={{ flex: 1, background: 'var(--tm-note-5)', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人花費
-                    </p>
-                    <p className="tm-expense-private-title" style={{ fontSize: 15, fontWeight: 700, color: '#6A2A9A', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
+                  {/* 分攤花費 + 私人花費 */}
+                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                    <div className="tm-stat-paid-box" style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>分攤花費</p>
+                      <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {sharedBurdenTWD.toLocaleString()}</p>
+                    </div>
+                    <div style={{ flex: 1, background: 'var(--tm-note-5)', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人花費
+                      </p>
+                      <p className="tm-expense-private-title" style={{ fontSize: 15, fontWeight: 700, color: '#6A2A9A', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
+                    </div>
                   </div>
-                </div>
+                </>
               )}
               {ms && (() => {
                 const detailSettlements = settlements.filter(s => s.from === detailName || s.to === detailName);
@@ -1967,6 +1988,26 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   )}
                 </div>
               </div>
+
+              {/* Smart detection: only-payer suggestion */}
+              {privateSuggestion && (
+                <div style={{ background: '#FFF8E8', border: `1.5px solid #C8A820`, borderRadius: 14, padding: '14px 16px' }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <FontAwesomeIcon icon={faLock} style={{ fontSize: 11, color: '#9A5AC8' }} />這筆費用只有你一人分攤
+                  </p>
+                  <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 12px' }}>是否改為私人帳？私人帳不計入分帳結算。</p>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => { set('isPrivate', true); setPrivateSuggestion(false); }}
+                      style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: 'none', background: '#9A5AC8', color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                      <FontAwesomeIcon icon={faLock} style={{ marginRight: 5 }} />改為私人帳
+                    </button>
+                    <button onClick={() => handleSave(true)}
+                      style={{ flex: 1, padding: '10px 0', borderRadius: 10, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT }}>
+                      保持分帳記錄
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
