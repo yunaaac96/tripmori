@@ -107,6 +107,11 @@ export interface Expense {
   // existing docs via deleteField() without TS complaints.
   settlementBatch?: number | null;
   adjustmentOf?: string | null;
+  // Settlement tracking
+  settledAt?: string;
+  settledByRef?: string | null;
+  /** ISO date when the payer confirmed they received repayment for this expense. */
+  receivedAt?: string;
 }
 
 // ── Resolve effective TWD ────────────────────────────────────────────────────
@@ -321,6 +326,8 @@ export interface StatementLineItem {
   awaitCardStatement: boolean;
   /** Date this expense was marked settled (ISO date string). Undefined = not yet settled. */
   settledAt?: string;
+  /** Date the payer confirmed they received repayment for this expense. */
+  receivedAt?: string;
 }
 
 /**
@@ -376,6 +383,7 @@ export const buildPersonalStatement = (
       splitWith: sw,
       awaitCardStatement: !!e.awaitCardStatement,
       settledAt: e.settledAt,
+      receivedAt: e.receivedAt,
     };
   };
 

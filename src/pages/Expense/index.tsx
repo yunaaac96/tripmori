@@ -510,12 +510,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     closeForm();
   };
 
-  const canDeleteExpense = (e: any) =>
-    !isReadOnly && (isOwner || (currentUserName && e.createdBy === currentUserName));
+  const canDeleteExpense = (e: any) => {
+    if (isReadOnly) return false;
+    // Regular settled expenses are locked — delete the settlement record to undo
+    if (e.category !== 'settlement' && e.settledAt) return false;
+    return isOwner || (currentUserName && e.createdBy === currentUserName);
+  };
 
   const handleDelete = async (id: string, expense: any) => {
     if (!canDeleteExpense(expense)) return;
-    // If deleting a settlement, clear settledByRef on all expenses it marked
+    // If deleting a settlement, clear settledAt/settledByRef AND receivedAt on all linked expenses
     if (expense.category === 'settlement') {
       const linked = (expenses as any[]).filter((e: any) => e.settledByRef === id);
       if (linked.length > 0) {
@@ -523,6 +527,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
           updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
             settledAt: deleteField(),
             settledByRef: deleteField(),
+            receivedAt: deleteField(),
           })
         ));
       }
@@ -598,6 +603,22 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       await Promise.all(toMark.map((e: any) =>
         updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
           settledAt: today,
+          settledByRef: settlementRef.id,
+        })
+      ));
+    }
+    // 3. Symmetric: mark the debtor's (from) own expenses where creditor (to) is a co-payer
+    //    → receivedAt means "代墊方已收回這筆帳"
+    const toReceive = (expenses as any[]).filter((e: any) => {
+      if (e.category === 'settlement' || e.isPrivate || e.receivedAt) return false;
+      if (e.payer !== from) return false;
+      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      return sw.includes(to);
+    });
+    if (toReceive.length > 0) {
+      await Promise.all(toReceive.map((e: any) =>
+        updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
+          receivedAt: today,
           settledByRef: settlementRef.id,
         })
       ));
@@ -2210,11 +2231,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                       {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
                           {splitModeLabel(e)}
-                          {e.notes ? ` · ${e.notes}` : ''}
+                          {e.notes ? <> · <SmartText text={e.notes} /></> : ''}
+                          {e.settledAt && (
+                            <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
+                              <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已結清
+                            </span>
+                          )}
                         </p>
                       )}
                       {isSettlement && e.notes && (
-                        <p style={{ fontSize: 11, color: C.sageDark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{e.notes}</p>
+                        <p style={{ fontSize: 11, color: C.sageDark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={e.notes} /></p>
                       )}
                     </div>
                     {/* Amount + actions */}
