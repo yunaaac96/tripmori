@@ -243,6 +243,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  // Settlement deletion confirm modal
+  const [settlementDeleteTarget, setSettlementDeleteTarget] = useState<any | null>(null);
+  const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
   const [settlementExpanded, setSettlementExpanded] = useState(false);
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
   // Self-detail privacy tabs (only ever rendered for own card)
@@ -514,6 +517,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     if (isReadOnly) return false;
     // Regular settled expenses are locked — delete the settlement record to undo
     if (e.category !== 'settlement' && e.settledAt) return false;
+    if (e.category === 'settlement') {
+      // Only parties involved (payer or receiver) or owner can delete settlements
+      const parties = [e.payer, ...(e.splitWith || [])];
+      return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
+    }
     return isOwner || (currentUserName && e.createdBy === currentUserName);
   };
 
@@ -1479,6 +1487,59 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         );
       })()}
 
+      {/* ── Settlement Delete Confirm Modal ── */}
+      {settlementDeleteTarget && (() => {
+        const t = settlementDeleteTarget;
+        const payer: string = t.payer || '';
+        const receiver: string = (t.splitWith && t.splitWith[0]) || '';
+        const parties = [payer, receiver].filter(Boolean);
+        const linkedCount = (expenses as any[]).filter((e: any) => e.settledByRef === t.id).length;
+        const inputTrimmed = settlementDeleteInput.trim();
+        const isConfirmed = parties.some(p => p === inputTrimmed);
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 500 }}>
+            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: '#9A3A3A', margin: '0 0 6px' }}>
+                <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />撤銷結清
+              </p>
+              <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 16px', lineHeight: 1.6 }}>
+                刪除後將撤銷此次結算，並清除 {linkedCount} 筆費用的結清標記。
+              </p>
+              <div style={{ background: 'var(--tm-section-bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <span style={{ fontSize: 13, color: C.bark, fontWeight: 600 }}>{payer} → {receiver}</span>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#9A3A3A' }}>NT$ {(t.amountTWD || t.amount || 0).toLocaleString()}</span>
+              </div>
+              <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>
+                輸入 <strong style={{ color: C.bark }}>{payer}</strong> 或 <strong style={{ color: C.bark }}>{receiver}</strong> 以確認
+              </label>
+              <input
+                style={{ ...inputStyle, fontSize: 15, marginBottom: 14 }}
+                placeholder="輸入付款方或收款方名稱"
+                value={settlementDeleteInput}
+                onChange={e => setSettlementDeleteInput(e.target.value)}
+                autoFocus
+              />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setSettlementDeleteTarget(null)}
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  取消
+                </button>
+                <button
+                  disabled={!isConfirmed}
+                  onClick={async () => {
+                    await handleDelete(t.id, t);
+                    setSettlementDeleteTarget(null);
+                    setSettlementDeleteInput('');
+                  }}
+                  style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: isConfirmed ? '#9A3A3A' : '#E0C0C0', color: 'white', fontWeight: 700, cursor: isConfirmed ? 'pointer' : 'default', fontFamily: FONT, fontSize: 14 }}>
+                  確認撤銷結清
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Settlement Form Modal ── */}
       {showSettleForm && (
         <SettlementForm
@@ -2286,7 +2347,16 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                             </button>
                           )}
                           {canDeleteExpense(e) && (
-                            <button onClick={() => handleDelete(e.id, e)} className="tm-btn-delete-soft"
+                            <button
+                              onClick={() => {
+                                if (isSettlement) {
+                                  setSettlementDeleteTarget(e);
+                                  setSettlementDeleteInput('');
+                                } else {
+                                  handleDelete(e.id, e);
+                                }
+                              }}
+                              className="tm-btn-delete-soft"
                               style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faTrashCan} />
                             </button>
