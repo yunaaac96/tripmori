@@ -943,33 +943,44 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const getMemberColor = (name: string) => members.find((m: any) => m.name === name)?.color || C.sageLight;
   const getMemberAvatar = (name: string) => members.find((m: any) => m.name === name)?.avatarUrl || null;
 
-  // ── Per-currency hints for settlement rows ───────────────────────────────
-  // For a given (from→to) pair, compute the original-currency breakdown of what
-  // from owes to (to paid, from is in splitWith) minus what to owes from (from paid,
-  // to in splitWith). Returns non-TWD currencies so we can show e.g. "JPY 50,000".
-  const getPairCurrencyHints = (from: string, to: string): { cur: string; amt: number }[] => {
+  // ── Per-currency breakdown for settlement rows ───────────────────────────
+  // For a (from→to) pair, aggregate each currency's original amount AND its
+  // TWD equivalent separately. Only shown when at least one non-TWD currency
+  // exists, so that: TWD expenses → "台幣 NT$ X", JPY expenses → "JPY Y ≈ NT$ Z".
+  const getPairCurrencyHints = (
+    from: string, to: string,
+  ): { cur: string; origAmt: number; twdEquiv: number }[] => {
     const active = (expenses as any[]).filter((e: any) =>
       !e.awaitCardStatement && !e.isPrivate && e.category !== 'settlement'
     );
-    const buckets: Record<string, number> = {};
+    const buckets: Record<string, { origSum: number; twdSum: number }> = {};
     active.forEach((e: any) => {
       const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
       const cur: string = e.currency || 'TWD';
-      if (cur === 'TWD') return; // only show non-TWD hints
       const origAmt: number = e.amount || 0;
       const twdAmt: number = effectiveTWD(e);
       if (twdAmt <= 0 || origAmt <= 0) return;
       if (e.payer === to && sw.includes(from)) {
-        const share = getPersonalShare(e, from, memberNames);
-        buckets[cur] = (buckets[cur] || 0) + origAmt * (share / twdAmt);
+        const shareTWD = getPersonalShare(e, from, memberNames);
+        if (!buckets[cur]) buckets[cur] = { origSum: 0, twdSum: 0 };
+        buckets[cur].origSum += origAmt * (shareTWD / twdAmt);
+        buckets[cur].twdSum  += shareTWD;
       } else if (e.payer === from && sw.includes(to)) {
-        const share = getPersonalShare(e, to, memberNames);
-        buckets[cur] = (buckets[cur] || 0) - origAmt * (share / twdAmt);
+        const shareTWD = getPersonalShare(e, to, memberNames);
+        if (!buckets[cur]) buckets[cur] = { origSum: 0, twdSum: 0 };
+        buckets[cur].origSum -= origAmt * (shareTWD / twdAmt);
+        buckets[cur].twdSum  -= shareTWD;
       }
     });
-    return Object.entries(buckets)
-      .filter(([, amt]) => amt > 0.5)
-      .map(([cur, amt]) => ({ cur, amt: Math.round(amt) }));
+    const hints = Object.entries(buckets)
+      .filter(([, { twdSum }]) => twdSum > 0.5)
+      .map(([cur, { origSum, twdSum }]) => ({
+        cur,
+        origAmt:  Math.round(origSum),
+        twdEquiv: Math.round(twdSum),
+      }));
+    // Only return hints when there is at least one non-TWD currency
+    return hints.some(h => h.cur !== 'TWD') ? hints : [];
   };
 
   // ── Filter / Sort logic ──────────────────────────────────────────────────
@@ -2416,11 +2427,18 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
                             {(() => {
                               const hints = getPairCurrencyHints(debt.from, debt.to);
-                              return hints.length > 0 ? (
-                                <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>
-                                  {hints.map(h => `${h.cur} ${h.amt.toLocaleString()}`).join(' · ')}
-                                </p>
-                              ) : null;
+                              if (hints.length === 0) return null;
+                              return (
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 1 }}>
+                                  {hints.map(h => (
+                                    <p key={h.cur} style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>
+                                      {h.cur === 'TWD'
+                                        ? `台幣 NT$ ${h.twdEquiv.toLocaleString()}`
+                                        : `${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
+                                    </p>
+                                  ))}
+                                </div>
+                              );
                             })()}
                           </div>
                           {/* Role-based buttons — show even if pair was previously confirmed (new balance may exist) */}
