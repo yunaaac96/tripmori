@@ -943,6 +943,35 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const getMemberColor = (name: string) => members.find((m: any) => m.name === name)?.color || C.sageLight;
   const getMemberAvatar = (name: string) => members.find((m: any) => m.name === name)?.avatarUrl || null;
 
+  // ── Per-currency hints for settlement rows ───────────────────────────────
+  // For a given (from→to) pair, compute the original-currency breakdown of what
+  // from owes to (to paid, from is in splitWith) minus what to owes from (from paid,
+  // to in splitWith). Returns non-TWD currencies so we can show e.g. "JPY 50,000".
+  const getPairCurrencyHints = (from: string, to: string): { cur: string; amt: number }[] => {
+    const active = (expenses as any[]).filter((e: any) =>
+      !e.awaitCardStatement && !e.isPrivate && e.category !== 'settlement'
+    );
+    const buckets: Record<string, number> = {};
+    active.forEach((e: any) => {
+      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      const cur: string = e.currency || 'TWD';
+      if (cur === 'TWD') return; // only show non-TWD hints
+      const origAmt: number = e.amount || 0;
+      const twdAmt: number = effectiveTWD(e);
+      if (twdAmt <= 0 || origAmt <= 0) return;
+      if (e.payer === to && sw.includes(from)) {
+        const share = getPersonalShare(e, from, memberNames);
+        buckets[cur] = (buckets[cur] || 0) + origAmt * (share / twdAmt);
+      } else if (e.payer === from && sw.includes(to)) {
+        const share = getPersonalShare(e, to, memberNames);
+        buckets[cur] = (buckets[cur] || 0) - origAmt * (share / twdAmt);
+      }
+    });
+    return Object.entries(buckets)
+      .filter(([, amt]) => amt > 0.5)
+      .map(([cur, amt]) => ({ cur, amt: Math.round(amt) }));
+  };
+
   // ── Filter / Sort logic ──────────────────────────────────────────────────
   const FILTER_CATS = [
     { key: 'all', label: '全部' },
@@ -2385,9 +2414,17 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
                             </p>
                             <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
+                            {(() => {
+                              const hints = getPairCurrencyHints(debt.from, debt.to);
+                              return hints.length > 0 ? (
+                                <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>
+                                  {hints.map(h => `${h.cur} ${h.amt.toLocaleString()}`).join(' · ')}
+                                </p>
+                              ) : null;
+                            })()}
                           </div>
-                          {/* Role-based buttons */}
-                          {!isReadOnly && !isConfirmedPair && (() => {
+                          {/* Role-based buttons — show even if pair was previously confirmed (new balance may exist) */}
+                          {!isReadOnly && (() => {
                             if (isProcessing) {
                               return <span style={{ flexShrink: 0, fontSize: 11, color: C.barkLight, fontWeight: 600, padding: '5px 8px' }}>處理中...</span>;
                             }
@@ -2650,8 +2687,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         return (
                           <>
                             <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {myShare.toLocaleString()}</p>
-                            <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}</p>
-                            {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{e.currency} {e.amount?.toLocaleString()}</p>}
+                            <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}{e.currency !== 'TWD' ? ` · ${e.currency} ${e.amount?.toLocaleString()}` : ''}</p>
                             {(() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                             <span className={isPayer ? 'tm-badge-sage-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 9, fontWeight: 700, borderRadius: 5, padding: '2px 6px', background: isPayer ? '#E0F0D8' : '#FFF2CC', color: isPayer ? '#4A7A35' : '#9A6800' }}>
                               {isPayer ? '我付款' : '需分攤'}
@@ -2661,7 +2697,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       })() : (
                         <>
                           <p style={{ fontSize: 15, fontWeight: 700, color: isIncome ? '#4A8A4A' : isSettlement ? C.sageDark : C.earth, margin: 0 }}>{isIncome ? '＋' : ''}NT$ {amtTWD.toLocaleString()}</p>
-                          {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
+                          {e.currency !== 'TWD' && !isSettlement && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                         </>
                       )}
