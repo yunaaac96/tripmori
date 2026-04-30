@@ -1032,67 +1032,73 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                       <FontAwesomeIcon icon={faLink} style={{ fontSize: 10, marginRight: 4 }} />綁定為我的成員卡
                     </button>
                   )}
-                  {/* 解除綁定 + 刪除成員 — 同排顯示 */}
-                  {/* 自己的卡：解除綁定永遠顯示；他人的卡：僅管理模式顯示 */}
-                  {((m.googleUid && isMyCard && !firestore.isReadOnly) ||
-                    (adminMode && !isMyCard && (m.googleUid || canEdit))) && (
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                      {m.googleUid && (adminMode || isMyCard) && !firestore.isReadOnly && (
-                        <button onClick={() => handleUnbindGoogle(m.id)} className="tm-btn-delete-soft"
-                          style={{ fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
-                          <FontAwesomeIcon icon={faXmark} style={{ marginRight: 4 }} />解除綁定
-                        </button>
-                      )}
-                      {adminMode && canEdit && !isMyCard && (
-                        <button onClick={() => handleDeleteMember(m.id, m.name)} className="tm-btn-delete-soft"
-                          style={{ fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
-                          <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 4 }} />刪除成員
-                        </button>
-                      )}
-                    </div>
-                  )}
-                  {/* ── 授權代錄夥伴 — only on own card with googleUid ── */}
-                  {isMyCard && googleUid && !isReadOnly && (() => {
+                  {/* ── 小操作列：解除綁定 / 刪除 / 授權代錄 ── */}
+                  {(() => {
+                    const showUnbind  = m.googleUid && (adminMode || isMyCard) && !firestore.isReadOnly;
+                    const showDelete  = adminMode && canEdit && !isMyCard;
+                    const proxyTargets = isMyCard && googleUid && !isReadOnly
+                      ? (members as any[]).filter((tm: any) => tm.googleUid && tm.googleUid !== googleUid)
+                      : [];
+                    const showProxy = proxyTargets.length > 0;
+                    if (!showUnbind && !showDelete && !showProxy) return null;
+                    return (
+                      <div style={{ marginTop: 6, display: 'flex', gap: 5, flexWrap: 'wrap', alignItems: 'center' }}>
+                        {showUnbind && (
+                          <button onClick={() => handleUnbindGoogle(m.id)}
+                            style={{ fontSize: 10, color: '#9A3A3A', background: 'none', border: '1px solid #E8C4C4', borderRadius: 6, padding: '1px 7px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <FontAwesomeIcon icon={faXmark} style={{ fontSize: 9 }} />解除綁定
+                          </button>
+                        )}
+                        {showDelete && (
+                          <button onClick={() => handleDeleteMember(m.id, m.name)}
+                            style={{ fontSize: 10, color: '#9A3A3A', background: 'none', border: '1px solid #E8C4C4', borderRadius: 6, padding: '1px 7px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 9 }} />刪除成員
+                          </button>
+                        )}
+                        {showProxy && (
+                          <button onClick={() => setProxyGrantOpen(v => !v)}
+                            style={{ fontSize: 10, fontWeight: 700, color: '#5A4A9A', background: 'none', border: '1px solid #C4BAE8', borderRadius: 6, padding: '1px 7px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            <FontAwesomeIcon icon={faUserShield} style={{ fontSize: 9 }} />
+                            代錄授權
+                            {myProxyUids.length > 0 && (
+                              <span style={{ background: '#5A4A9A', color: 'white', borderRadius: 8, padding: '0 4px', fontSize: 9, lineHeight: '14px' }}>{myProxyUids.length}</span>
+                            )}
+                            <FontAwesomeIcon icon={proxyGrantOpen ? faChevronUp : faChevronDown} style={{ fontSize: 8 }} />
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })()}
+                  {/* 代錄授權展開面板 */}
+                  {isMyCard && googleUid && !isReadOnly && proxyGrantOpen && (() => {
                     const proxyTargets = (members as any[]).filter(
                       (tm: any) => tm.googleUid && tm.googleUid !== googleUid
                     );
                     if (proxyTargets.length === 0) return null;
                     return (
-                      <div style={{ marginTop: 8 }}>
-                        <button
-                          onClick={() => setProxyGrantOpen(v => !v)}
-                          style={{ fontSize: 11, fontWeight: 700, color: '#5A4A9A', background: '#EDE8FF', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>
-                          <FontAwesomeIcon icon={faUserShield} style={{ fontSize: 10 }} />
-                          授權代錄夥伴
-                          {myProxyUids.length > 0 && <span style={{ background: '#5A4A9A', color: 'white', borderRadius: 10, padding: '0 5px', fontSize: 10 }}>{myProxyUids.length}</span>}
-                          <FontAwesomeIcon icon={proxyGrantOpen ? faChevronUp : faChevronDown} style={{ fontSize: 9 }} />
-                        </button>
-                        {proxyGrantOpen && (
-                          <div style={{ marginTop: 8, background: '#F5F3FF', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                            <p style={{ fontSize: 11, color: '#6A5A9A', margin: '0 0 4px', lineHeight: 1.5 }}>
-                              被授權的夥伴可在新增支出時幫你代錄私人帳目。
-                            </p>
-                            {proxyTargets.map((tm: any) => {
-                              const isGranted = myProxyUids.includes(tm.googleUid);
-                              return (
-                                <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: tm.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
-                                    {tm.avatarUrl
-                                      ? <img src={tm.avatarUrl} alt={tm.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                      : tm.name?.[0]?.toUpperCase()}
-                                  </div>
-                                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>{tm.name}</span>
-                                  <button
-                                    onClick={() => handleToggleProxy(tm.googleUid)}
-                                    disabled={savingProxy}
-                                    style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 8, border: 'none', cursor: savingProxy ? 'default' : 'pointer', fontFamily: FONT, background: isGranted ? '#5A4A9A' : '#E0D8F8', color: isGranted ? 'white' : '#5A4A9A', opacity: savingProxy ? 0.6 : 1, transition: 'all 0.15s' }}>
-                                    {isGranted ? '已授權 ✓' : '授權'}
-                                  </button>
-                                </div>
-                              );
-                            })}
-                          </div>
-                        )}
+                      <div style={{ marginTop: 6, background: '#F5F3FF', borderRadius: 10, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <p style={{ fontSize: 10, color: '#6A5A9A', margin: 0, lineHeight: 1.5 }}>
+                          被授權的夥伴可替你代錄私人帳目。
+                        </p>
+                        {proxyTargets.map((tm: any) => {
+                          const isGranted = myProxyUids.includes(tm.googleUid);
+                          return (
+                            <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: tm.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                                {tm.avatarUrl
+                                  ? <img src={tm.avatarUrl} alt={tm.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  : tm.name?.[0]?.toUpperCase()}
+                              </div>
+                              <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: C.bark }}>{tm.name}</span>
+                              <button
+                                onClick={() => handleToggleProxy(tm.googleUid)}
+                                disabled={savingProxy}
+                                style={{ fontSize: 10, fontWeight: 700, padding: '3px 10px', borderRadius: 6, border: 'none', cursor: savingProxy ? 'default' : 'pointer', fontFamily: FONT, background: isGranted ? '#5A4A9A' : '#E0D8F8', color: isGranted ? 'white' : '#5A4A9A', opacity: savingProxy ? 0.6 : 1, transition: 'all 0.15s' }}>
+                                {isGranted ? '已授權 ✓' : '授權'}
+                              </button>
+                            </div>
+                          );
+                        })}
                       </div>
                     );
                   })()}
