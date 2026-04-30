@@ -1,6 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { auth } from '../../config/firebase';
 import { C, FONT, cardStyle, ExpandableNotes } from '../../App';
+import { toTWDCalc } from '../../utils/expenseCalc';
 import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
@@ -177,7 +178,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
   const [singleFlightForm,      setSingleFlightForm]      = useState<any>({});
   const [singleFlightParticipants, setSingleFlightParticipants] = useState<string[]>([]);
 
-  const projCurrency = project?.currency || 'JPY';
+  const projCurrency = project?.currency || 'TWD';
 
   const BLANK_FLIGHT = (dir = '去程', idx = 0) => ({
     id: `f${idx + 1}`, direction: dir, airline: '', flightNo: '',
@@ -274,7 +275,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         setCars(updated);
         if (editForm.totalCost && Number(editForm.totalCost) > 0) {
           const ptcNames = editParticipants.map(id => members.find((m: any) => m.id === id)?.name).filter(Boolean) as string[];
-          setExpensePrompt({ type: 'car', name: editForm.company || '租車/包車', amount: Number(editForm.totalCost), currency: editForm.currency || 'JPY', date: (editForm.pickupTime || '').split(/\s+/)[0], participantNames: ptcNames.length ? ptcNames : undefined });
+          setExpensePrompt({ type: 'car', name: editForm.company || '租車/包車', amount: Number(editForm.totalCost), currency: editForm.currency || projCurrency, date: (editForm.pickupTime || '').split(/\s+/)[0], participantNames: ptcNames.length ? ptcNames : undefined });
         }
       }
       setEditType(null);
@@ -346,14 +347,14 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       title: b.title || '', type: b.type || 'activity',
       confirmCode: b.confirmCode || '', notes: b.notes || '',
       date: b.date || '', cost: b.cost ? String(b.cost) : '',
-      currency: b.currency || 'JPY', qrUrl: b.qrUrl || '',
+      currency: b.currency || projCurrency, qrUrl: b.qrUrl || '',
     });
     setCustomParticipants(b.participants || []);
     setShowAdd(true);
   };
 
   const closeCustomForm = () => {
-    setShowAdd(false); setEditBookingId(null); setCustomForm({ ...EMPTY_CUSTOM_FORM }); setCustomParticipants([]);
+    setShowAdd(false); setEditBookingId(null); setCustomForm({ ...EMPTY_CUSTOM_FORM, currency: projCurrency }); setCustomParticipants([]);
   };
 
   const handleToggleUsed = async (b: any) => {
@@ -542,7 +543,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     setExpenseSaving(true);
     try {
       const { type, name, amount, currency, date, participantNames } = expensePrompt;
-      const amountTWD = currency === 'TWD' ? amount : currency === 'JPY' ? Math.round(amount * 0.22) : Math.round(amount * 0.0022); // IDR approx
+      const amountTWD = toTWDCalc(amount, currency);
       // Map type to expense category and description prefix
       const catMap: Record<string, { cat: string; prefix: string }> = {
         hotel:      { cat: 'hotel',      prefix: '住宿' },
@@ -672,7 +673,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 
         {/* ── 住宿 ── */}
         <SectionTitle action={!isReadOnly && hotels?.length ? (
-          <button onClick={() => { setEditType('hotel'); setEditIndex((hotels || []).length); setEditForm({ id: `h${Date.now()}`, name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); setEditParticipants([]); }}
+          <button onClick={() => { setEditType('hotel'); setEditIndex((hotels || []).length); setEditForm({ id: `h${Date.now()}`, name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: projCurrency, costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); setEditParticipants([]); }}
             style={sectionAddBtn}>
             ＋ 新增
           </button>
@@ -683,7 +684,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>住宿安排待更新</p>
             <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>擁有者可點擊 <FontAwesomeIcon icon={faPen} style={{ fontSize: 10 }} /> 填入訂房資訊</p>
             {!isReadOnly && (
-              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: project?.currency || 'JPY', costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); setEditParticipants([]); }}
+              <button onClick={() => { setEditType('hotel'); setEditIndex(0); setEditForm({ id: 'h1', name: '', nameLocal: '', address: '', roomType: '', checkIn: '', checkOut: '', totalCost: '', currency: projCurrency, costPerPerson: '', confirmCode: '', pin: '', notes: '', mapUrl: '' }); setEditParticipants([]); }}
                 style={emptyStateAddBtn}>
                 ＋ 新增住宿
               </button>
@@ -765,8 +766,8 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                       <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                         <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
                         <div style={{ textAlign: 'right' }}>
-                          {h.totalCost && <p style={{ fontSize: 16, fontWeight: 700, color: C.earth, margin: 0 }}>{getCurrencySymbol(h.currency || 'JPY')} {Number(h.totalCost).toLocaleString()}</p>}
-                          {h.costPerPerson && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>每人 {getCurrencySymbol(h.currency || 'JPY')} {Number(h.costPerPerson).toLocaleString()}</p>}
+                          {h.totalCost && <p style={{ fontSize: 16, fontWeight: 700, color: C.earth, margin: 0 }}>{getCurrencySymbol(h.currency || projCurrency)} {Number(h.totalCost).toLocaleString()}</p>}
+                          {h.costPerPerson && <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>每人 {getCurrencySymbol(h.currency || projCurrency)} {Number(h.costPerPerson).toLocaleString()}</p>}
                         </div>
                       </div>
                     )}
@@ -865,7 +866,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               <div className="tm-booking-cost" style={{ background: '#FFF8E1', borderRadius: 12, padding: '8px 14px', marginBottom: 10, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 11, color: C.barkLight }}>費用</span>
                 <span style={{ fontSize: 16, fontWeight: 700, color: C.earth }}>
-                  {getCurrencySymbol(car.currency || 'JPY')} {Number(car.totalCost).toLocaleString()}
+                  {getCurrencySymbol(car.currency || projCurrency)} {Number(car.totalCost).toLocaleString()}
                 </span>
               </div>
             ) : null}
@@ -987,7 +988,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                       <div className="tm-booking-cost" style={{ background: C.cream, borderRadius: 12, padding: '7px 10px' }}>
                         <p style={{ fontSize: 9, color: C.barkLight, fontWeight: 700, margin: 0 }}>費用</p>
                         <p style={{ fontSize: 12, fontWeight: 700, color: C.earth, margin: '2px 0 0' }}>
-                          {getCurrencySymbol(b.currency || 'JPY')} {Number(b.cost).toLocaleString()}
+                          {getCurrencySymbol(b.currency || projCurrency)} {Number(b.cost).toLocaleString()}
                         </p>
                       </div>
                     )}

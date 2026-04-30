@@ -96,7 +96,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const [activeDay, setActiveDay]   = useState(() => project?.startDate || '2026-04-23');
   const [mode, setMode]             = useState<Mode>('view');
   const [selectedEvent, setSelectedEvent] = useState<any>(null);
-  const [form, setForm]             = useState({ ...EMPTY_EVENT_FORM, date: '' });
+  const [form, setForm]             = useState({ ...EMPTY_EVENT_FORM, currency: project?.currency || 'TWD', date: '' });
   const [travelMode, setTravelMode] = useState<'car' | 'transit' | 'walk' | 'flight'>('car');
   const [travelCalcStatus, setTravelCalcStatus] = useState<'idle' | 'loading' | 'done' | 'error'>('idle');
   const [travelCalcMsg, setTravelCalcMsg] = useState('');
@@ -240,7 +240,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
     if (!bulkText.trim()) { setShowBulkImport(false); return; }
     setBulkImporting(true); setBulkError('');
     try {
-      const currency = project?.currency || 'JPY';
+      const currency = project?.currency || 'TWD';
       const parsed = parseUniversalImport(bulkText, currency);
       if (parsed.errors.length > 0) {
         setBulkError(parsed.errors.slice(0, 5).join('\n') + (parsed.errors.length > 5 ? `\n⋯ 共 ${parsed.errors.length} 個錯誤` : ''));
@@ -411,7 +411,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const FLIGHT_KW = /機場|airport|起飛|降落|抵達|出發|航班|班機|飛機|✈/i;
   const isFlightEvt = (e: any) => FLIGHT_KW.test(e?.title || '') || FLIGHT_KW.test(e?.location || '');
 
-  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, date: activeDay }); setFormParticipants([]); setSelectedEvent(null); setTravelCalcStatus('idle'); setTravelCalcMsg(''); setTravelMode('car'); setMode('add'); };
+  const openAdd  = () => { if (isReadOnly) return; setForm({ ...EMPTY_EVENT_FORM, currency: project?.currency || 'TWD', date: activeDay }); setFormParticipants([]); setSelectedEvent(null); setTravelCalcStatus('idle'); setTravelCalcMsg(''); setTravelMode('car'); setMode('add'); };
   const openEdit = (event: any) => {
     const evtDate = (event.date || '').replace(/\//g, '-') || activeDay;
     const dayEvts = events
@@ -425,7 +425,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
       travelTime: event.travelTime || '',
       category: event.category || 'attraction', location: event.location || '',
       notes: event.notes || '', mapUrl: event.mapUrl || '',
-      cost: event.cost ? String(event.cost) : '', currency: event.currency || 'JPY',
+      cost: event.cost ? String(event.cost) : '', currency: event.currency || project?.currency || 'TWD',
       date: evtDate,
     });
     setSelectedEvent(event);
@@ -498,7 +498,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
         startDate:   d.startDate   || project?.startDate   || '',
         endDate:     d.endDate     || project?.endDate     || '',
         description: d.description || project?.description || '',
-        currency:    d.currency    || 'JPY',
+        currency:    d.currency    || project?.currency || 'TWD',
         exchangeRate: d.exchangeRate != null ? String(d.exchangeRate) : '',
       });
     } catch {
@@ -508,7 +508,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
         startDate:   project?.startDate   || '',
         endDate:     project?.endDate     || '',
         description: project?.description || '',
-        currency:    'JPY',
+        currency:    project?.currency || 'TWD',
         exchangeRate: project?.exchangeRate != null ? String(project.exchangeRate) : '',
       });
     }

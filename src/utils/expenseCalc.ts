@@ -127,7 +127,7 @@ export interface Expense {
 export const effectiveTWD = (e: Expense): number => {
   if (e.actualTWD != null) return e.actualTWD;
   if (e.amountTWD != null) return e.amountTWD;
-  return toTWDCalc(e.amount || 0, e.currency || 'JPY');
+  return toTWDCalc(e.amount || 0, e.currency || 'TWD');
 };
 
 // ── Compute TWD amount for a NEW / edited expense at save time ──────────────
@@ -387,7 +387,7 @@ export const buildPersonalStatement = (
       category: e.category || 'other',
       isIncome: !!e.isIncome,
       origAmount: e.amount || 0,
-      origCurrency: e.currency || 'JPY',
+      origCurrency: e.currency || 'TWD',
       payer: e.payer || '',
       effectiveTWD: effectiveTWD(e),
       myShare: getPersonalShare(e, memberName, memberNames),

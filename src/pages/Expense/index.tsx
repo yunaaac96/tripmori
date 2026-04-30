@@ -209,7 +209,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const isVisitor = isReadOnly;
   const isOwner = role === 'owner';
 
-  const projCurrency = (project?.currency || 'JPY') as Currency;
+  const projCurrency = (project?.currency || 'TWD') as Currency;
   const defaultForm = { ...EMPTY_FORM, currency: projCurrency, date: new Date().toISOString().slice(0, 10) };
 
   const darkMode = useDarkMode();
@@ -431,7 +431,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     setForm({
       description: e.description || '',
       amount: String(e.amount || ''),
-      currency: e.currency || 'JPY',
+      currency: e.currency || projCurrency,
       category: e.category || 'food',
       payer: e.payer || '',
       paymentMethod: e.paymentMethod || 'cash',
@@ -792,14 +792,14 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustNote, setAdjustNote]     = useState('');
   const [adjustDir, setAdjustDir]       = useState<'expense' | 'refund'>('expense');
-  const [adjustCurrency, setAdjustCurrency] = useState<string>('JPY');
+  const [adjustCurrency, setAdjustCurrency] = useState<string>(() => projCurrency);
   const [adjustSaving, setAdjustSaving] = useState(false);
   const openAdjustForm = (original: any) => {
     setAdjustTarget(original);
     setAdjustAmount('');
     setAdjustNote('');
     setAdjustDir('expense');
-    setAdjustCurrency(original.currency || 'JPY');
+    setAdjustCurrency(original.currency || projCurrency);
   };
   const closeAdjustForm = () => {
     setAdjustTarget(null);
@@ -814,7 +814,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     setAdjustSaving(true);
     try {
       const original = adjustTarget;
-      const currency = adjustCurrency || original.currency || 'JPY';
+      const currency = adjustCurrency || original.currency || projCurrency;
       // Direction: 'refund' means the group gets money back → negative amount
       const signedAmt = adjustDir === 'refund' ? -absAmt : absAmt;
       const amtTWD = toTWD(absAmt, currency) * (adjustDir === 'refund' ? -1 : 1);
@@ -2398,7 +2398,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               }
                               return (
                                 <button
-                                  onClick={() => { setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount }); setPayModalForeign(false); setPayModalCur(projCurrency && projCurrency !== 'TWD' ? projCurrency : 'JPY'); setPayModalAmt(''); setPayModalRate(''); }}
+                                  onClick={() => { setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount }); setPayModalForeign(false); setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY'); setPayModalAmt(''); setPayModalRate(''); }}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                                   確認已付
@@ -2545,7 +2545,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               const isAdjustment = !!e.adjustmentOf;
               const isAwaiting = !!e.awaitCardStatement;
               const hasActual  = e.actualTWD != null;
-              const isForeignCard = e.paymentMethod === 'card' && (e.currency || 'JPY') !== 'TWD';
+              const isForeignCard = e.paymentMethod === 'card' && (e.currency || projCurrency) !== 'TWD';
               return (
                 <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : isIncome ? `3px solid #4A8A4A` : undefined, opacity: isAwaiting ? 0.8 : 1 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -2585,7 +2585,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           </span>
                         )}
                         {/* FX status chip: actual / estimated / awaiting */}
-                        {!isSettlement && !isPrivateExpense && (e.currency || 'JPY') !== 'TWD' && (
+                        {!isSettlement && !isPrivateExpense && (e.currency || projCurrency) !== 'TWD' && (
                           isAwaiting ? (
                             <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFE8CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                               <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 8 }} />等卡單
