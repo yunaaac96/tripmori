@@ -2033,11 +2033,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
               {expenseView === 'mine' && currentUserName ? '個人負擔總額（換算台幣）' : '團隊總支出（換算台幣）'}
             </p>
             <p style={{ fontSize: 28, fontWeight: 900, color: 'white', margin: 0 }}>NT$ {headerTWD.toLocaleString()}</p>
-            {expenseView === 'mine' && currentUserName && (
-              <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>
-                含個人分攤＋私人消費 · 團隊共 NT$ {teamTotalTWD.toLocaleString()}
-              </p>
-            )}
+            <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.65)', margin: '3px 0 0' }}>
+              {expenseView === 'mine' && currentUserName
+                ? `含個人分攤＋私人消費 · 團隊共 NT$ ${teamTotalTWD.toLocaleString()}`
+                : '僅計入分帳費用，私人帳不含在內'}
+            </p>
           </div>
         )}
       </PageHeader>
