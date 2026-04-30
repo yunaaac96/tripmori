@@ -485,18 +485,29 @@ export const getSettlementBadge = (
   confirmedPairMap: Map<string, string>,
 ): 'settled' | 'received' | 'none' => {
   const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+  // Expense date in YYYY-MM-DD form — empty string if not set
+  const expDate = (e.date || '').slice(0, 10);
+
+  // Helper: does a confirmed settlement cover this expense?
+  // A settlement covers an expense if the settlement date >= expense date.
+  // Expenses with no date are treated as "today" (not covered by past settlements).
+  const isCoveredBy = (settlementDate: string | undefined): boolean => {
+    if (settlementDate == null) return false;
+    if (!expDate) return false;   // no expense date → not settled by past settlement
+    return expDate <= settlementDate;
+  };
 
   // Viewer is a debtor for this expense (in splitWith, not the payer)
   if (e.payer !== viewerName && sw.includes(viewerName)) {
     if (e.settledAt) return 'settled';  // legacy stamp
-    if (confirmedPairMap.has(`${viewerName}→${e.payer}`)) return 'settled';
+    if (isCoveredBy(confirmedPairMap.get(`${viewerName}→${e.payer}`))) return 'settled';
   }
 
   // Viewer is the payer (creditor): show 'received' when all debtors confirmed
   if (e.payer === viewerName) {
     if (e.receivedAt) return 'received';  // legacy stamp
     const debtors = sw.filter(n => n !== viewerName);
-    if (debtors.length > 0 && debtors.every(d => confirmedPairMap.has(`${d}→${viewerName}`))) {
+    if (debtors.length > 0 && debtors.every(d => isCoveredBy(confirmedPairMap.get(`${d}→${viewerName}`)))) {
       return 'received';
     }
   }

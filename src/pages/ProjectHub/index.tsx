@@ -947,7 +947,15 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                   const rl = ROLE_LABEL[p.role];
                   const ended = isTripEnded(p);
                   return (
-                    <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 0, boxShadow: ended ? C.shadowSm : 'none', borderRadius: ended ? 20 : 0 }}>
+                    <div key={p.id} style={{ display: 'flex', flexDirection: 'column', gap: 0,
+                      /* For ended trips in normal mode: outer div owns the card border + shadow + border-radius
+                         and overflow:hidden clips children — prevents the archive bar from overflowing */
+                      boxShadow: (ended && !isEditMode) ? C.shadowSm : 'none',
+                      borderRadius: (ended && !isEditMode) ? 20 : 0,
+                      overflow: (ended && !isEditMode) ? 'hidden' : undefined,
+                      border: (ended && !isEditMode) ? `2px solid #D0C4B0` : 'none',
+                      opacity: ended ? 0.85 : 1,
+                    }}>
                       <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
                         {isEditMode && p.role === 'owner' && (
                           <button
@@ -958,22 +966,28 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                         )}
                         <button
                           onClick={() => { if (!isEditMode) onEnterProject(p); }}
-                          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: ended ? '20px 20px 0 0' : 20, background: 'var(--tm-card-bg)', border: `2px solid ${isEditMode && p.role === 'owner' ? '#E76F51' : ended ? '#D0C4B0' : C.creamDark}`, borderBottom: ended ? 'none' : undefined, cursor: isEditMode ? 'default' : 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: ended ? 'none' : C.shadowSm, opacity: ended ? 0.85 : 1 }}>
+                          style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px',
+                            /* When outer div owns the border, don't double-border children */
+                            borderRadius: (ended && !isEditMode) ? 0 : 20,
+                            background: 'var(--tm-card-bg)',
+                            border: (ended && !isEditMode) ? 'none' : `2px solid ${isEditMode && p.role === 'owner' ? '#E76F51' : C.creamDark}`,
+                            cursor: isEditMode ? 'default' : 'pointer', fontFamily: FONT, textAlign: 'left',
+                            boxShadow: (ended && !isEditMode) ? 'none' : C.shadowSm }}>
                           <span style={{ fontSize: 28, flexShrink: 0 }}>{p.emoji}</span>
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</p>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 4, flexWrap: 'wrap' as const }}>
                               <span style={{ fontSize: 10, fontWeight: 700, color: rl.color, background: rl.bg, borderRadius: 6, padding: '2px 8px', whiteSpace: 'nowrap', flexShrink: 0 }}>{rl.label}</span>
                               {ended && <span style={{ fontSize: 10, fontWeight: 700, color: '#8A7060', background: '#EDE8DF', borderRadius: 6, padding: '2px 6px', whiteSpace: 'nowrap', flexShrink: 0 }}>🏁 已結束</span>}
                               {p.startDate && <span style={{ fontSize: 10, color: C.barkLight, whiteSpace: 'nowrap' }}>{p.startDate}{p.endDate ? ` – ${p.endDate}` : ''}</span>}
                             </div>
                           </div>
-                          {!isEditMode && <span style={{ fontSize: 20, color: C.barkLight }}>›</span>}
+                          {!isEditMode && <span style={{ fontSize: 20, color: C.barkLight, flexShrink: 0 }}>›</span>}
                         </button>
                       </div>
-                      {/* Ended trip: archive prompt bar — no shadow (outer wrapper carries it) */}
+                      {/* Ended trip: archive prompt bar — contained by outer overflow:hidden */}
                       {ended && !isEditMode && (
-                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--tm-section-bg)', border: `2px solid #D0C4B0`, borderTop: 'none', borderRadius: '0 0 20px 20px', padding: '8px 16px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--tm-section-bg)', borderTop: `1.5px solid #D0C4B0`, padding: '8px 16px' }}>
                           <span style={{ fontSize: 11, color: C.barkLight }}>移至「已結束」區塊？</span>
                           <button onClick={() => archiveProject(p.id)}
                             style={{ fontSize: 11, fontWeight: 700, color: '#8A7060', background: '#EDE8DF', border: 'none', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>

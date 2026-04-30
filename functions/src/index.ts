@@ -1,5 +1,5 @@
 import * as admin from 'firebase-admin';
-import { onDocumentCreated, onDocumentUpdated } from 'firebase-functions/v2/firestore';
+import { onDocumentCreated, onDocumentUpdated, onDocumentWritten } from 'firebase-functions/v2/firestore';
 import { onSchedule } from 'firebase-functions/v2/scheduler';
 import { onCall, HttpsError } from 'firebase-functions/v2/https';
 import { defineSecret } from 'firebase-functions/params';
@@ -964,4 +964,47 @@ export const backupTripToNotion = onCall(
       }),
     };
   }
+);
+
+// ── 8. Proxy grant notification ───────────────────────────────────────────────
+// Triggers when proxyGrants/{grantorUid} is created or updated.
+// Sends a push notification to any member whose UID was newly added to proxyUids.
+export const onProxyGrantChanged = onDocumentWritten(
+  'trips/{tripId}/proxyGrants/{grantorUid}',
+  async (event) => {
+    const before = event.data?.before?.data();
+    const after  = event.data?.after?.data();
+    if (!after) return; // deletion — no notification
+
+    const { tripId, grantorUid } = event.params;
+
+    const prevUids: string[] = before?.proxyUids ?? [];
+    const nextUids: string[] = after.proxyUids   ?? [];
+
+    // Only notify for newly added UIDs (not revocations)
+    const newlyGranted = nextUids.filter(uid => !prevUids.includes(uid));
+    if (newlyGranted.length === 0) return;
+
+    // Look up all members to resolve UIDs → names
+    const membersSnap = await db
+      .collection('trips').doc(tripId)
+      .collection('members').get();
+
+    const allMembers = membersSnap.docs.map(d => ({ ...(d.data() as Record<string, any>) }));
+    const grantor = allMembers.find(m => m.googleUid === grantorUid);
+    const grantorName: string = grantor?.name ?? '旅伴';
+
+    for (const uid of newlyGranted) {
+      const target = allMembers.find(m => m.googleUid === uid);
+      const targetName: string = target?.name;
+      if (!targetName) continue;
+      await notifyMember(
+        tripId,
+        targetName,
+        '🔑 代錄授權通知',
+        `${grantorName} 授權你可以協助代錄私人帳目`,
+        { tag: `proxy-grant-${grantorUid}`, url: '/' },
+      );
+    }
+  },
 );
