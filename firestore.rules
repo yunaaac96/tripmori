@@ -36,6 +36,15 @@ service cloud.firestore {
       return isOwner(tripId) || isEditor(tripId);
     }
 
+    // Check if the current user has been granted proxy recording rights
+    // for the given principal (principalUid is the expense owner's UID).
+    // Keyed by principalUid so the principal controls their own grants.
+    function isAuthorizedProxyFor(tripId, principalUid) {
+      let grantDoc = get(/databases/$(database)/documents/trips/$(tripId)/proxyGrants/$(principalUid));
+      return grantDoc.data != null &&
+             grantDoc.data.get('proxyUids', []).hasAny([request.auth.uid]);
+    }
+
     // ── /trips collection ──────────────────────────────────────────────────
     match /trips/{tripId} {
 
@@ -102,6 +111,15 @@ service cloud.firestore {
         allow write:  if canWrite(tripId);
       }
 
+      // ── /proxyGrants ──────────────────────────────────────────────────────
+      // Keyed by principalUid. Stores proxyUids[] — who can record on behalf
+      // of the principal. Only the principal (or trip owner) can write.
+      match /proxyGrants/{principalUid} {
+        allow read: if canWrite(tripId);
+        allow write: if canWrite(tripId) &&
+          (request.auth.uid == principalUid || isOwner(tripId));
+      }
+
       // ── /expenses ─────────────────────────────────────────────────────────
       // Private expense protection:
       //   list  → allow all authenticated users (needed for onSnapshot collection query)
@@ -109,6 +127,8 @@ service cloud.firestore {
       //   get   → block reading another user's private expense directly by document ID
       //   write → can only create/edit private expenses with own UID as privateOwnerUid
       //           cannot forge another user's private expense
+      //   proxy → an authorized proxy (proxyGrants) may record private expenses on
+      //           behalf of the principal; may only edit/delete what they recorded
       match /expenses/{expenseId} {
 
         // Collection query (onSnapshot): Google-authed only. Anonymous
@@ -121,29 +141,34 @@ service cloud.firestore {
         // Single document read: Google-authed + not someone else's private
         allow get: if isGoogleAuthed() && (
           !resource.data.get('isPrivate', false) ||
-          resource.data.privateOwnerUid == request.auth.uid
+          resource.data.privateOwnerUid == request.auth.uid ||
+          resource.data.get('loggedByUid', null) == request.auth.uid
         );
 
-        // Create: editor/owner, and if private must be own UID (or owner helping another member)
+        // Create: editor/owner; if private, must be own UID, owner, or authorized proxy
         allow create: if canWrite(tripId) && (
           !request.resource.data.get('isPrivate', false) ||
           request.resource.data.privateOwnerUid == request.auth.uid ||
-          isOwner(tripId)
+          isOwner(tripId) ||
+          isAuthorizedProxyFor(tripId, request.resource.data.privateOwnerUid)
         );
 
-        // Update: editor/owner, and cannot change privateOwnerUid to someone else
-        // Exception: trip owner can set private on behalf of any member
+        // Update: editor/owner; proxy can only update what they originally logged
         allow update: if canWrite(tripId) && (
           !request.resource.data.get('isPrivate', false) ||
           request.resource.data.privateOwnerUid == request.auth.uid ||
-          isOwner(tripId)
+          isOwner(tripId) ||
+          (resource.data.get('loggedByUid', null) == request.auth.uid &&
+           isAuthorizedProxyFor(tripId, resource.data.privateOwnerUid))
         );
 
-        // Delete: only if shared expense OR it's your own private expense (or owner)
+        // Delete: proxy can only delete what they originally logged
         allow delete: if canWrite(tripId) && (
           !resource.data.get('isPrivate', false) ||
           resource.data.privateOwnerUid == request.auth.uid ||
-          isOwner(tripId)
+          isOwner(tripId) ||
+          (resource.data.get('loggedByUid', null) == request.auth.uid &&
+           isAuthorizedProxyFor(tripId, resource.data.privateOwnerUid))
         );
       }
     }

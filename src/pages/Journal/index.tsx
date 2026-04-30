@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { C, FONT, cardStyle, inputStyle, btnPrimary, SmartText } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage, faXmark, faChevronLeft, faChevronRight } from '@fortawesome/free-solid-svg-icons';
+import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage, faXmark, faChevronLeft, faChevronRight, faPen } from '@fortawesome/free-solid-svg-icons';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useGoogleUid } from '../../hooks/useAuth';
 import { arrayUnion, arrayRemove } from 'firebase/firestore';
@@ -36,6 +36,7 @@ function MemberAvatar({ name, members, size = 32, fontSize = 14 }: { name: strin
 export default function JournalPage({ journals, members, journalComments, firestore, project, currentUserName: propCurrentUser, hasMoreJournals, onShowMoreJournals }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [saving, setSaving]    = useState(false);
   const [uploading, setUploading] = useState(false);
   const [form, setForm]        = useState({ content: '', date: '', author: '', photos: [] as string[] });
@@ -100,7 +101,14 @@ export default function JournalPage({ journals, members, journalComments, firest
   const isEditorUnbound = !isReadOnly && role === 'editor' && googleUid && !members.some((m: any) => m.googleUid === googleUid);
 
   const openForm = () => {
+    setEditingId(null);
     setForm({ content: '', date: new Date().toISOString().slice(0, 10), author: currentUser, photos: [] });
+    setShowForm(true);
+  };
+
+  const openEdit = (j: any) => {
+    setEditingId(j.id);
+    setForm({ content: j.content || '', date: j.date || '', author: j.authorName || '', photos: j.photos || [] });
     setShowForm(true);
   };
 
@@ -138,15 +146,27 @@ export default function JournalPage({ journals, members, journalComments, firest
     if (!form.content || !authorToSave || !googleUid) return;
     setSaving(true);
     try {
-      await addDoc(collection(db, 'trips', TRIP_ID, 'journals'), {
-        content: form.content, date: form.date || new Date().toISOString().slice(0,10),
-        authorName: authorToSave, photos: form.photos,
-        reactions: {},
-        createdAt: Timestamp.now(),
-      });
-    } catch(e) { console.error(e); }
+      if (editingId) {
+        // Edit mode: update content, date, photos only (never change author)
+        await updateDoc(doc(db, 'trips', TRIP_ID, 'journals', editingId), {
+          content: form.content,
+          date: form.date || new Date().toISOString().slice(0, 10),
+          photos: form.photos,
+          updatedAt: Timestamp.now(),
+        });
+      } else {
+        // Create mode
+        await addDoc(collection(db, 'trips', TRIP_ID, 'journals'), {
+          content: form.content, date: form.date || new Date().toISOString().slice(0,10),
+          authorName: authorToSave, photos: form.photos,
+          reactions: {},
+          createdAt: Timestamp.now(),
+        });
+      }
+    } catch(e) { console.error(e); alert('儲存失敗，請重試'); }
     setSaving(false);
     setShowForm(false);
+    setEditingId(null);
     setForm({ content: '', date: '', author: '', photos: [] });
   };
 
@@ -161,6 +181,7 @@ export default function JournalPage({ journals, members, journalComments, firest
 
   const closeForm = () => {
     setShowForm(false);
+    setEditingId(null);
     setForm({ content: '', date: '', author: '', photos: [] });
   };
 
@@ -275,14 +296,23 @@ export default function JournalPage({ journals, members, journalComments, firest
           onClick={e => { if (e.target === e.currentTarget) closeForm(); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '90vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 }}>
-              <p style={{ fontSize: 17, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={faBook} style={{ fontSize: 14 }} /> 新增日誌</p>
+              <p style={{ fontSize: 17, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}><FontAwesomeIcon icon={editingId ? faPen : faBook} style={{ fontSize: 14 }} /> {editingId ? '編輯日誌' : '新增日誌'}</p>
               <button onClick={closeForm} style={{ background: 'none', border: 'none', fontSize: 18, cursor: 'pointer', color: 'var(--tm-bark-light)', display: 'flex', alignItems: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
             </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {/* 作者 */}
               <div>
                 <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--tm-bark-light)', display: 'block', marginBottom: 6 }}>誰的日誌 *</label>
-                {(googleUid && currentUser) ? (
+                {editingId ? (
+                  /* Edit mode: author is locked */
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: 'var(--tm-input-bg)', border: `1.5px solid var(--tm-cream-dark)` }}>
+                    <MemberAvatar name={form.author} members={members} size={32} fontSize={14} />
+                    <div>
+                      <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>{form.author}</p>
+                      <p style={{ fontSize: 10, color: 'var(--tm-bark-light)', margin: 0, display: 'flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 9 }} /> 編輯時不可更改作者</p>
+                    </div>
+                  </div>
+                ) : (googleUid && currentUser) ? (
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 12, background: C.sage }}>
                     <div style={{ width: 32, height: 32, borderRadius: '50%', background: 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize: 14, color: 'white', flexShrink: 0 }}>
                       {currentUser[0]?.toUpperCase()}
@@ -343,7 +373,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                 <button onClick={closeForm} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid var(--tm-cream-dark)`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.content || !(form.author || currentUser)}
                   style={{ ...btnPrimary(), flex: 2, opacity: saving||!form.content||!(form.author||currentUser)?0.6:1 }}>
-                  {saving ? '儲存中...' : '✓ 新增'}
+                  {saving ? '儲存中...' : editingId ? '✓ 儲存' : '✓ 新增'}
                 </button>
               </div>
             </div>
@@ -408,8 +438,18 @@ export default function JournalPage({ journals, members, journalComments, firest
                         </div>
                       </div>
                       {!isReadOnly && (role === 'owner' || j.authorName === currentUser) && (
-                        <button onClick={() => handleDelete(j.id, j.authorName)}
-                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faTrashCan} /></button>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          {/* 編輯：僅作者本人 */}
+                          {j.authorName === currentUser && (
+                            <button onClick={() => openEdit(j)}
+                              title="編輯日誌"
+                              style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid var(--tm-cream-dark)`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faPen} /></button>
+                          )}
+                          {/* 刪除：作者本人或擁有者 */}
+                          <button onClick={() => handleDelete(j.id, j.authorName)}
+                            title="刪除日誌"
+                            style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faTrashCan} /></button>
+                        </div>
                       )}
                     </div>
                     <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={j.content || ''} /></p>

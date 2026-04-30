@@ -7,7 +7,7 @@ import OnboardingModal from './components/OnboardingModal';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus, faCircleCheck, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus, faCircleCheck, faPlus, faGear } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
 import SchedulePage from './pages/Schedule/index';
@@ -420,6 +420,13 @@ function App() {
   const [members, setMembers]   = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [proxyGrants, setProxyGrants] = useState<any[]>([]);
+  const [adminMode, setAdminMode] = useState(() => sessionStorage.getItem('tm-admin') === '1');
+  const toggleAdminMode = () => setAdminMode(prev => {
+    const next = !prev;
+    next ? sessionStorage.setItem('tm-admin', '1') : sessionStorage.removeItem('tm-admin');
+    return next;
+  });
   const [journals, setJournals] = useState<any[]>([]);
   // Journal pagination — live-subscribe to newest N entries, let user click
   // "載入更多" to grow. Avoids pulling 100+ docs + their photo URLs on every
@@ -686,6 +693,9 @@ function App() {
           unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
             setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
           }, logErr('expenses')));
+          unsubs.push(onSnapshot(collection(tripRef, 'proxyGrants'), snap => {
+            setProxyGrants(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }, logErr('proxyGrants')));
           unsubs.push(onSnapshot(collection(tripRef, 'memberNotes'), snap => {
             const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             setMemberNotes(items);
@@ -698,7 +708,7 @@ function App() {
           }, logErr('journalComments')));
         } else {
           // Clear any stale data from a previous non-visitor session in this tab
-          setExpenses([]); setMemberNotes([]); setJournalComments([]);
+          setExpenses([]); setProxyGrants([]); setMemberNotes([]); setJournalComments([]);
         }
         // ── Watch trip doc: sync title changes + editor revocation + deletion ──
         const currentUid = auth.currentUser?.uid;
@@ -1075,7 +1085,7 @@ function App() {
   if (loading) return <SplashScreen />;
 
   const isReadOnly = activeProject.role === 'visitor';
-  const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly, tripNotifications };
+  const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly, tripNotifications, adminMode: activeProject.role === 'owner' && adminMode };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
@@ -1154,6 +1164,14 @@ function App() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
+              {activeProject.role === 'owner' && (
+                <button onClick={toggleAdminMode}
+                  title={adminMode ? '離開管理模式' : '進入管理模式'}
+                  style={{ fontSize: 11, color: adminMode ? '#E87A30' : C.barkLight, background: adminMode ? '#FEF0E6' : 'none', border: `1px solid ${adminMode ? '#E87A30' : C.creamDark}`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <FontAwesomeIcon icon={faGear} style={{ fontSize: 10 }} />
+                  {adminMode ? '管理中' : '管理'}
+                </button>
+              )}
               <button
                 onClick={() => signOut(auth).catch(console.error)}
                 style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: `1px solid #E8C4C4`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
@@ -1167,12 +1185,26 @@ function App() {
           </div>
         )}
 
+        {/* ── Admin mode banner ── */}
+        {activeProject.role === 'owner' && adminMode && (
+          <div style={{ background: '#E87A30', color: 'white', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FontAwesomeIcon icon={faGear} style={{ fontSize: 11 }} />
+              管理模式 — 顯示管理操作
+            </span>
+            <button onClick={toggleAdminMode}
+              style={{ fontSize: 11, fontWeight: 700, color: 'white', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 8, padding: '2px 10px', cursor: 'pointer', fontFamily: FONT }}>
+              離開
+            </button>
+          </div>
+        )}
+
         {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
+        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} proxyGrants={proxyGrants} firestore={firestore} project={activeProject} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={activeProject} currentUserName={localStorage.getItem('tripmori_current_user') || ''} hasMoreJournals={hasMoreJournals} onShowMoreJournals={showMoreJournals} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
+        {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} proxyGrants={proxyGrants} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
 
         {/* ── Onboarding modal (creator / invitee track) ── */}

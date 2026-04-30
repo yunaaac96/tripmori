@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, ExpandableNotes, SmartText } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
-import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD, buildPersonalStatement } from '../../utils/expenseCalc';
+import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD, buildPersonalStatement, getConfirmedSettlementPairMap, getSettlementBadge } from '../../utils/expenseCalc';
 import type { StatementLineItem } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -204,8 +204,8 @@ function SettlementForm({ memberNames, onAdd, onClose, firestore, projCurrency }
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function ExpensePage({ expenses, members, firestore, project }: any) {
-  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role } = firestore;
+export default function ExpensePage({ expenses, members, proxyGrants = [], firestore, project }: any) {
+  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role, adminMode } = firestore;
   const isVisitor = isReadOnly;
   const isOwner = role === 'owner';
 
@@ -237,6 +237,20 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [expenseView, setExpenseView] = useState<'all' | 'mine'>('all');
   const [hideSettled, setHideSettled] = useState(false);
   const [privateSuggestion, setPrivateSuggestion] = useState(false);
+  // Proxy recording: member name this entry is being recorded on behalf of
+  const [proxyTarget, setProxyTarget] = useState<{ name: string; uid: string } | null>(null);
+
+  // Derive which members have granted proxy rights to the current user
+  const proxyPrincipals: { name: string; uid: string; color: string; avatarUrl?: string }[] = (() => {
+    if (!googleUid) return [];
+    return (proxyGrants as any[])
+      .filter((g: any) => (g.proxyUids || []).includes(googleUid))
+      .map((g: any) => {
+        const m = (members as any[]).find((mb: any) => mb.googleUid === g.id);
+        return m ? { name: m.name, uid: g.id, color: m.color, avatarUrl: m.avatarUrl } : null;
+      })
+      .filter(Boolean) as any[];
+  })();
 
   // Pie chart — auto-expand for visitors
   const [showPie, setShowPie] = useState(false);
@@ -383,6 +397,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     setForm({ ...defaultForm });
     setEditingId(null);
     setPrivateSuggestion(false);
+    setProxyTarget(null);
   };
 
   const openEdit = (e: any) => {
@@ -412,6 +427,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     });
     setEditingId(e.id);
     setShowForm(true);
+    // Restore proxy context when editing a proxy-recorded expense
+    if (googleUid && e.loggedByUid === googleUid && e.privateOwnerUid && e.privateOwnerUid !== googleUid) {
+      const principalMember = (members as any[]).find((m: any) => m.googleUid === e.privateOwnerUid);
+      if (principalMember) setProxyTarget({ name: principalMember.name, uid: e.privateOwnerUid });
+    } else {
+      setProxyTarget(null);
+    }
   };
 
   // ── Computed values ──────────────────────────────────────────────────────
@@ -502,16 +524,19 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       receiptUrl: form.receiptUrl || '',
       isPrivate: form.isPrivate || false,
       privateOwnerUid: form.isPrivate
-        ? (() => {
+        ? (proxyTarget ? proxyTarget.uid : (() => {
             const payerMember = (members as any[]).find((m: any) => m.name === form.payer);
             return payerMember?.googleUid || googleUid || null;
-          })()
+          })())
         : null,
       isIncome: form.isIncome || false,
       // Cross-currency bookkeeping
       exchangeRate: formExRate && formExRate > 0 ? formExRate : null,
       cardFeePercent: isForeignCard ? cardFee : null,
       awaitCardStatement: isForeignCard && form.awaitCardStatement ? true : false,
+      // Proxy recording traceability
+      loggedByUid: proxyTarget ? (googleUid || null) : null,
+      loggedByName: proxyTarget ? (currentUserName || null) : null,
     };
 
     try {
@@ -532,19 +557,35 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     closeForm();
   };
 
-  const canEditExpense = (e: any) =>
-    !isReadOnly && e.category !== 'settlement' && !e.settledAt && !e.receivedAt;
+  const canEditExpense = (e: any) => {
+    if (isReadOnly || e.category === 'settlement') return false;
+    if (e.settledAt || e.receivedAt) return false;
+    if (currentUserName) {
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap);
+      if (badge !== 'none') return false;
+    }
+    if (e.isPrivate) {
+      // Private: principal, proxy who recorded it, or owner
+      if (isOwner) return true;
+      if (googleUid && e.privateOwnerUid === googleUid) return true;
+      if (googleUid && e.loggedByUid === googleUid) return true;
+      return false;
+    }
+    return true;
+  };
 
   const canDeleteExpense = (e: any) => {
     if (isReadOnly) return false;
-    // Regular settled expenses are locked — delete the settlement record to undo
-    if (e.category !== 'settlement' && (e.settledAt || e.receivedAt)) return false;
     if (e.category === 'settlement') {
-      // Only parties involved (payer or receiver) or owner can delete settlements
       const parties = [e.payer, ...(e.splitWith || [])];
       return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
     }
-    return isOwner || (currentUserName && e.createdBy === currentUserName);
+    if (e.settledAt || e.receivedAt) return false;
+    if (e.isPrivate) {
+      return isOwner ||
+        !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
+    }
+    return isOwner || !!(currentUserName);
   };
 
   const handleDelete = async (id: string, expense: any) => {
@@ -600,58 +641,64 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
   };
 
-  const handleQuickSettle = async (from: string, to: string, amount: number) => {
+  // Phase 1: debtor initiates — creates a pending settlement record.
+  // Individual expenses are NOT stamped; Method B derives status from the record.
+  const handleDebtorPay = async (from: string, to: string, amount: number) => {
+    if (isReadOnly) return;
     const key = `${from}-${to}`;
     setSettlingId(key);
-    // 1. Record the settlement expense and capture its doc ID
-    const settlementRef = await (async () => {
-      const amt = amount;
-      const payload = {
+    const today = new Date().toISOString().slice(0, 10);
+    await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
+      description: '結清款項',
+      amount, currency: 'TWD', amountTWD: amount,
+      category: 'settlement',
+      payer: from,
+      paymentMethod: 'cash',
+      splitMode: 'equal',
+      splitWith: [to],
+      percentages: {}, customAmounts: {}, subItems: [],
+      date: today,
+      notes: `${from} → ${to}`,
+      status: 'pending',
+      paidAt: today,
+      createdAt: Timestamp.now(),
+    });
+    setSettlingId(null);
+  };
+
+  // Phase 2: creditor confirms — updates pending → confirmed, or creates confirmed directly.
+  // No individual expense stamping; badge state is derived from the confirmed record.
+  const handleCreditorConfirm = async (
+    pendingId: string | null,
+    from: string,
+    to: string,
+    amount: number,
+  ) => {
+    if (isReadOnly) return;
+    const key = `${from}-${to}`;
+    setSettlingId(key);
+    const today = new Date().toISOString().slice(0, 10);
+    if (pendingId) {
+      await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', pendingId), {
+        status: 'confirmed',
+        confirmedAt: today,
+      });
+    } else {
+      await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
         description: '結清款項',
-        amount: amt, currency: 'TWD', amountTWD: amt,
+        amount, currency: 'TWD', amountTWD: amount,
         category: 'settlement',
         payer: from,
         paymentMethod: 'cash',
         splitMode: 'equal',
         splitWith: [to],
         percentages: {}, customAmounts: {}, subItems: [],
-        date: new Date().toISOString().slice(0, 10),
+        date: today,
         notes: `${from} → ${to}`,
+        status: 'confirmed',
+        confirmedAt: today,
         createdAt: Timestamp.now(),
-      };
-      return addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
-    })();
-    // 2. Batch-mark all outstanding expenses: creditor (to) paid, debtor (from) has a share
-    const today = new Date().toISOString().slice(0, 10);
-    const toMark = (expenses as any[]).filter((e: any) => {
-      if (e.category === 'settlement' || e.isPrivate || e.settledAt) return false;
-      if (e.payer !== to) return false;
-      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-      return sw.includes(from);
-    });
-    if (toMark.length > 0) {
-      await Promise.all(toMark.map((e: any) =>
-        updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
-          settledAt: today,
-          settledByRef: settlementRef.id,
-        })
-      ));
-    }
-    // 3. Symmetric: mark the debtor's (from) own expenses where creditor (to) is a co-payer
-    //    → receivedAt means "代墊方已收回這筆帳"
-    const toReceive = (expenses as any[]).filter((e: any) => {
-      if (e.category === 'settlement' || e.isPrivate || e.receivedAt) return false;
-      if (e.payer !== from) return false;
-      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-      return sw.includes(to);
-    });
-    if (toReceive.length > 0) {
-      await Promise.all(toReceive.map((e: any) =>
-        updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
-          receivedAt: today,
-          settledByRef: settlementRef.id,
-        })
-      ));
+      });
     }
     setSettlingId(null);
   };
@@ -778,6 +825,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const memberStats = computeMemberStats(expenses, memberNames);
   const settlements = computeSettlements(memberStats);
 
+  // Method B: per-pair settlement state derived from settlement records (not individual stamps)
+  const confirmedPairMap = getConfirmedSettlementPairMap(expenses as any[]);
+
   // ── Member card order ────────────────────────────────────────────────────
   // Owner can reorder; editors see own card first then rest
   const memberOrder: string[] = project?.memberOrder || memberNames;
@@ -878,7 +928,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   // the same second / identical amount don't flip positions on re-render.
   const filteredExpenses = baseExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
-    .filter((e: any) => !hideSettled || (!e.settledAt && !e.receivedAt) || e.category === 'settlement')
+    .filter((e: any) => {
+      if (!hideSettled) return true;
+      if (e.category === 'settlement') return true;
+      if (!currentUserName) return true;
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap);
+      return badge === 'none';
+    })
     .sort((a: any, b: any) => {
       const tieBreak = String(a.id || '').localeCompare(String(b.id || ''));
       if (sortMode === 'newest') {
@@ -1523,47 +1579,39 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         const t = settlementDeleteTarget;
         const payer: string = t.payer || '';
         const receiver: string = (t.splitWith && t.splitWith[0]) || '';
-        const parties = [payer, receiver].filter(Boolean);
         const linkedCount = (expenses as any[]).filter((e: any) => e.settledByRef === t.id).length;
-        const inputTrimmed = settlementDeleteInput.trim();
-        const isConfirmed = parties.some(p => p === inputTrimmed);
+        const isPending = t.status === 'pending';
         return (
           <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 500 }}>
             <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: '#9A3A3A', margin: '0 0 6px' }}>
-                <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />撤銷結清
+                <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />{isPending ? '取消待確認款項' : '撤銷結清'}
               </p>
               <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 16px', lineHeight: 1.6 }}>
-                刪除後將撤銷此次結算，並清除 {linkedCount} 筆費用的結清標記。
+                {isPending
+                  ? '刪除後將取消此筆待確認款項。'
+                  : linkedCount > 0
+                    ? `刪除後將撤銷此次結算，並清除 ${linkedCount} 筆費用的結清標記。`
+                    : '刪除後將撤銷此次結算。'
+                }
               </p>
-              <div style={{ background: 'var(--tm-section-bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 16, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ background: 'var(--tm-section-bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 20, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                 <span style={{ fontSize: 13, color: C.bark, fontWeight: 600 }}>{payer} → {receiver}</span>
                 <span style={{ fontSize: 14, fontWeight: 700, color: '#9A3A3A' }}>NT$ {(t.amountTWD || t.amount || 0).toLocaleString()}</span>
               </div>
-              <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>
-                輸入 <strong style={{ color: C.bark }}>{payer}</strong> 或 <strong style={{ color: C.bark }}>{receiver}</strong> 以確認
-              </label>
-              <input
-                style={{ ...inputStyle, fontSize: 15, marginBottom: 14 }}
-                placeholder="輸入付款方或收款方名稱"
-                value={settlementDeleteInput}
-                onChange={e => setSettlementDeleteInput(e.target.value)}
-                autoFocus
-              />
               <div style={{ display: 'flex', gap: 8 }}>
                 <button onClick={() => setSettlementDeleteTarget(null)}
                   style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
                   取消
                 </button>
                 <button
-                  disabled={!isConfirmed}
                   onClick={async () => {
                     await handleDelete(t.id, t);
                     setSettlementDeleteTarget(null);
                     setSettlementDeleteInput('');
                   }}
-                  style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: isConfirmed ? '#9A3A3A' : '#E0C0C0', color: 'white', fontWeight: 700, cursor: isConfirmed ? 'pointer' : 'default', fontFamily: FONT, fontSize: 14 }}>
-                  確認撤銷結清
+                  style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: '#9A3A3A', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  {isPending ? '確認取消' : '確認撤銷結清'}
                 </button>
               </div>
             </div>
@@ -1587,7 +1635,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '93vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: proxyTarget ? 10 : 16 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
                 {editingId
                   ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 12, marginRight: 6 }} />修改{form.isIncome ? '收入' : '支出'}</>
@@ -1595,9 +1643,53 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     ? <><FontAwesomeIcon icon={faCoins} style={{ fontSize: 13, marginRight: 6, color: '#4A8A4A' }} />新增收入</>
                     : <><FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 12, marginRight: 6 }} />新增支出</>}
               </p>
-              <button onClick={closeForm}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* "替夥伴記帳" trigger — shown only when not in edit mode and has proxy grants */}
+                {!editingId && proxyPrincipals.length > 0 && !proxyTarget && (
+                  <button
+                    onClick={() => {
+                      const p = proxyPrincipals[0];
+                      setProxyTarget(p);
+                      setForm(prev => ({ ...prev, isPrivate: true, payer: p.name, splitWith: [p.name] }));
+                    }}
+                    style={{ fontSize: 11, fontWeight: 700, color: '#5A4A9A', background: '#EDE8FF', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                    <FontAwesomeIcon icon={faUserShield} style={{ fontSize: 10 }} />替夥伴記帳
+                  </button>
+                )}
+                <button onClick={closeForm}
+                  style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              </div>
             </div>
+
+            {/* ── Proxy mode banner — always visible when proxyTarget is set ── */}
+            {proxyTarget && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EDE8FF', borderRadius: 12, padding: '10px 14px', marginBottom: 14, border: '1.5px solid #B8A8F0' }}>
+                <FontAwesomeIcon icon={faUserShield} style={{ fontSize: 14, color: '#5A4A9A', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: '#5A4A9A', margin: 0 }}>
+                    現在記給：<strong>{proxyTarget.name}</strong>
+                  </p>
+                  <p style={{ fontSize: 11, color: '#8A7ABE', margin: '1px 0 0' }}>此筆帳目將歸屬於 {proxyTarget.name} 的私人支出</p>
+                </div>
+                {proxyPrincipals.length > 1 && (
+                  <select
+                    value={proxyTarget.uid}
+                    onChange={e => {
+                      const p = proxyPrincipals.find(x => x.uid === e.target.value);
+                      if (p) {
+                        setProxyTarget(p);
+                        setForm(prev => ({ ...prev, payer: p.name, splitWith: [p.name] }));
+                      }
+                    }}
+                    style={{ fontSize: 12, border: `1px solid #B8A8F0`, borderRadius: 8, padding: '4px 8px', background: 'white', color: '#5A4A9A', fontFamily: FONT, cursor: 'pointer' }}>
+                    {proxyPrincipals.map(p => <option key={p.uid} value={p.uid}>{p.name}</option>)}
+                  </select>
+                )}
+                <button
+                  onClick={() => { setProxyTarget(null); setForm(prev => ({ ...prev, isPrivate: false, payer: currentUserName || '', splitWith: [] })); }}
+                  style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: '#8A7ABE', flexShrink: 0, padding: 2 }}>✕</button>
+              </div>
+            )}
 
             {/* 支出 / 收入 toggle */}
             {!editingId && (
@@ -2149,7 +2241,17 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {debts.map((debt, i) => {
                       const sKey = `${debt.from}-${debt.to}`;
+                      const pairKey = `${debt.from}→${debt.to}`;
                       const isMe = debt.from === currentUserName;
+                      const isCreditorViewer = debt.to === currentUserName;
+                      const isOwnerAction = adminMode && !isMe && !isCreditorViewer;
+                      const isProcessing = settlingId === sKey;
+                      // Find pending settlement for this pair
+                      const pendingEntry = (expenses as any[]).find((e: any) =>
+                        e.category === 'settlement' && e.status === 'pending' &&
+                        e.payer === debt.from && e.splitWith?.[0] === debt.to
+                      );
+                      const isConfirmedPair = confirmedPairMap.has(pairKey);
                       return (
                         <div key={i} className="tm-settlement-debt-row" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', borderRadius: 10, padding: '8px 10px' }}>
                           <div style={{ width: 26, height: 26, borderRadius: '50%', background: getMemberColor(debt.from), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
@@ -2164,15 +2266,42 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                             </p>
                             <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
                           </div>
-                          {!isReadOnly && (isOwner || (currentUserName && (currentUserName === debt.from || currentUserName === debt.to))) && (
-                            <button
-                              onClick={() => handleQuickSettle(debt.from, debt.to, debt.amount)}
-                              disabled={settlingId === sKey}
-                              className="tm-settle-confirm-btn"
-                              style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: settlingId === sKey ? C.creamDark : '#4A7A35', color: settlingId === sKey ? C.barkLight : 'white', fontSize: 11, fontWeight: 700, cursor: settlingId === sKey ? 'default' : 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                              {settlingId === sKey ? '處理中...' : '✓ 確認還款'}
-                            </button>
-                          )}
+                          {/* Role-based buttons */}
+                          {!isReadOnly && !isConfirmedPair && (() => {
+                            if (isProcessing) {
+                              return <span style={{ flexShrink: 0, fontSize: 11, color: C.barkLight, fontWeight: 600, padding: '5px 8px' }}>處理中...</span>;
+                            }
+                            // Debtor: I owe this creditor
+                            if (isMe) {
+                              if (pendingEntry) {
+                                return (
+                                  <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>
+                                    等待收款確認
+                                  </span>
+                                );
+                              }
+                              return (
+                                <button
+                                  onClick={() => handleDebtorPay(debt.from, debt.to, debt.amount)}
+                                  className="tm-settle-confirm-btn"
+                                  style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                  確認已付
+                                </button>
+                              );
+                            }
+                            // Creditor or owner: can confirm receipt
+                            if (isCreditorViewer || isOwnerAction) {
+                              return (
+                                <button
+                                  onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, debt.from, debt.to, debt.amount)}
+                                  className="tm-settle-confirm-btn"
+                                  style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: pendingEntry ? '#4A7A35' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                  {pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                </button>
+                              );
+                            }
+                            return null;
+                          })()}
                         </div>
                       );
                     })}
@@ -2267,8 +2396,10 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                 {sortLabels[sortMode]}
               </button>
             </div>
-            {/* 剔除已結清 toggle — only shown if any settled expense exists */}
-            {(expenses as any[]).some((e: any) => e.settledAt || e.receivedAt) && (
+            {/* 剔除已結清 toggle — only shown if any expense is settled from viewer's perspective */}
+            {currentUserName && (expenses as any[]).some((e: any) =>
+              e.category !== 'settlement' && getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap) !== 'none'
+            ) && (
               <button
                 onClick={() => setHideSettled(v => !v)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${hideSettled ? C.sageDark : C.creamDark}`, background: hideSettled ? '#EAF3DE' : 'var(--tm-card-bg)', color: hideSettled ? C.sageDark : C.barkLight, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
@@ -2322,7 +2453,9 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                           <span className="tm-badge-private" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} /> 私人</span>
                         )}
                         {isSettlement ? (
-                          <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
+                          e.status === 'pending'
+                            ? <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF3CC', color: '#9A6800' }}>待確認</span>
+                            : <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
                         ) : isIncome ? (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faCoins} style={{ fontSize: 8 }} />收入</span>
                         ) : !isPrivateExpense && (
@@ -2357,21 +2490,32 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                           ? `${e.payer} 代收 · ${e.splitWith && e.splitWith.length === 1 ? `${e.splitWith[0]} 受益` : '全體均分'}`
                           : `${e.payer} 付款`
                         } · {e.date || ''}
+                        {e.loggedByName && e.loggedByName !== e.payer && (
+                          <span style={{ marginLeft: 4, color: '#8A7ABE', fontWeight: 600 }}>
+                            · 由 {e.loggedByName} 代錄
+                          </span>
+                        )}
                       </p>
                       {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
                           {splitModeLabel(e)}
                           {e.notes ? <> · <SmartText text={e.notes} /></> : ''}
-                          {e.settledAt && (
-                            <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
-                              <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已結清
-                            </span>
-                          )}
-                          {!e.settledAt && e.receivedAt && (
-                            <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
-                              <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已收回
-                            </span>
-                          )}
+                          {(() => {
+                            const badge = currentUserName
+                              ? getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap)
+                              : 'none';
+                            if (badge === 'settled') return (
+                              <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
+                                <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已結清
+                              </span>
+                            );
+                            if (badge === 'received') return (
+                              <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
+                                <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已收回
+                              </span>
+                            );
+                            return null;
+                          })()}
                         </p>
                       )}
                       {isSettlement && e.notes && (
@@ -2407,14 +2551,14 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                             </button>
                           )}
                           {/* 補實際金額 — foreign-card expense, whether awaiting or already estimated */}
-                          {!isSettlement && isForeignCard && !e.settledAt && !e.receivedAt && (
+                          {!isSettlement && isForeignCard && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap) !== 'none') && (
                             <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faReceipt} />
                             </button>
                           )}
                           {/* 補記差額 — only for shared (non-settlement, non-private, non-settled) rows */}
-                          {!isSettlement && !isPrivateExpense && !isAdjustment && !e.settledAt && !e.receivedAt && (
+                          {!isSettlement && !isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap) !== 'none') && (
                             <button onClick={() => openAdjustForm(e)} title="補記差額"
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faArrowRightArrowLeft} />

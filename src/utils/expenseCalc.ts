@@ -112,6 +112,13 @@ export interface Expense {
   settledByRef?: string | null;
   /** ISO date when the payer confirmed they received repayment for this expense. */
   receivedAt?: string;
+  // Two-phase settlement status (only on category==='settlement' records)
+  // Absent = legacy confirmed (backward compat)
+  status?: 'pending' | 'confirmed';
+  /** ISO date when debtor marked as paid (pending phase). */
+  paidAt?: string;
+  /** ISO date when creditor confirmed receipt (confirmed phase). */
+  confirmedAt?: string;
 }
 
 // ── Resolve effective TWD ────────────────────────────────────────────────────
@@ -210,7 +217,12 @@ export const computeMemberStats = (
 ): MemberStat[] => {
   // Exclude expenses that are waiting on a credit-card statement — the real
   // TWD isn't known yet, so counting them would inflate / misstate balances.
-  const active = expenses.filter(e => !e.awaitCardStatement);
+  // Also exclude pending settlement records (debtor claimed paid, creditor not yet confirmed)
+  // so that suggestion amounts remain correct until both parties confirm.
+  const active = expenses.filter(e =>
+    !e.awaitCardStatement &&
+    !(e.category === 'settlement' && e.status === 'pending'),
+  );
 
   // Settlements received: payer=A, splitWith=[B] means B received money from A
   const settlementsReceivedByName: Record<string, number> = {};
@@ -431,4 +443,63 @@ export const buildPersonalStatement = (
       myPayments.some(i => i.awaitCardStatement) ||
       myShares.some(i => i.awaitCardStatement),
   };
+};
+
+// ── Settlement pair helpers (Method B) ────────────────────────────────────────
+
+/**
+ * Build a map of confirmed settlement pairs from the expense list.
+ * Key: "debtor→creditor", Value: confirmed date (ISO string).
+ * Records without a `status` field are treated as confirmed (backward compat).
+ * Only the most recent date per pair is kept.
+ */
+export const getConfirmedSettlementPairMap = (expenses: Expense[]): Map<string, string> => {
+  const map = new Map<string, string>();
+  expenses.forEach(e => {
+    if (e.category !== 'settlement') return;
+    if (e.status === 'pending') return;
+    const to = e.splitWith?.[0];
+    if (!e.payer || !to) return;
+    const key = `${e.payer}→${to}`;
+    const date = e.confirmedAt || e.date || '';
+    if (!map.has(key) || date > (map.get(key) ?? '')) {
+      map.set(key, date);
+    }
+  });
+  return map;
+};
+
+/**
+ * Returns the settlement badge state for an expense from a specific viewer's perspective.
+ * 'settled'  → viewer is a debtor for this expense and their pair is confirmed
+ * 'received' → viewer is the payer (creditor) and all debtors' pairs are confirmed
+ * 'none'     → no confirmed settlement covers this viewer's pair
+ *
+ * Checks both legacy stamp fields (settledAt / receivedAt) for backward compatibility
+ * and the new per-pair confirmed settlement map.
+ */
+export const getSettlementBadge = (
+  e: Expense,
+  viewerName: string,
+  memberNames: string[],
+  confirmedPairMap: Map<string, string>,
+): 'settled' | 'received' | 'none' => {
+  const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+
+  // Viewer is a debtor for this expense (in splitWith, not the payer)
+  if (e.payer !== viewerName && sw.includes(viewerName)) {
+    if (e.settledAt) return 'settled';  // legacy stamp
+    if (confirmedPairMap.has(`${viewerName}→${e.payer}`)) return 'settled';
+  }
+
+  // Viewer is the payer (creditor): show 'received' when all debtors confirmed
+  if (e.payer === viewerName) {
+    if (e.receivedAt) return 'received';  // legacy stamp
+    const debtors = sw.filter(n => n !== viewerName);
+    if (debtors.length > 0 && debtors.every(d => confirmedPairMap.has(`${d}→${viewerName}`))) {
+      return 'received';
+    }
+  }
+
+  return 'none';
 };
