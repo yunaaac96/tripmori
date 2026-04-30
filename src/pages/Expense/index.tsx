@@ -321,15 +321,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   // Compute the effective exchange rate for display on expense cards.
   // Priority: actualTWD (card statement) > amountTWD (recorded) > exchangeRate field > CURRENCY_TO_TWD table.
+  // Returns null for TWD or unknown currency — never falls back to a different currency.
   const getDisplayRate = (e: any): number | null => {
-    const cur = e.currency || 'JPY';
-    if (cur === 'TWD') return null;
+    const cur = e.currency;
+    if (!cur || cur === 'TWD') return null;
     const amt = e.amount || 0;
     if (amt <= 0) return null;
     if (e.actualTWD != null && e.actualTWD > 0) return e.actualTWD / amt;
     if (e.amountTWD != null && e.amountTWD > 0) return e.amountTWD / amt;
     if (e.exchangeRate != null && e.exchangeRate > 0) return e.exchangeRate;
-    return CURRENCY_TO_TWD[cur] ?? null;
+    return null; // no recorded rate — don't fall back to hardcoded table
   };
   const fmtRate = (r: number): string => {
     if (r >= 100) return r.toFixed(0);
@@ -1073,7 +1074,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 </div>
                 <div>
                   <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>匯率（1 {payModalCur} = __ TWD）</p>
-                  <input type="number" inputMode="decimal" placeholder={`例：${fmtRate(CURRENCY_TO_TWD[payModalCur] ?? 1)}`} value={payModalRate}
+                  <input type="number" inputMode="decimal" placeholder="例：0.22" value={payModalRate}
                     onChange={e => setPayModalRate(e.target.value)}
                     style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
                 </div>
@@ -2397,7 +2398,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               }
                               return (
                                 <button
-                                  onClick={() => { setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount }); setPayModalForeign(false); setPayModalCur('JPY'); setPayModalAmt(''); setPayModalRate(''); }}
+                                  onClick={() => { setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount }); setPayModalForeign(false); setPayModalCur(projCurrency && projCurrency !== 'TWD' ? projCurrency : 'JPY'); setPayModalAmt(''); setPayModalRate(''); }}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                                   確認已付
