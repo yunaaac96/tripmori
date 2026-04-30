@@ -439,9 +439,13 @@ export default function JournalPage({ journals, members, journalComments, firest
                       </div>
                       {!isReadOnly && (role === 'owner' || j.authorName === currentUser) && (
                         <div style={{ display: 'flex', gap: 6 }}>
-                          <button onClick={() => openEdit(j)}
-                            title="編輯日誌"
-                            style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid var(--tm-cream-dark)`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faPen} /></button>
+                          {/* 編輯：僅作者本人 */}
+                          {j.authorName === currentUser && (
+                            <button onClick={() => openEdit(j)}
+                              title="編輯日誌"
+                              style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid var(--tm-cream-dark)`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faPen} /></button>
+                          )}
+                          {/* 刪除：作者本人或擁有者 */}
                           <button onClick={() => handleDelete(j.id, j.authorName)}
                             title="刪除日誌"
                             style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faTrashCan} /></button>
