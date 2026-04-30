@@ -1359,10 +1359,20 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
               {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
               {(() => {
-                // Show only: paid by someone else + not yet settled
-                const unpaidShares = stmt.myShares.filter(item =>
-                  item.payer !== name && !item.settledAt
-                );
+                // Show only: paid by someone else + not covered by a confirmed settlement.
+                // Method A: respects the legacy per-expense `settledAt` stamp.
+                // Method B: an expense is considered settled if a confirmed settlement for
+                //   this pair (name→payer) exists AND the expense date ≤ settlement date.
+                //   Only expenses created *after* the latest settlement are shown.
+                const unpaidShares = stmt.myShares.filter(item => {
+                  if (item.payer === name) return false;
+                  if (item.settledAt) return false; // legacy Method A stamp
+                  const pairKey = `${name}→${item.payer}`;
+                  const settledDate = confirmedPairMap.get(pairKey);
+                  if (!settledDate) return true; // no settlement yet → show
+                  // Show only expenses newer than the settlement date
+                  return (item.date || '') > settledDate;
+                });
                 const unpaidTotal = unpaidShares.reduce((sum, item) => sum + (item.myShare || 0), 0);
                 if (unpaidShares.length === 0) return null;
                 return (
