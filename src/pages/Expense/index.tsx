@@ -205,7 +205,7 @@ function SettlementForm({ memberNames, onAdd, onClose, firestore, projCurrency }
 
 // ── Main Component ─────────────────────────────────────────────────────────
 export default function ExpensePage({ expenses, members, proxyGrants = [], firestore, project }: any) {
-  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role } = firestore;
+  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role, adminMode } = firestore;
   const isVisitor = isReadOnly;
   const isOwner = role === 'owner';
 
@@ -2244,7 +2244,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       const pairKey = `${debt.from}→${debt.to}`;
                       const isMe = debt.from === currentUserName;
                       const isCreditorViewer = debt.to === currentUserName;
-                      const isOwnerAction = isOwner && !isMe && !isCreditorViewer;
+                      const isOwnerAction = adminMode && !isMe && !isCreditorViewer;
                       const isProcessing = settlingId === sKey;
                       // Find pending settlement for this pair
                       const pendingEntry = (expenses as any[]).find((e: any) =>

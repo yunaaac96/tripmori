@@ -87,7 +87,7 @@ const FALLBACK_CLIMATE: WeatherDay = {
 };
 
 export default function SchedulePage({ events, members = [], project, firestore, onProjectUpdate }: { events: any[]; members: any[]; project: any; firestore: any; onProjectUpdate?: (p: any) => void }) {
-  const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role } = firestore;
+  const { db, TRIP_ID, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, isReadOnly, role, adminMode } = firestore;
   const isOwner = role === 'owner';
 
   const TRIP_DATES = buildTripDates(project?.startDate || '2026-04-23', project?.endDate || '2026-04-26');
@@ -1217,7 +1217,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
       )}
 
       <PageHeader title={project?.title || '行程'} subtitle={project?.description || undefined} emoji={project?.emoji || '✈️'} color={C.sage} className="tm-hero-page-sage">
-        {firestore.role === 'owner' && (
+        {adminMode && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 8 }}>
             <button onClick={openMetaEdit} style={{ fontSize: 11, fontWeight: 700, color: 'rgba(255,255,255,0.85)', background: 'rgba(255,255,255,0.18)', border: '1px solid rgba(255,255,255,0.35)', borderRadius: 8, padding: '4px 12px', cursor: 'pointer', fontFamily: FONT }}>
               <FontAwesomeIcon icon={faPen} style={{ fontSize: 10, marginRight: 4 }} />編輯旅行設定

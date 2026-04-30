@@ -7,7 +7,7 @@ import OnboardingModal from './components/OnboardingModal';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus, faCircleCheck, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus, faCircleCheck, faPlus, faGear } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
 import SchedulePage from './pages/Schedule/index';
@@ -421,6 +421,12 @@ function App() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [proxyGrants, setProxyGrants] = useState<any[]>([]);
+  const [adminMode, setAdminMode] = useState(() => sessionStorage.getItem('tm-admin') === '1');
+  const toggleAdminMode = () => setAdminMode(prev => {
+    const next = !prev;
+    next ? sessionStorage.setItem('tm-admin', '1') : sessionStorage.removeItem('tm-admin');
+    return next;
+  });
   const [journals, setJournals] = useState<any[]>([]);
   // Journal pagination — live-subscribe to newest N entries, let user click
   // "載入更多" to grow. Avoids pulling 100+ docs + their photo URLs on every
@@ -1079,7 +1085,7 @@ function App() {
   if (loading) return <SplashScreen />;
 
   const isReadOnly = activeProject.role === 'visitor';
-  const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly, tripNotifications };
+  const firestore = { db, TRIP_ID: activeTripId, Timestamp, addDoc, updateDoc, deleteDoc, collection, doc, role: activeProject.role, isReadOnly, tripNotifications, adminMode: activeProject.role === 'owner' && adminMode };
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
@@ -1158,6 +1164,14 @@ function App() {
               </span>
             </div>
             <div style={{ display: 'flex', gap: 6 }}>
+              {activeProject.role === 'owner' && (
+                <button onClick={toggleAdminMode}
+                  title={adminMode ? '離開管理模式' : '進入管理模式'}
+                  style={{ fontSize: 11, color: adminMode ? '#E87A30' : C.barkLight, background: adminMode ? '#FEF0E6' : 'none', border: `1px solid ${adminMode ? '#E87A30' : C.creamDark}`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  <FontAwesomeIcon icon={faGear} style={{ fontSize: 10 }} />
+                  {adminMode ? '管理中' : '管理'}
+                </button>
+              )}
               <button
                 onClick={() => signOut(auth).catch(console.error)}
                 style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: `1px solid #E8C4C4`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
@@ -1168,6 +1182,20 @@ function App() {
                 切換
               </button>
             </div>
+          </div>
+        )}
+
+        {/* ── Admin mode banner ── */}
+        {activeProject.role === 'owner' && adminMode && (
+          <div style={{ background: '#E87A30', color: 'white', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <FontAwesomeIcon icon={faGear} style={{ fontSize: 11 }} />
+              管理模式 — 顯示管理操作
+            </span>
+            <button onClick={toggleAdminMode}
+              style={{ fontSize: 11, fontWeight: 700, color: 'white', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 8, padding: '2px 10px', cursor: 'pointer', fontFamily: FONT }}>
+              離開
+            </button>
           </div>
         )}
 

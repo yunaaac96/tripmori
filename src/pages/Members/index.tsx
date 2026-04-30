@@ -23,7 +23,7 @@ const LS_USER_KEY   = 'tripmori_current_user';
 const NOTE_COLORS = ['var(--tm-note-1)', 'var(--tm-note-2)', 'var(--tm-note-3)', 'var(--tm-note-4)', 'var(--tm-note-5)', 'var(--tm-note-6)'];
 
 export default function MembersPage({ members, memberNotes, proxyGrants = [], project, firestore, pwaInstallAvailable, onPwaInstall }: any) {
-  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, updateDoc, collection, doc, isReadOnly } = firestore;
+  const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, updateDoc, collection, doc, isReadOnly, adminMode } = firestore;
 
   const [showAdd, setShowAdd]           = useState(false);
   const [editTarget, setEditTarget]     = useState<any | null>(null);
@@ -853,8 +853,8 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
         </div>
       )}
 
-      {/* Editor list management (Owner only) */}
-      {firestore.role === 'owner' && allowedEditorUids.length > 0 && (
+      {/* Editor list management (Owner only, admin mode) */}
+      {adminMode && allowedEditorUids.length > 0 && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, boxShadow: C.shadowSm, overflow: 'hidden' }}>
           <button onClick={() => setEditorListOpen(v => !v)}
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
@@ -979,8 +979,8 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
             <div key={m.id} style={{ marginBottom: 16 }}>
               {/* Member info card */}
               <div style={{ background: 'var(--tm-card-bg)', borderRadius: '20px 20px 0 0', padding: '16px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
-                {/* Reorder arrows (owner only, hidden for own pinned card) */}
-                {firestore.role === 'owner' && !isMyCard && (
+                {/* Reorder arrows (admin mode only, hidden for own pinned card) */}
+                {adminMode && !isMyCard && (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2, flexShrink: 0 }}>
                     <button onClick={() => handleMemberReorder(m.id, 'up')} disabled={memberIdx === 0}
                       style={{ width: 22, height: 22, borderRadius: 6, border: 'none', background: memberIdx === 0 ? 'transparent' : C.cream, color: C.barkLight, cursor: memberIdx === 0 ? 'default' : 'pointer', fontSize: 10, display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: memberIdx === 0 ? 0.25 : 1 }}><FontAwesomeIcon icon={faArrowUp} /></button>
@@ -1033,16 +1033,17 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                     </button>
                   )}
                   {/* 解除綁定 + 刪除成員 — 同排顯示 */}
-                  {((m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly) ||
-                    (firestore.role === 'owner' && canEdit && !isMyCard)) && (
+                  {/* 自己的卡：解除綁定永遠顯示；他人的卡：僅管理模式顯示 */}
+                  {((m.googleUid && isMyCard && !firestore.isReadOnly) ||
+                    (adminMode && !isMyCard && (m.googleUid || canEdit))) && (
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                      {m.googleUid && (firestore.role === 'owner' || isMyCard) && !firestore.isReadOnly && (
+                      {m.googleUid && (adminMode || isMyCard) && !firestore.isReadOnly && (
                         <button onClick={() => handleUnbindGoogle(m.id)} className="tm-btn-delete-soft"
                           style={{ fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
                           <FontAwesomeIcon icon={faXmark} style={{ marginRight: 4 }} />解除綁定
                         </button>
                       )}
-                      {firestore.role === 'owner' && canEdit && !isMyCard && (
+                      {adminMode && canEdit && !isMyCard && (
                         <button onClick={() => handleDeleteMember(m.id, m.name)} className="tm-btn-delete-soft"
                           style={{ fontSize: 10, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600 }}>
                           <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 4 }} />刪除成員
