@@ -9,7 +9,7 @@ import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -204,7 +204,7 @@ function SettlementForm({ memberNames, onAdd, onClose, firestore, projCurrency }
 }
 
 // ── Main Component ─────────────────────────────────────────────────────────
-export default function ExpensePage({ expenses, members, firestore, project }: any) {
+export default function ExpensePage({ expenses, members, proxyGrants = [], firestore, project }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, doc, collection, isReadOnly, updateDoc, role } = firestore;
   const isVisitor = isReadOnly;
   const isOwner = role === 'owner';
@@ -237,6 +237,20 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const [expenseView, setExpenseView] = useState<'all' | 'mine'>('all');
   const [hideSettled, setHideSettled] = useState(false);
   const [privateSuggestion, setPrivateSuggestion] = useState(false);
+  // Proxy recording: member name this entry is being recorded on behalf of
+  const [proxyTarget, setProxyTarget] = useState<{ name: string; uid: string } | null>(null);
+
+  // Derive which members have granted proxy rights to the current user
+  const proxyPrincipals: { name: string; uid: string; color: string; avatarUrl?: string }[] = (() => {
+    if (!googleUid) return [];
+    return (proxyGrants as any[])
+      .filter((g: any) => (g.proxyUids || []).includes(googleUid))
+      .map((g: any) => {
+        const m = (members as any[]).find((mb: any) => mb.googleUid === g.id);
+        return m ? { name: m.name, uid: g.id, color: m.color, avatarUrl: m.avatarUrl } : null;
+      })
+      .filter(Boolean) as any[];
+  })();
 
   // Pie chart — auto-expand for visitors
   const [showPie, setShowPie] = useState(false);
@@ -383,6 +397,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     setForm({ ...defaultForm });
     setEditingId(null);
     setPrivateSuggestion(false);
+    setProxyTarget(null);
   };
 
   const openEdit = (e: any) => {
@@ -412,6 +427,13 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
     });
     setEditingId(e.id);
     setShowForm(true);
+    // Restore proxy context when editing a proxy-recorded expense
+    if (googleUid && e.loggedByUid === googleUid && e.privateOwnerUid && e.privateOwnerUid !== googleUid) {
+      const principalMember = (members as any[]).find((m: any) => m.googleUid === e.privateOwnerUid);
+      if (principalMember) setProxyTarget({ name: principalMember.name, uid: e.privateOwnerUid });
+    } else {
+      setProxyTarget(null);
+    }
   };
 
   // ── Computed values ──────────────────────────────────────────────────────
@@ -502,16 +524,19 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
       receiptUrl: form.receiptUrl || '',
       isPrivate: form.isPrivate || false,
       privateOwnerUid: form.isPrivate
-        ? (() => {
+        ? (proxyTarget ? proxyTarget.uid : (() => {
             const payerMember = (members as any[]).find((m: any) => m.name === form.payer);
             return payerMember?.googleUid || googleUid || null;
-          })()
+          })())
         : null,
       isIncome: form.isIncome || false,
       // Cross-currency bookkeeping
       exchangeRate: formExRate && formExRate > 0 ? formExRate : null,
       cardFeePercent: isForeignCard ? cardFee : null,
       awaitCardStatement: isForeignCard && form.awaitCardStatement ? true : false,
+      // Proxy recording traceability
+      loggedByUid: proxyTarget ? (googleUid || null) : null,
+      loggedByName: proxyTarget ? (currentUserName || null) : null,
     };
 
     try {
@@ -534,12 +559,17 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
 
   const canEditExpense = (e: any) => {
     if (isReadOnly || e.category === 'settlement') return false;
-    // Legacy: blocked by old stamp fields
     if (e.settledAt || e.receivedAt) return false;
-    // Method B: blocked if any confirmed pair covers this expense
     if (currentUserName) {
       const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap);
       if (badge !== 'none') return false;
+    }
+    if (e.isPrivate) {
+      // Private: principal, proxy who recorded it, or owner
+      if (isOwner) return true;
+      if (googleUid && e.privateOwnerUid === googleUid) return true;
+      if (googleUid && e.loggedByUid === googleUid) return true;
+      return false;
     }
     return true;
   };
@@ -547,12 +577,14 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
   const canDeleteExpense = (e: any) => {
     if (isReadOnly) return false;
     if (e.category === 'settlement') {
-      // Only parties involved (payer or receiver) or owner can delete settlements
       const parties = [e.payer, ...(e.splitWith || [])];
       return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
     }
-    // Regular expenses: locked if they carry old settlement stamps
     if (e.settledAt || e.receivedAt) return false;
+    if (e.isPrivate) {
+      return isOwner ||
+        !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
+    }
     return isOwner || !!(currentUserName);
   };
 
@@ -1603,7 +1635,7 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, maxHeight: '93vh', overflowY: 'auto', boxSizing: 'border-box' }}>
             {/* Header */}
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: proxyTarget ? 10 : 16 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0 }}>
                 {editingId
                   ? <><FontAwesomeIcon icon={faPen} style={{ fontSize: 12, marginRight: 6 }} />修改{form.isIncome ? '收入' : '支出'}</>
@@ -1611,9 +1643,53 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                     ? <><FontAwesomeIcon icon={faCoins} style={{ fontSize: 13, marginRight: 6, color: '#4A8A4A' }} />新增收入</>
                     : <><FontAwesomeIcon icon={faMoneyBill1} style={{ fontSize: 12, marginRight: 6 }} />新增支出</>}
               </p>
-              <button onClick={closeForm}
-                style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {/* "替夥伴記帳" trigger — shown only when not in edit mode and has proxy grants */}
+                {!editingId && proxyPrincipals.length > 0 && !proxyTarget && (
+                  <button
+                    onClick={() => {
+                      const p = proxyPrincipals[0];
+                      setProxyTarget(p);
+                      setForm(prev => ({ ...prev, isPrivate: true, payer: p.name, splitWith: [p.name] }));
+                    }}
+                    style={{ fontSize: 11, fontWeight: 700, color: '#5A4A9A', background: '#EDE8FF', border: 'none', borderRadius: 8, padding: '5px 10px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5, whiteSpace: 'nowrap' }}>
+                    <FontAwesomeIcon icon={faUserShield} style={{ fontSize: 10 }} />替夥伴記帳
+                  </button>
+                )}
+                <button onClick={closeForm}
+                  style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              </div>
             </div>
+
+            {/* ── Proxy mode banner — always visible when proxyTarget is set ── */}
+            {proxyTarget && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EDE8FF', borderRadius: 12, padding: '10px 14px', marginBottom: 14, border: '1.5px solid #B8A8F0' }}>
+                <FontAwesomeIcon icon={faUserShield} style={{ fontSize: 14, color: '#5A4A9A', flexShrink: 0 }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 12, fontWeight: 700, color: '#5A4A9A', margin: 0 }}>
+                    現在記給：<strong>{proxyTarget.name}</strong>
+                  </p>
+                  <p style={{ fontSize: 11, color: '#8A7ABE', margin: '1px 0 0' }}>此筆帳目將歸屬於 {proxyTarget.name} 的私人支出</p>
+                </div>
+                {proxyPrincipals.length > 1 && (
+                  <select
+                    value={proxyTarget.uid}
+                    onChange={e => {
+                      const p = proxyPrincipals.find(x => x.uid === e.target.value);
+                      if (p) {
+                        setProxyTarget(p);
+                        setForm(prev => ({ ...prev, payer: p.name, splitWith: [p.name] }));
+                      }
+                    }}
+                    style={{ fontSize: 12, border: `1px solid #B8A8F0`, borderRadius: 8, padding: '4px 8px', background: 'white', color: '#5A4A9A', fontFamily: FONT, cursor: 'pointer' }}>
+                    {proxyPrincipals.map(p => <option key={p.uid} value={p.uid}>{p.name}</option>)}
+                  </select>
+                )}
+                <button
+                  onClick={() => { setProxyTarget(null); setForm(prev => ({ ...prev, isPrivate: false, payer: currentUserName || '', splitWith: [] })); }}
+                  style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', color: '#8A7ABE', flexShrink: 0, padding: 2 }}>✕</button>
+              </div>
+            )}
 
             {/* 支出 / 收入 toggle */}
             {!editingId && (
@@ -2414,6 +2490,11 @@ export default function ExpensePage({ expenses, members, firestore, project }: a
                           ? `${e.payer} 代收 · ${e.splitWith && e.splitWith.length === 1 ? `${e.splitWith[0]} 受益` : '全體均分'}`
                           : `${e.payer} 付款`
                         } · {e.date || ''}
+                        {e.loggedByName && e.loggedByName !== e.payer && (
+                          <span style={{ marginLeft: 4, color: '#8A7ABE', fontWeight: 600 }}>
+                            · 由 {e.loggedByName} 代錄
+                          </span>
+                        )}
                       </p>
                       {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>

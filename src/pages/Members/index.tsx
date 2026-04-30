@@ -3,13 +3,13 @@ import { C, FONT } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen } from '@fortawesome/free-solid-svg-icons';
+import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen, faHandshake, faUserShield } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
 import { useGoogleAuth } from '../../hooks/useAuth';
-import { getDoc, setDoc, arrayRemove, updateDoc as _updateDoc, doc as _doc, deleteField, query, where, getDocs, collection as _collection } from 'firebase/firestore';
+import { getDoc, setDoc, arrayRemove, arrayUnion, updateDoc as _updateDoc, doc as _doc, deleteField, query, where, getDocs, collection as _collection } from 'firebase/firestore';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { makeCollabKey, saveProject } from '../ProjectHub/index';
 import { enableFcmForMember } from '../../hooks/useFcm';
@@ -22,7 +22,7 @@ const LS_USER_KEY   = 'tripmori_current_user';
 // Note card color palette for sticky notes
 const NOTE_COLORS = ['var(--tm-note-1)', 'var(--tm-note-2)', 'var(--tm-note-3)', 'var(--tm-note-4)', 'var(--tm-note-5)', 'var(--tm-note-6)'];
 
-export default function MembersPage({ members, memberNotes, project, firestore, pwaInstallAvailable, onPwaInstall }: any) {
+export default function MembersPage({ members, memberNotes, proxyGrants = [], project, firestore, pwaInstallAvailable, onPwaInstall }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, updateDoc, collection, doc, isReadOnly } = firestore;
 
   const [showAdd, setShowAdd]           = useState(false);
@@ -39,6 +39,8 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
   const [authError, setAuthError]       = useState<string | null>(null);
   const [bindingSummaryOpen, setBindingSummaryOpen] = useState(false);
   const [editorListOpen, setEditorListOpen]         = useState(false);
+  const [proxyGrantOpen, setProxyGrantOpen]         = useState(false);
+  const [savingProxy, setSavingProxy]               = useState(false);
 
   // Notification permission state
   const [notifPermission, setNotifPermission] = useState<NotificationPermission>(() =>
@@ -541,6 +543,30 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
     } catch (e) { console.error(e); alert('操作失敗，請重試'); }
   };
 
+  // ── Proxy grant management ───────────────────────────────────────────────
+  // My grant doc is keyed by my UID: proxyGrants/{myUid}
+  const myGrantDoc = googleUid ? (proxyGrants as any[]).find((g: any) => g.id === googleUid) : null;
+  const myProxyUids: string[] = myGrantDoc?.proxyUids || [];
+
+  const handleToggleProxy = async (targetUid: string) => {
+    if (!googleUid || !TRIP_ID || isReadOnly) return;
+    setSavingProxy(true);
+    const grantRef = _doc(db, 'trips', TRIP_ID, 'proxyGrants', googleUid);
+    const isGranted = myProxyUids.includes(targetUid);
+    try {
+      if (isGranted) {
+        await _updateDoc(grantRef, { proxyUids: arrayRemove(targetUid) });
+      } else {
+        await setDoc(grantRef, { proxyUids: arrayUnion(targetUid) }, { merge: true });
+      }
+    } catch (e) {
+      console.error('[proxyGrant] toggle failed', e);
+      alert('操作失敗，請重試');
+    } finally {
+      setSavingProxy(false);
+    }
+  };
+
   // ── Member order ─────────────────────────────────────────────────────────
   const [localMemberOrder, setLocalMemberOrder] = useState<string[] | null>(null);
 
@@ -1024,6 +1050,51 @@ export default function MembersPage({ members, memberNotes, project, firestore, 
                       )}
                     </div>
                   )}
+                  {/* ── 授權代錄夥伴 — only on own card with googleUid ── */}
+                  {isMyCard && googleUid && !isReadOnly && (() => {
+                    const proxyTargets = (members as any[]).filter(
+                      (tm: any) => tm.googleUid && tm.googleUid !== googleUid
+                    );
+                    if (proxyTargets.length === 0) return null;
+                    return (
+                      <div style={{ marginTop: 8 }}>
+                        <button
+                          onClick={() => setProxyGrantOpen(v => !v)}
+                          style={{ fontSize: 11, fontWeight: 700, color: '#5A4A9A', background: '#EDE8FF', border: 'none', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <FontAwesomeIcon icon={faUserShield} style={{ fontSize: 10 }} />
+                          授權代錄夥伴
+                          {myProxyUids.length > 0 && <span style={{ background: '#5A4A9A', color: 'white', borderRadius: 10, padding: '0 5px', fontSize: 10 }}>{myProxyUids.length}</span>}
+                          <FontAwesomeIcon icon={proxyGrantOpen ? faChevronUp : faChevronDown} style={{ fontSize: 9 }} />
+                        </button>
+                        {proxyGrantOpen && (
+                          <div style={{ marginTop: 8, background: '#F5F3FF', borderRadius: 10, padding: '10px 12px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                            <p style={{ fontSize: 11, color: '#6A5A9A', margin: '0 0 4px', lineHeight: 1.5 }}>
+                              被授權的夥伴可在新增支出時幫你代錄私人帳目。
+                            </p>
+                            {proxyTargets.map((tm: any) => {
+                              const isGranted = myProxyUids.includes(tm.googleUid);
+                              return (
+                                <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                  <div style={{ width: 28, height: 28, borderRadius: '50%', background: tm.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                                    {tm.avatarUrl
+                                      ? <img src={tm.avatarUrl} alt={tm.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                      : tm.name?.[0]?.toUpperCase()}
+                                  </div>
+                                  <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>{tm.name}</span>
+                                  <button
+                                    onClick={() => handleToggleProxy(tm.googleUid)}
+                                    disabled={savingProxy}
+                                    style={{ fontSize: 11, fontWeight: 700, padding: '4px 12px', borderRadius: 8, border: 'none', cursor: savingProxy ? 'default' : 'pointer', fontFamily: FONT, background: isGranted ? '#5A4A9A' : '#E0D8F8', color: isGranted ? 'white' : '#5A4A9A', opacity: savingProxy ? 0.6 : 1, transition: 'all 0.15s' }}>
+                                    {isGranted ? '已授權 ✓' : '授權'}
+                                  </button>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
                 {/* Board toggle — 固定寬度避免有無留言時大小改變 */}
                 <button onClick={() => setExpandedBoard(isExpanded ? null : m.id)}

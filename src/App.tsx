@@ -420,6 +420,7 @@ function App() {
   const [members, setMembers]   = useState<any[]>([]);
   const [bookings, setBookings] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
+  const [proxyGrants, setProxyGrants] = useState<any[]>([]);
   const [journals, setJournals] = useState<any[]>([]);
   // Journal pagination — live-subscribe to newest N entries, let user click
   // "載入更多" to grow. Avoids pulling 100+ docs + their photo URLs on every
@@ -686,6 +687,9 @@ function App() {
           unsubs.push(onSnapshot(collection(tripRef, 'expenses'), { includeMetadataChanges: true }, snap => {
             setExpenses(snap.docs.map(d => ({ id: d.id, ...d.data(), _pending: d.metadata.hasPendingWrites })));
           }, logErr('expenses')));
+          unsubs.push(onSnapshot(collection(tripRef, 'proxyGrants'), snap => {
+            setProxyGrants(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+          }, logErr('proxyGrants')));
           unsubs.push(onSnapshot(collection(tripRef, 'memberNotes'), snap => {
             const items = snap.docs.map(d => ({ id: d.id, ...d.data() }));
             setMemberNotes(items);
@@ -698,7 +702,7 @@ function App() {
           }, logErr('journalComments')));
         } else {
           // Clear any stale data from a previous non-visitor session in this tab
-          setExpenses([]); setMemberNotes([]); setJournalComments([]);
+          setExpenses([]); setProxyGrants([]); setMemberNotes([]); setJournalComments([]);
         }
         // ── Watch trip doc: sync title changes + editor revocation + deletion ──
         const currentUid = auth.currentUser?.uid;
@@ -1169,10 +1173,10 @@ function App() {
 
         {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
         {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} firestore={firestore} project={activeProject} />}
+        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} proxyGrants={proxyGrants} firestore={firestore} project={activeProject} />}
         {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={activeProject} currentUserName={localStorage.getItem('tripmori_current_user') || ''} hasMoreJournals={hasMoreJournals} onShowMoreJournals={showMoreJournals} />}
         {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
+        {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} proxyGrants={proxyGrants} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
 
         {/* ── Onboarding modal (creator / invitee track) ── */}
