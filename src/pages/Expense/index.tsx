@@ -320,17 +320,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const toTWD = toTWDCalc;
 
   // Compute the effective exchange rate for display on expense cards.
-  // Priority: actualTWD (card statement) > amountTWD (recorded) > exchangeRate field > CURRENCY_TO_TWD table.
-  // Returns null for TWD or unknown currency — never falls back to a different currency.
+  // Priority:
+  //   1. actualTWD / amount  — card statement settled amount (most authoritative)
+  //   2. exchangeRate         — user manually entered at record time
+  //   3. amountTWD / amount  — system-computed from default table at save time
+  //   4. CURRENCY_TO_TWD[cur] — system default table (legacy data without amountTWD)
+  // Returns null for TWD or unknown currency — never assumes a different currency.
   const getDisplayRate = (e: any): number | null => {
     const cur = e.currency;
     if (!cur || cur === 'TWD') return null;
     const amt = e.amount || 0;
     if (amt <= 0) return null;
     if (e.actualTWD != null && e.actualTWD > 0) return e.actualTWD / amt;
-    if (e.amountTWD != null && e.amountTWD > 0) return e.amountTWD / amt;
     if (e.exchangeRate != null && e.exchangeRate > 0) return e.exchangeRate;
-    return null; // no recorded rate — don't fall back to hardcoded table
+    if (e.amountTWD != null && e.amountTWD > 0) return e.amountTWD / amt;
+    return CURRENCY_TO_TWD[cur] ?? null; // system default table — for legacy data
   };
   const fmtRate = (r: number): string => {
     if (r >= 100) return r.toFixed(0);
