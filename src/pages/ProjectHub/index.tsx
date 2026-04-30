@@ -83,12 +83,15 @@ export const ensureDefaultProject = () => {
 };
 
 // 檢查登入的 Google user 是否為此 trip 的 owner，是則升級 localStorage role（或首次加入）
-export const checkOwnerRole = async (googleEmail: string): Promise<TripRole | null> => {
+// Returns: 'owner' | null (confirmed non-owner) | 'unavailable' (offline / error — caller must NOT clear project)
+export const checkOwnerRole = async (googleEmail: string): Promise<TripRole | 'unavailable' | null> => {
   try {
     const { doc: fDoc, getDoc } = await import('firebase/firestore');
     const { db: fDb } = await import('../../config/firebase');
     const snap = await getDoc(fDoc(fDb, 'trips', DEFAULT_TRIP_ID));
-    if (!snap.exists()) return null;
+    // fromCache=true means we're offline and reading from IndexedDB.
+    // If the doc doesn't exist in cache → don't treat as "non-owner", just unavailable.
+    if (!snap.exists()) return snap.metadata?.fromCache ? 'unavailable' : null;
     const data = snap.data();
     if (data.ownerEmail && data.ownerEmail.toLowerCase() === googleEmail.toLowerCase()) {
       const projects = loadProjects();
@@ -110,8 +113,12 @@ export const checkOwnerRole = async (googleEmail: string): Promise<TripRole | nu
       }
       return 'owner';
     }
-  } catch (e) { console.error(e); }
-  return null;
+  } catch (e) {
+    // Network / offline error → cannot confirm role, do NOT treat as non-owner
+    console.warn('[checkOwnerRole] unavailable:', (e as Error)?.message);
+    return 'unavailable';
+  }
+  return null; // confirmed: doc exists but email doesn't match
 };
 
 // ── Firestore: write trip metadata doc ───────────────────────────

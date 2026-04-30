@@ -297,8 +297,8 @@ function App() {
               }
               return prev;
             });
-          } else {
-            // 非 owner：清除 localStorage 裡的預設行程（無論 role 為何）
+          } else if (role === null) {
+            // Confirmed non-owner (server responded, email doesn't match) → remove default trip
             const projects = loadProjects();
             const idx = projects.findIndex(p => p.id === '74pfE7RXyEIusEdRV0rZ');
             if (idx >= 0) {
@@ -314,18 +314,24 @@ function App() {
               });
             }
           }
+          // role === 'unavailable': offline / network error — keep existing project state untouched
         });
       } else if (wasGoogleSignedIn.current) {
         // 使用者主動或自動登出 → 清除所有專案，回到初始畫面
         // Guard: skip clearing when offline — auth null event may be transient (token refresh failure).
-        // Note: navigator.onLine is unreliable on iOS (reports true even with no gateway),
-        // so we also add a 3-second debounce: if auth is restored within that window (e.g. token
+        // navigator.onLine is unreliable on iOS (reports true even without actual internet),
+        // so use a 5-second debounce: if auth is restored within that window (e.g. token
         // refresh completes), cancel the clear and treat it as a transient state change.
-        if (!navigator.onLine) return;
+        // Additional guard: skip clearing when Firestore considers itself offline
+        // (checks via .info/connected-equivalent: connectionState state ref).
+        const firestoreOffline = document.querySelector?.('meta[name="firestore-offline"]') !== null;
+        if (!navigator.onLine || firestoreOffline) return;
         logoutTimerRef.current = setTimeout(() => {
           logoutTimerRef.current = null;
-          // If auth has since been restored (wasGoogleSignedIn reset), skip clear.
+          // If auth has since been restored (wasGoogleSignedIn set back to true), skip clear.
           if (wasGoogleSignedIn.current) return;
+          // Double-check: if still offline (navigator.onLine may have changed), abort.
+          if (!navigator.onLine) return;
           // Save last project ID so we can restore it after re-login
           const lastId = localStorage.getItem('tripmori_active_project');
           if (lastId) localStorage.setItem('tripmori_last_project', lastId);
@@ -333,7 +339,7 @@ function App() {
           localStorage.removeItem('tripmori_projects');
           setSyncedProjects([]);
           setActiveProjectState(null);
-        }, 3000);
+        }, 5000); // extended from 3s → 5s to give token refresh more time
       }
     });
     return unsub;

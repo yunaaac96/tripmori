@@ -1,5 +1,5 @@
 import { initializeApp } from 'firebase/app';
-import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager } from 'firebase/firestore';
+import { getFirestore, initializeFirestore, persistentLocalCache, persistentMultipleTabManager, persistentSingleTabManager } from 'firebase/firestore';
 import { getStorage } from 'firebase/storage';
 import { getAuth, signInAnonymously, onAuthStateChanged, browserLocalPersistence, setPersistence } from 'firebase/auth';
 import { getMessaging, isSupported } from 'firebase/messaging';
@@ -18,17 +18,32 @@ const app  = initializeApp(firebaseConfig);
 
 // 啟用離線持久化：多 tab 模式（需 SharedWorker），不支援時自動降級為單 tab
 // 自動偵測 Long Polling（解決 QUIC ERR_QUIC_PROTOCOL_ERROR）
+//
+// IMPORTANT: initializeFirestore can only be called once per Firebase app.
+// We must choose the tabManager BEFORE calling initializeFirestore, so we
+// test SharedWorker support separately to avoid a double-initialization bug.
 function createDb() {
+  // Test SharedWorker availability (required by persistentMultipleTabManager)
+  // without calling initializeFirestore first.
+  let tabManager;
+  try {
+    // persistentMultipleTabManager() itself is safe to call; it only allocates
+    // a descriptor object. The actual SharedWorker is created lazily by Firestore.
+    tabManager = persistentMultipleTabManager();
+  } catch {
+    tabManager = persistentSingleTabManager();
+  }
   try {
     return initializeFirestore(app, {
-      cache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      cache: persistentLocalCache({ tabManager }),
       experimentalAutoDetectLongPolling: true,
     });
-  } catch {
-    return initializeFirestore(app, {
-      cache: persistentLocalCache({ tabManager: persistentSingleTabManager() }),
-      experimentalAutoDetectLongPolling: true,
-    });
+  } catch (e) {
+    // initializeFirestore already called (hot-reload / module re-eval edge case).
+    // Fall back to the default Firestore instance — getFirestore returns the
+    // existing instance without re-initializing.
+    console.warn('[firebase] initializeFirestore failed, using default instance:', (e as Error)?.message);
+    return getFirestore(app);
   }
 }
 export const db = createDb();
