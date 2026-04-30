@@ -209,7 +209,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const isVisitor = isReadOnly;
   const isOwner = role === 'owner';
 
-  const projCurrency = (project?.currency || 'JPY') as Currency;
+  const projCurrency = (project?.currency || 'TWD') as Currency;
   const defaultForm = { ...EMPTY_FORM, currency: projCurrency, date: new Date().toISOString().slice(0, 10) };
 
   const darkMode = useDarkMode();
@@ -259,6 +259,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
+  // Debtor pay modal — supports TWD or foreign currency cash repayment
+  const [payModal, setPayModal] = useState<{ from: string; to: string; amountTWD: number } | null>(null);
+  const [payModalForeign, setPayModalForeign] = useState(false);
+  const [payModalCur, setPayModalCur] = useState('JPY');
+  const [payModalAmt, setPayModalAmt] = useState('');
+  const [payModalRate, setPayModalRate] = useState('');
   // Settlement deletion confirm modal
   const [settlementDeleteTarget, setSettlementDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
@@ -312,6 +318,27 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   // toTWD: alias for display (rounds to integer)
   const toTWD = toTWDCalc;
+
+  // Compute the effective exchange rate for display on expense cards.
+  // Priority: actualTWD (card statement) > amountTWD (recorded) > exchangeRate field > CURRENCY_TO_TWD table.
+  // Returns null for TWD or unknown currency — never falls back to a different currency.
+  const getDisplayRate = (e: any): number | null => {
+    const cur = e.currency;
+    if (!cur || cur === 'TWD') return null;
+    const amt = e.amount || 0;
+    if (amt <= 0) return null;
+    if (e.actualTWD != null && e.actualTWD > 0) return e.actualTWD / amt;
+    if (e.amountTWD != null && e.amountTWD > 0) return e.amountTWD / amt;
+    if (e.exchangeRate != null && e.exchangeRate > 0) return e.exchangeRate;
+    return null; // no recorded rate — don't fall back to hardcoded table
+  };
+  const fmtRate = (r: number): string => {
+    if (r >= 100) return r.toFixed(0);
+    if (r >= 10)  return r.toFixed(1);
+    if (r >= 1)   return r.toFixed(2);
+    if (r >= 0.1) return r.toFixed(3);
+    return r.toFixed(4);
+  };
 
   // getEqualPcts and normalizePcts are imported from utils/expenseCalc
 
@@ -404,7 +431,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     setForm({
       description: e.description || '',
       amount: String(e.amount || ''),
-      currency: e.currency || 'JPY',
+      currency: e.currency || projCurrency,
       category: e.category || 'food',
       payer: e.payer || '',
       paymentMethod: e.paymentMethod || 'cash',
@@ -643,7 +670,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   // Phase 1: debtor initiates — creates a pending settlement record.
   // Individual expenses are NOT stamped; Method B derives status from the record.
-  const handleDebtorPay = async (from: string, to: string, amount: number) => {
+  const handleDebtorPay = async (from: string, to: string, amount: number, extraNotes?: string) => {
     if (isReadOnly) return;
     const key = `${from}-${to}`;
     setSettlingId(key);
@@ -658,7 +685,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       splitWith: [to],
       percentages: {}, customAmounts: {}, subItems: [],
       date: today,
-      notes: `${from} → ${to}`,
+      notes: extraNotes || `${from} → ${to}`,
       status: 'pending',
       paidAt: today,
       createdAt: Timestamp.now(),
@@ -765,14 +792,14 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [adjustAmount, setAdjustAmount] = useState('');
   const [adjustNote, setAdjustNote]     = useState('');
   const [adjustDir, setAdjustDir]       = useState<'expense' | 'refund'>('expense');
-  const [adjustCurrency, setAdjustCurrency] = useState<string>('JPY');
+  const [adjustCurrency, setAdjustCurrency] = useState<string>(() => projCurrency);
   const [adjustSaving, setAdjustSaving] = useState(false);
   const openAdjustForm = (original: any) => {
     setAdjustTarget(original);
     setAdjustAmount('');
     setAdjustNote('');
     setAdjustDir('expense');
-    setAdjustCurrency(original.currency || 'JPY');
+    setAdjustCurrency(original.currency || projCurrency);
   };
   const closeAdjustForm = () => {
     setAdjustTarget(null);
@@ -787,7 +814,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     setAdjustSaving(true);
     try {
       const original = adjustTarget;
-      const currency = adjustCurrency || original.currency || 'JPY';
+      const currency = adjustCurrency || original.currency || projCurrency;
       // Direction: 'refund' means the group gets money back → negative amount
       const signedAmt = adjustDir === 'refund' ? -absAmt : absAmt;
       const amtTWD = toTWD(absAmt, currency) * (adjustDir === 'refund' ? -1 : 1);
@@ -1000,6 +1027,85 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       )}
 
       {/* ── 補實際金額 Modal ── */}
+      {/* ── Debtor pay modal (supports TWD or foreign currency cash) ── */}
+      {payModal && (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 550 }}
+          onClick={ev => { if (ev.target === ev.currentTarget) setPayModal(null); }}>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, boxSizing: 'border-box' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
+                <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 14 }} /> 確認已付款
+              </p>
+              <button onClick={() => setPayModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+            </div>
+            {/* Suggested TWD amount */}
+            <div style={{ padding: '10px 14px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px dashed ${C.creamDark}`, marginBottom: 14 }}>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px', fontWeight: 600 }}>建議結清金額</p>
+              <p style={{ fontSize: 20, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {payModal.amountTWD.toLocaleString()}</p>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{payModal.from} → {payModal.to}</p>
+            </div>
+            {/* Payment method toggle */}
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 8px' }}>還款方式</p>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
+              {(['twd', 'foreign'] as const).map(mode => (
+                <button key={mode} onClick={() => setPayModalForeign(mode === 'foreign')}
+                  style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: `1.5px solid ${payModalForeign === (mode === 'foreign') ? C.earth : C.creamDark}`, background: payModalForeign === (mode === 'foreign') ? '#FEF0E6' : 'var(--tm-card-bg)', color: payModalForeign === (mode === 'foreign') ? C.earth : C.barkLight, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+                  {mode === 'twd' ? '💳 台幣轉帳' : '💵 外幣現金'}
+                </button>
+              ))}
+            </div>
+            {/* Foreign currency inputs */}
+            {payModalForeign && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>幣別</p>
+                  <select value={payModalCur} onChange={e => setPayModalCur(e.target.value)}
+                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}>
+                    {Object.keys(CURRENCY_TO_TWD).filter(c => c !== 'TWD').map(c => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>金額（{payModalCur}）</p>
+                  <input type="number" inputMode="decimal" placeholder={`例：5000`} value={payModalAmt}
+                    onChange={e => setPayModalAmt(e.target.value)}
+                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+                </div>
+                <div>
+                  <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>匯率（1 {payModalCur} = __ TWD）</p>
+                  <input type="number" inputMode="decimal" placeholder="例：0.22" value={payModalRate}
+                    onChange={e => setPayModalRate(e.target.value)}
+                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
+                </div>
+                {payModalAmt && payModalRate && (
+                  <div style={{ padding: '8px 12px', background: '#F0F8E8', borderRadius: 10, border: `1px solid ${C.sageDark}` }}>
+                    <p style={{ fontSize: 12, color: C.sageDark, margin: 0, fontWeight: 600 }}>
+                      {payModalCur} {Number(payModalAmt).toLocaleString()} × {payModalRate} = NT$ {Math.round(Number(payModalAmt) * Number(payModalRate)).toLocaleString()}
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+            <button
+              disabled={payModalForeign && (!payModalAmt || !payModalRate || Number(payModalAmt) <= 0 || Number(payModalRate) <= 0)}
+              onClick={async () => {
+                let finalTWD = payModal.amountTWD;
+                let notes = `${payModal.from} → ${payModal.to}`;
+                if (payModalForeign && payModalAmt && payModalRate) {
+                  finalTWD = Math.round(Number(payModalAmt) * Number(payModalRate));
+                  notes = `${payModal.from} → ${payModal.to}（${payModalCur} ${Number(payModalAmt).toLocaleString()} @ ${payModalRate}）`;
+                }
+                setPayModal(null);
+                await handleDebtorPay(payModal.from, payModal.to, finalTWD, notes);
+              }}
+              style={{ width: '100%', padding: '13px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: (payModalForeign && (!payModalAmt || !payModalRate)) ? 0.5 : 1 }}>
+              ✓ 確認已付款
+            </button>
+          </div>
+        </div>
+      )}
+
       {actualTarget && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 550 }}
           onClick={ev => { if (ev.target === ev.currentTarget) closeActualForm(); }}>
@@ -1359,10 +1465,20 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
               {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
               {(() => {
-                // Show only: paid by someone else + not yet settled
-                const unpaidShares = stmt.myShares.filter(item =>
-                  item.payer !== name && !item.settledAt
-                );
+                // Show only: paid by someone else + not covered by a confirmed settlement.
+                // Method A: respects the legacy per-expense `settledAt` stamp.
+                // Method B: an expense is considered settled if a confirmed settlement for
+                //   this pair (name→payer) exists AND the expense date ≤ settlement date.
+                //   Only expenses created *after* the latest settlement are shown.
+                const unpaidShares = stmt.myShares.filter(item => {
+                  if (item.payer === name) return false;
+                  if (item.settledAt) return false; // legacy Method A stamp
+                  const pairKey = `${name}→${item.payer}`;
+                  const settledDate = confirmedPairMap.get(pairKey);
+                  if (!settledDate) return true; // no settlement yet → show
+                  // Show only expenses newer than the settlement date
+                  return (item.date || '') > settledDate;
+                });
                 const unpaidTotal = unpaidShares.reduce((sum, item) => sum + (item.myShare || 0), 0);
                 if (unpaidShares.length === 0) return null;
                 return (
@@ -2282,7 +2398,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               }
                               return (
                                 <button
-                                  onClick={() => handleDebtorPay(debt.from, debt.to, debt.amount)}
+                                  onClick={() => { setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount }); setPayModalForeign(false); setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY'); setPayModalAmt(''); setPayModalRate(''); }}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                                   確認已付
@@ -2429,7 +2545,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               const isAdjustment = !!e.adjustmentOf;
               const isAwaiting = !!e.awaitCardStatement;
               const hasActual  = e.actualTWD != null;
-              const isForeignCard = e.paymentMethod === 'card' && (e.currency || 'JPY') !== 'TWD';
+              const isForeignCard = e.paymentMethod === 'card' && (e.currency || projCurrency) !== 'TWD';
               return (
                 <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : isIncome ? `3px solid #4A8A4A` : undefined, opacity: isAwaiting ? 0.8 : 1 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
@@ -2469,7 +2585,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           </span>
                         )}
                         {/* FX status chip: actual / estimated / awaiting */}
-                        {!isSettlement && !isPrivateExpense && (e.currency || 'JPY') !== 'TWD' && (
+                        {!isSettlement && !isPrivateExpense && (e.currency || projCurrency) !== 'TWD' && (
                           isAwaiting ? (
                             <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFE8CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
                               <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 8 }} />等卡單
@@ -2531,6 +2647,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <>
                             <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {myShare.toLocaleString()}</p>
                             <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}</p>
+                            {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{e.currency} {e.amount?.toLocaleString()}</p>}
+                            {(() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                             <span className={isPayer ? 'tm-badge-sage-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 9, fontWeight: 700, borderRadius: 5, padding: '2px 6px', background: isPayer ? '#E0F0D8' : '#FFF2CC', color: isPayer ? '#4A7A35' : '#9A6800' }}>
                               {isPayer ? '我付款' : '需分攤'}
                             </span>
@@ -2540,6 +2658,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         <>
                           <p style={{ fontSize: 15, fontWeight: 700, color: isIncome ? '#4A8A4A' : isSettlement ? C.sageDark : C.earth, margin: 0 }}>{isIncome ? '＋' : ''}NT$ {amtTWD.toLocaleString()}</p>
                           {e.currency !== 'TWD' && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
+                          {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                         </>
                       )}
                       {!isReadOnly && (

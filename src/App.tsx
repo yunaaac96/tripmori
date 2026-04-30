@@ -101,7 +101,8 @@ export const EXPENSE_CATEGORY_MAP: Record<string, { emoji: string; bg: string; l
   other:     { emoji: '📦', bg: '#F0F0F0', label: '其他' },
 };
 export const JPY_TO_TWD = 0.22;
-export const EMPTY_EVENT_FORM = { title: '', startTime: '', endTime: '', travelTime: '', category: 'attraction', location: '', notes: '', mapUrl: '', cost: '', currency: 'JPY' };
+export const EMPTY_EVENT_FORM = { title: '', startTime: '', endTime: '', travelTime: '', category: 'attraction', location: '', notes: '', mapUrl: '', cost: '', currency: 'TWD' };
+// Note: currency is overridden at usage site via { ...EMPTY_EVENT_FORM, currency: project?.currency || 'TWD' }
 
 /** Dynamic font size for long names: scales down to prevent overflow */
 export const dynFont = (text: string, base = 14): number => {
