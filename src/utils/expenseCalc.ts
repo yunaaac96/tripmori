@@ -461,7 +461,7 @@ export const getConfirmedSettlementPairMap = (expenses: Expense[]): Map<string, 
     const to = e.splitWith?.[0];
     if (!e.payer || !to) return;
     const key = `${e.payer}→${to}`;
-    const date = e.confirmedAt || e.date || '';
+    const date = (e.confirmedAt || e.date || '').slice(0, 10);
     if (!map.has(key) || date > (map.get(key) ?? '')) {
       map.set(key, date);
     }
