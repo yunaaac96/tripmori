@@ -2699,7 +2699,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         {isSettlement ? (
                           e.status === 'pending'
                             ? <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF3CC', color: '#9A6800' }}>待確認</span>
-                            : <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>結清</span>
+                            : <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>還款</span>
                         ) : isIncome ? (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faCoins} style={{ fontSize: 8 }} />收入</span>
                         ) : !isPrivateExpense && (
