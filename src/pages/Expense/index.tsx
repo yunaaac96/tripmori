@@ -601,8 +601,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       if (badge !== 'none') return false;
     }
     if (e.isPrivate) {
-      // Private: principal, proxy who recorded it, or owner
-      if (isOwner) return true;
+      // Private: only the principal or proxy who recorded it can edit.
+      // Owner cannot see others' private expenses (visibleExpenses filter),
+      // so isOwner is intentionally NOT an exemption here.
       if (googleUid && e.privateOwnerUid === googleUid) return true;
       if (googleUid && e.loggedByUid === googleUid) return true;
       return false;
@@ -888,9 +889,11 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     }
 
     // ── Private expenses ─────────────────────────────────────────────────────
+    // Owner cannot see others' private expenses (visibleExpenses already filters
+    // them out), so isOwner is NOT an exemption here — only the principal or
+    // the proxy who recorded it can delete.
     if (e.isPrivate) {
-      return isOwner ||
-        !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
+      return !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
     }
 
     // ── Non-private: Owner can delete any unsettled expense;
