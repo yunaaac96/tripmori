@@ -259,8 +259,13 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
-  // Debtor pay modal — supports TWD or foreign currency cash repayment
+  // Debtor pay modal — partial or full repayment
   const [payModal, setPayModal] = useState<{ from: string; to: string; amountTWD: number } | null>(null);
+  const [payModalAmt, setPayModalAmt] = useState('');
+  const openPayModal = (from: string, to: string, amountTWD: number) => {
+    setPayModal({ from, to, amountTWD });
+    setPayModalAmt(String(amountTWD));
+  };
   // Settlement deletion confirm modal
   const [settlementDeleteTarget, setSettlementDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
@@ -1030,30 +1035,50 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         </div>
       )}
 
-      {/* ── 補實際金額 Modal ── */}
-      {/* ── Debtor pay modal ── */}
+      {/* ── Debtor pay modal (partial or full repayment) ── */}
       {payModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 550 }}
           onClick={ev => { if (ev.target === ev.currentTarget) setPayModal(null); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
-                <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 14 }} /> 確認已付款
+                <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 14 }} /> 記錄還款
               </p>
               <button onClick={() => setPayModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
-            <div style={{ padding: '14px 16px', background: 'var(--tm-section-bg)', borderRadius: 14, border: `1px dashed ${C.creamDark}`, marginBottom: 20 }}>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 4px', fontWeight: 600 }}>結清金額</p>
-              <p style={{ fontSize: 26, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {payModal.amountTWD.toLocaleString()}</p>
-              <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0' }}>{payModal.from} → {payModal.to}</p>
+            {/* Outstanding amount reference */}
+            <div style={{ padding: '10px 14px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px dashed ${C.creamDark}`, marginBottom: 16 }}>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px', fontWeight: 600 }}>目前待還金額</p>
+              <p style={{ fontSize: 20, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {payModal.amountTWD.toLocaleString()}</p>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{payModal.from} → {payModal.to}</p>
+            </div>
+            {/* Editable repayment amount */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: C.bark }}>還款金額（NT$）</label>
+                <span style={{ fontSize: 11, color: C.barkLight }}>可部分還款</span>
+              </div>
+              <input
+                type="number" inputMode="decimal"
+                value={payModalAmt}
+                onChange={ev => setPayModalAmt(ev.target.value)}
+                style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', fontSize: 18, fontWeight: 700 }}
+              />
+              {payModalAmt && Number(payModalAmt) > 0 && Number(payModalAmt) < payModal.amountTWD && (
+                <p style={{ fontSize: 11, color: C.barkLight, margin: '5px 0 0' }}>
+                  還款後剩餘：NT$ {(payModal.amountTWD - Math.round(Number(payModalAmt))).toLocaleString()}
+                </p>
+              )}
             </div>
             <button
+              disabled={!payModalAmt || Number(payModalAmt) <= 0}
               onClick={async () => {
+                const amt = Math.round(Number(payModalAmt));
                 setPayModal(null);
-                await handleDebtorPay(payModal.from, payModal.to, payModal.amountTWD);
+                await handleDebtorPay(payModal.from, payModal.to, amt);
               }}
-              style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-              <FontAwesomeIcon icon={faCheck} style={{ marginRight: 8 }} />確認已付款
+              style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: (!payModalAmt || Number(payModalAmt) <= 0) ? 0.5 : 1 }}>
+              <FontAwesomeIcon icon={faCheck} style={{ marginRight: 8 }} />確認還款
             </button>
           </div>
         </div>
@@ -1313,9 +1338,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                     <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>等待確認</span>
                                   );
                                   return (
-                                    <button onClick={() => setPayModal({ from: s.from, to: s.to, amountTWD: s.amount })}
+                                    <button onClick={() => openPayModal(s.from, s.to, s.amount)}
                                       style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#9A3A3A', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                      確認已付
+                                      記錄還款
                                     </button>
                                   );
                                 }
@@ -1323,16 +1348,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                 if (isPrimaryCreditor) return (
                                   <button onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
                                     style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                    {pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                    {pendingEntry ? '✓ 確認收款' : '確認收款'}
                                   </button>
                                 );
                                 // Admin viewing another member's modal
                                 if (adminMode) return (
                                   <button onClick={() => isPayer
-                                    ? setPayModal({ from: s.from, to: s.to, amountTWD: s.amount })
+                                    ? openPayModal(s.from, s.to, s.amount)
                                     : handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
                                     style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: isPayer ? '#5A8ACF' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                    {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                    {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收款' : '確認收款'}
                                   </button>
                                 );
                                 return null;
@@ -2355,10 +2380,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               }
                               return (
                                 <button
-                                  onClick={() => setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount })}
+                                  onClick={() => openPayModal(debt.from, debt.to, debt.amount)}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                  確認已付
+                                  記錄還款
                                 </button>
                               );
                             }
@@ -2369,7 +2394,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                   onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, debt.from, debt.to, debt.amount)}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: pendingEntry ? '#4A7A35' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                  {pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                  {pendingEntry ? '✓ 確認收款' : '確認收款'}
                                 </button>
                               );
                             }
