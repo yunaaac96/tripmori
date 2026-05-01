@@ -261,10 +261,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [settlingId, setSettlingId] = useState<string | null>(null);
   // Debtor pay modal — supports TWD or foreign currency cash repayment
   const [payModal, setPayModal] = useState<{ from: string; to: string; amountTWD: number } | null>(null);
-  const [payModalForeign, setPayModalForeign] = useState(false);
-  const [payModalCur, setPayModalCur] = useState('JPY');
-  const [payModalAmt, setPayModalAmt] = useState('');
-  const [payModalRate, setPayModalRate] = useState('');
   // Settlement deletion confirm modal
   const [settlementDeleteTarget, setSettlementDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
@@ -947,51 +943,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // For a (from→to) pair, aggregate each currency's original amount AND its
   // TWD equivalent separately. Only shown when at least one non-TWD currency
   // exists, so that: TWD expenses → "台幣 NT$ X", JPY expenses → "JPY Y ≈ NT$ Z".
-  const getPairCurrencyHints = (
-    from: string, _to: string,
-  ): { cur: string; origAmt: number; twdEquiv: number; isCash: boolean }[] => {
-    // NOTE: computeSettlements uses a greedy optimisation algorithm so the
-    // settlement pair (from→to) may be *indirect* — they may share no direct
-    // expenses. Looking up only pair-specific expenses would return nothing.
-    // Instead, bucket ALL of `from`'s outstanding shares (expenses paid by
-    // someone else where `from` is in splitWith). This correctly reflects the
-    // currency composition of `from`'s overall debt regardless of who the
-    // optimised creditor is.
-    const active = (expenses as any[]).filter((e: any) =>
-      !e.awaitCardStatement && !e.isPrivate && e.category !== 'settlement'
-    );
-    const buckets: Record<string, { origSum: number; twdSum: number; isCash: boolean }> = {};
-    active.forEach((e: any) => {
-      const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-      // Only consider expenses where `from` owes someone (not the payer, but in split)
-      if (e.payer === from || !sw.includes(from)) return;
-      const cur: string = e.currency || 'TWD';
-      // Card + foreign → settle in TWD; cash + foreign → settle in original currency
-      const isCashForeign = cur !== 'TWD' && e.paymentMethod !== 'card';
-      const bucketCur = isCashForeign ? cur : 'TWD';
-      const origAmt: number = Number(e.amount) || 0;
-      const twdAmt: number = effectiveTWD(e);
-      if (twdAmt <= 0) return;
-      const shareTWD = getPersonalShare(e, from, memberNames);
-      if (shareTWD <= 0) return;
-      if (!buckets[bucketCur]) buckets[bucketCur] = { origSum: 0, twdSum: 0, isCash: isCashForeign };
-      if (isCashForeign && origAmt > 0) {
-        buckets[bucketCur].origSum += origAmt * (shareTWD / twdAmt);
-      }
-      buckets[bucketCur].twdSum += shareTWD;
-    });
-    const hints = Object.entries(buckets)
-      .filter(([, { twdSum }]) => twdSum > 0.5)
-      .map(([cur, { origSum, twdSum, isCash }]) => ({
-        cur,
-        origAmt:  Math.round(origSum),
-        twdEquiv: Math.round(twdSum),
-        isCash,
-      }));
-    // Only return hints when there is at least one non-TWD currency
-    return hints.some(h => h.cur !== 'TWD') ? hints : [];
-  };
-
   // ── Filter / Sort logic ──────────────────────────────────────────────────
   const FILTER_CATS = [
     { key: 'all', label: '全部' },
@@ -1080,93 +1031,29 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       )}
 
       {/* ── 補實際金額 Modal ── */}
-      {/* ── Debtor pay modal (supports TWD or foreign currency cash) ── */}
+      {/* ── Debtor pay modal ── */}
       {payModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 550 }}
           onClick={ev => { if (ev.target === ev.currentTarget) setPayModal(null); }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, boxSizing: 'border-box' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
                 <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 14 }} /> 確認已付款
               </p>
               <button onClick={() => setPayModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
-            {/* Suggested TWD amount */}
-            <div style={{ padding: '10px 14px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px dashed ${C.creamDark}`, marginBottom: 14 }}>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px', fontWeight: 600 }}>建議結清金額</p>
-              <p style={{ fontSize: 20, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {payModal.amountTWD.toLocaleString()}</p>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{payModal.from} → {payModal.to}</p>
+            <div style={{ padding: '14px 16px', background: 'var(--tm-section-bg)', borderRadius: 14, border: `1px dashed ${C.creamDark}`, marginBottom: 20 }}>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 4px', fontWeight: 600 }}>結清金額</p>
+              <p style={{ fontSize: 26, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {payModal.amountTWD.toLocaleString()}</p>
+              <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0' }}>{payModal.from} → {payModal.to}</p>
             </div>
-            {/* Payment method toggle */}
-            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 8px' }}>還款方式</p>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
-              {(['twd', 'foreign'] as const).map(mode => (
-                <button key={mode} onClick={() => setPayModalForeign(mode === 'foreign')}
-                  style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: `1.5px solid ${payModalForeign === (mode === 'foreign') ? C.earth : C.creamDark}`, background: payModalForeign === (mode === 'foreign') ? '#FEF0E6' : 'var(--tm-card-bg)', color: payModalForeign === (mode === 'foreign') ? C.earth : C.barkLight, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-                  <FontAwesomeIcon icon={mode === 'twd' ? faCreditCard : faMoneyBill1} style={{ marginRight: 5 }} />
-                  {mode === 'twd' ? '台幣轉帳' : '外幣現金'}
-                </button>
-              ))}
-            </div>
-            {/* Foreign currency inputs */}
-            {payModalForeign && (
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 14 }}>
-                <div>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>幣別</p>
-                  <select value={payModalCur} onChange={e => setPayModalCur(e.target.value)}
-                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }}>
-                    {Object.keys(CURRENCY_TO_TWD).filter(c => c !== 'TWD').map(c => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>金額（{payModalCur}）</p>
-                  <input type="number" inputMode="decimal" placeholder={`例：5000`} value={payModalAmt}
-                    onChange={e => setPayModalAmt(e.target.value)}
-                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
-                </div>
-                <div>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 4px' }}>
-                    <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: 0 }}>匯率（1 {payModalCur} = __ TWD）</p>
-                    <span style={{ fontSize: 10, color: C.barkLight, background: 'var(--tm-section-bg)', borderRadius: 4, padding: '1px 5px' }}>選填</span>
-                  </div>
-                  <input type="number" inputMode="decimal" placeholder={`留空使用系統匯率 ${CURRENCY_TO_TWD[payModalCur] ? `(≈${CURRENCY_TO_TWD[payModalCur]})` : ''}`} value={payModalRate}
-                    onChange={e => setPayModalRate(e.target.value)}
-                    style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
-                </div>
-                {payModalAmt && (
-                  <div style={{ padding: '8px 12px', background: '#F0F8E8', borderRadius: 10, border: `1px solid ${C.sageDark}` }}>
-                    {(() => {
-                      const rate = payModalRate ? Number(payModalRate) : (CURRENCY_TO_TWD[payModalCur] ?? null);
-                      if (!rate) return null;
-                      return (
-                        <p style={{ fontSize: 12, color: C.sageDark, margin: 0, fontWeight: 600 }}>
-                          {payModalCur} {Number(payModalAmt).toLocaleString()} × {rate} = NT$ {Math.round(Number(payModalAmt) * rate).toLocaleString()}
-                          {!payModalRate && <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 4 }}>（系統匯率）</span>}
-                        </p>
-                      );
-                    })()}
-                  </div>
-                )}
-              </div>
-            )}
             <button
-              disabled={payModalForeign && (!payModalAmt || Number(payModalAmt) <= 0)}
               onClick={async () => {
-                let finalTWD = payModal.amountTWD;
-                let notes = `${payModal.from} → ${payModal.to}`;
-                if (payModalForeign && payModalAmt) {
-                  const rate = payModalRate ? Number(payModalRate) : (CURRENCY_TO_TWD[payModalCur] ?? 1);
-                  finalTWD = Math.round(Number(payModalAmt) * rate);
-                  const rateLabel = payModalRate ? payModalRate : `${rate}(系統)`;
-                  notes = `${payModal.from} → ${payModal.to}（${payModalCur} ${Number(payModalAmt).toLocaleString()} @ ${rateLabel}）`;
-                }
                 setPayModal(null);
-                await handleDebtorPay(payModal.from, payModal.to, finalTWD, notes);
+                await handleDebtorPay(payModal.from, payModal.to, payModal.amountTWD);
               }}
-              style={{ width: '100%', padding: '13px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: (payModalForeign && !payModalAmt) ? 0.5 : 1 }}>
-              ✓ 確認已付款
+              style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
+              <FontAwesomeIcon icon={faCheck} style={{ marginRight: 8 }} />確認已付款
             </button>
           </div>
         </div>
@@ -1188,7 +1075,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               </p>
             </div>
             <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 14px', lineHeight: 1.6 }}>
-              請填入刷卡單上實際扣款的台幣金額。填入後這筆記帳會自動以實際金額計算，若有「等卡單」狀態會一併解除。
+              請填入刷卡單上的實際扣款總金額（含國際手續費）。填入後這筆記帳會自動以實際金額計算，若有「等卡單」狀態會一併解除。
             </p>
             <div style={{ marginBottom: 16 }}>
               <label style={{ fontSize: 12, color: C.barkLight, fontWeight: 600, display: 'block', marginBottom: 6 }}>實際 TWD 金額</label>
@@ -1397,7 +1284,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         e.category === 'settlement' && e.status === 'pending' &&
                         e.payer === s.from && e.splitWith?.[0] === s.to
                       );
-                      const hints = getPairCurrencyHints(s.from, s.to);
                       const isPrimaryDebtor   = isPayer  && name === currentUserName;
                       const isPrimaryCreditor = !isPayer && name === currentUserName;
                       return (
@@ -1408,7 +1294,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                               : <span style={{ fontSize: 12, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
                           </div>
-                          {/* Labels + amount + currency hints */}
+                          {/* Labels + amount */}
                           <div style={{ flex: 1, minWidth: 0 }}>
                             <p style={{ fontSize: 13, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0 }}>
                               {isPayer ? `付給 ${other}` : `收自 ${other}`}
@@ -1416,21 +1302,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             <p style={{ fontSize: 11, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: '2px 0 0' }}>
                               NT$ {s.amount.toLocaleString()}
                             </p>
-                            {hints.length > 0 && (
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 2 }}>
-                                {hints.map(h => (
-                                  <p key={h.cur} style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.75, margin: 0 }}>
-                                    <FontAwesomeIcon icon={h.cur === 'TWD' ? faCreditCard : faMoneyBill1} style={{ marginRight: 4, fontSize: 9 }} />
-                                    {h.cur === 'TWD'
-                                      ? `台幣 NT$ ${h.twdEquiv.toLocaleString()}`
-                                      : `外幣現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
-                                  </p>
-                                ))}
-                                <p style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.6, margin: '2px 0 0', fontStyle: 'italic' }}>
-                                  外幣現金可與台幣分開結清
-                                </p>
-                              </div>
-                            )}
                           </div>
                           {/* Action buttons */}
                           {isProcessing
@@ -1442,18 +1313,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                     <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>等待確認</span>
                                   );
                                   return (
-                                    <button onClick={() => {
-                                      const cashHint = hints.find(h => h.cur !== 'TWD' && h.isCash);
-                                      setPayModal({ from: s.from, to: s.to, amountTWD: s.amount });
-                                      if (cashHint) {
-                                        setPayModalForeign(true); setPayModalCur(cashHint.cur);
-                                        setPayModalAmt(String(cashHint.origAmt)); setPayModalRate('');
-                                      } else {
-                                        setPayModalForeign(false);
-                                        setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY');
-                                        setPayModalAmt(''); setPayModalRate('');
-                                      }
-                                    }} style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#9A3A3A', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                    <button onClick={() => setPayModal({ from: s.from, to: s.to, amountTWD: s.amount })}
+                                      style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#9A3A3A', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                                       確認已付
                                     </button>
                                   );
@@ -1468,7 +1329,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                 // Admin viewing another member's modal
                                 if (adminMode) return (
                                   <button onClick={() => isPayer
-                                    ? (() => { setPayModal({ from: s.from, to: s.to, amountTWD: s.amount }); setPayModalForeign(false); setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY'); setPayModalAmt(''); setPayModalRate(''); })()
+                                    ? setPayModal({ from: s.from, to: s.to, amountTWD: s.amount })
                                     : handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
                                     style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: isPayer ? '#5A8ACF' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                                     {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收訖' : '確認收訖'}
@@ -2477,25 +2338,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
                             </p>
                             <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
-                            {(() => {
-                              const hints = getPairCurrencyHints(debt.from, debt.to);
-                              if (hints.length === 0) return null;
-                              return (
-                                <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 1 }}>
-                                  {hints.map(h => (
-                                    <p key={h.cur} style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>
-                                      <FontAwesomeIcon icon={h.cur === 'TWD' ? faCreditCard : faMoneyBill1} style={{ marginRight: 4, fontSize: 9 }} />
-                                      {h.cur === 'TWD'
-                                        ? `台幣 NT$ ${h.twdEquiv.toLocaleString()}`
-                                        : `外幣現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
-                                    </p>
-                                  ))}
-                                  <p style={{ fontSize: 10, color: C.barkLight, opacity: 0.7, margin: '2px 0 0', fontStyle: 'italic' }}>
-                                    外幣現金可與台幣分開結清
-                                  </p>
-                                </div>
-                              );
-                            })()}
                           </div>
                           {/* Role-based buttons — show even if pair was previously confirmed (new balance may exist) */}
                           {!isReadOnly && (() => {
@@ -2513,23 +2355,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               }
                               return (
                                 <button
-                                  onClick={() => {
-                                    const hints = getPairCurrencyHints(debt.from, debt.to);
-                                    const cashHint = hints.find(h => h.cur !== 'TWD' && h.isCash);
-                                    setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount });
-                                    if (cashHint) {
-                                      // Pre-select foreign cash mode with the hint's currency & amount
-                                      setPayModalForeign(true);
-                                      setPayModalCur(cashHint.cur);
-                                      setPayModalAmt(String(cashHint.origAmt));
-                                      setPayModalRate('');
-                                    } else {
-                                      setPayModalForeign(false);
-                                      setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY');
-                                      setPayModalAmt('');
-                                      setPayModalRate('');
-                                    }
-                                  }}
+                                  onClick={() => setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount })}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                                   確認已付
