@@ -1411,6 +1411,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                       : `💵 現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
                                   </p>
                                 ))}
+                                <p style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.6, margin: '2px 0 0', fontStyle: 'italic' }}>
+                                  可分次結清，系統自動更新餘額
+                                </p>
                               </div>
                             )}
                           </div>
@@ -2471,6 +2474,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                         : `💵 現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
                                     </p>
                                   ))}
+                                  <p style={{ fontSize: 10, color: C.barkLight, opacity: 0.7, margin: '2px 0 0', fontStyle: 'italic' }}>
+                                    可分次結清，系統自動更新餘額
+                                  </p>
                                 </div>
                               );
                             })()}
