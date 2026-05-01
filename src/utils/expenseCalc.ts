@@ -445,6 +445,40 @@ export const buildPersonalStatement = (
   };
 };
 
+// ── Expense insertion-date helper ────────────────────────────────────────────
+/**
+ * Returns the "real" insertion date (YYYY-MM-DD) for an expense.
+ *
+ * Priority:
+ *   1. createdAt (Firestore Timestamp | Date | ISO string) — actual write time,
+ *      immune to backdating by the user.
+ *   2. date field — user-supplied, used only as fallback for old records that
+ *      predate the createdAt field.
+ *
+ * This is the value used when deciding whether an expense was created before
+ * or after a settlement was confirmed.
+ */
+export const getExpenseInsertDate = (e: Expense): string => {
+  const raw = (e as any).createdAt;
+  if (raw) {
+    // Firestore Timestamp: { seconds, nanoseconds } with optional toDate()
+    if (typeof raw.toDate === 'function') {
+      return (raw.toDate() as Date).toISOString().slice(0, 10);
+    }
+    if (typeof raw.seconds === 'number') {
+      return new Date(raw.seconds * 1000).toISOString().slice(0, 10);
+    }
+    if (raw instanceof Date) {
+      return raw.toISOString().slice(0, 10);
+    }
+    if (typeof raw === 'string') {
+      return raw.slice(0, 10);
+    }
+  }
+  // Fallback for legacy expenses without createdAt
+  return (e.date || '').slice(0, 10);
+};
+
 // ── Settlement pair helpers (Method B) ────────────────────────────────────────
 
 /**
@@ -485,18 +519,30 @@ export const getSettlementBadge = (
   confirmedPairMap: Map<string, string>,
 ): 'settled' | 'received' | 'none' => {
   const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+  // Use createdAt (actual Firestore write time) so backdated expenses created
+  // after a settlement are NOT incorrectly marked as already settled.
+  // Falls back to e.date only for old records without createdAt.
+  const insertDate = getExpenseInsertDate(e);
+
+  // Helper: does a confirmed settlement cover this expense?
+  // Covered = expense was inserted on or before the settlement confirmation date.
+  const isCoveredBy = (settlementDate: string | undefined): boolean => {
+    if (settlementDate == null) return false;
+    if (!insertDate) return false;
+    return insertDate <= settlementDate;
+  };
 
   // Viewer is a debtor for this expense (in splitWith, not the payer)
   if (e.payer !== viewerName && sw.includes(viewerName)) {
     if (e.settledAt) return 'settled';  // legacy stamp
-    if (confirmedPairMap.has(`${viewerName}→${e.payer}`)) return 'settled';
+    if (isCoveredBy(confirmedPairMap.get(`${viewerName}→${e.payer}`))) return 'settled';
   }
 
   // Viewer is the payer (creditor): show 'received' when all debtors confirmed
   if (e.payer === viewerName) {
     if (e.receivedAt) return 'received';  // legacy stamp
     const debtors = sw.filter(n => n !== viewerName);
-    if (debtors.length > 0 && debtors.every(d => confirmedPairMap.has(`${d}→${viewerName}`))) {
+    if (debtors.length > 0 && debtors.every(d => isCoveredBy(confirmedPairMap.get(`${d}→${viewerName}`)))) {
       return 'received';
     }
   }

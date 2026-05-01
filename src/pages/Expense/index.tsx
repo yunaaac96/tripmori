@@ -949,35 +949,43 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // exists, so that: TWD expenses → "台幣 NT$ X", JPY expenses → "JPY Y ≈ NT$ Z".
   const getPairCurrencyHints = (
     from: string, to: string,
-  ): { cur: string; origAmt: number; twdEquiv: number }[] => {
+  ): { cur: string; origAmt: number; twdEquiv: number; isCash: boolean }[] => {
     const active = (expenses as any[]).filter((e: any) =>
       !e.awaitCardStatement && !e.isPrivate && e.category !== 'settlement'
     );
-    const buckets: Record<string, { origSum: number; twdSum: number }> = {};
+    const buckets: Record<string, { origSum: number; twdSum: number; isCash: boolean }> = {};
     active.forEach((e: any) => {
       const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
       const cur: string = e.currency || 'TWD';
+      // Card + foreign → settle in TWD; cash + foreign → settle in original currency
+      const isCashForeign = cur !== 'TWD' && e.paymentMethod !== 'card';
+      const bucketCur = isCashForeign ? cur : 'TWD';
       const origAmt: number = e.amount || 0;
       const twdAmt: number = effectiveTWD(e);
-      if (twdAmt <= 0 || origAmt <= 0) return;
+      if (twdAmt <= 0) return;
       if (e.payer === to && sw.includes(from)) {
         const shareTWD = getPersonalShare(e, from, memberNames);
-        if (!buckets[cur]) buckets[cur] = { origSum: 0, twdSum: 0 };
-        buckets[cur].origSum += origAmt * (shareTWD / twdAmt);
-        buckets[cur].twdSum  += shareTWD;
+        if (!buckets[bucketCur]) buckets[bucketCur] = { origSum: 0, twdSum: 0, isCash: isCashForeign };
+        if (isCashForeign && origAmt > 0) {
+          buckets[bucketCur].origSum += origAmt * (shareTWD / twdAmt);
+        }
+        buckets[bucketCur].twdSum += shareTWD;
       } else if (e.payer === from && sw.includes(to)) {
         const shareTWD = getPersonalShare(e, to, memberNames);
-        if (!buckets[cur]) buckets[cur] = { origSum: 0, twdSum: 0 };
-        buckets[cur].origSum -= origAmt * (shareTWD / twdAmt);
-        buckets[cur].twdSum  -= shareTWD;
+        if (!buckets[bucketCur]) buckets[bucketCur] = { origSum: 0, twdSum: 0, isCash: isCashForeign };
+        if (isCashForeign && origAmt > 0) {
+          buckets[bucketCur].origSum -= origAmt * (shareTWD / twdAmt);
+        }
+        buckets[bucketCur].twdSum -= shareTWD;
       }
     });
     const hints = Object.entries(buckets)
       .filter(([, { twdSum }]) => twdSum > 0.5)
-      .map(([cur, { origSum, twdSum }]) => ({
+      .map(([cur, { origSum, twdSum, isCash }]) => ({
         cur,
         origAmt:  Math.round(origSum),
         twdEquiv: Math.round(twdSum),
+        isCash,
       }));
     // Only return hints when there is at least one non-TWD currency
     return hints.some(h => h.cur !== 'TWD') ? hints : [];
@@ -2433,8 +2441,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                   {hints.map(h => (
                                     <p key={h.cur} style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>
                                       {h.cur === 'TWD'
-                                        ? `台幣 NT$ ${h.twdEquiv.toLocaleString()}`
-                                        : `${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
+                                        ? `💳 台幣 NT$ ${h.twdEquiv.toLocaleString()}`
+                                        : `💵 現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
                                     </p>
                                   ))}
                                 </div>
@@ -2457,7 +2465,23 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               }
                               return (
                                 <button
-                                  onClick={() => { setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount }); setPayModalForeign(false); setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY'); setPayModalAmt(''); setPayModalRate(''); }}
+                                  onClick={() => {
+                                    const hints = getPairCurrencyHints(debt.from, debt.to);
+                                    const cashHint = hints.find(h => h.cur !== 'TWD' && h.isCash);
+                                    setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount });
+                                    if (cashHint) {
+                                      // Pre-select foreign cash mode with the hint's currency & amount
+                                      setPayModalForeign(true);
+                                      setPayModalCur(cashHint.cur);
+                                      setPayModalAmt(String(cashHint.origAmt));
+                                      setPayModalRate('');
+                                    } else {
+                                      setPayModalForeign(false);
+                                      setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY');
+                                      setPayModalAmt('');
+                                      setPayModalRate('');
+                                    }
+                                  }}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
                                   確認已付

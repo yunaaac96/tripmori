@@ -1077,7 +1077,7 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                     if (proxyTargets.length === 0) return null;
                     return (
                       <div style={{ marginTop: 6, background: '#F5F3FF', borderRadius: 10, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
-                        <p style={{ fontSize: 10, color: '#6A5A9A', margin: 0, lineHeight: 1.5 }}>
+                        <p style={{ fontSize: 10, color: '#4A3570', margin: 0, lineHeight: 1.5 }}>
                           被授權的夥伴可替你代錄私人帳目。
                         </p>
                         {proxyTargets.map((tm: any) => {
@@ -1089,7 +1089,7 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                                   ? <img src={tm.avatarUrl} alt={tm.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                   : tm.name?.[0]?.toUpperCase()}
                               </div>
-                              <span style={{ flex: 1, fontSize: 12, fontWeight: 600, color: C.bark }}>{tm.name}</span>
+                              <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#3D2A60' }}>{tm.name}</span>
                               <button
                                 onClick={() => handleToggleProxy(tm.googleUid)}
                                 disabled={savingProxy}
