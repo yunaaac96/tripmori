@@ -2647,7 +2647,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}>{e.description}</p>
+                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{e.description}</p>
                         {e._pending && (
                           <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>↻</span>
                         )}
@@ -2687,7 +2687,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           ) : null
                         )}
                       </div>
-                      <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                         {isIncome
                           ? `${e.payer} 代收 · ${e.splitWith && e.splitWith.length === 1 ? `${e.splitWith[0]} 受益` : '全體均分'}`
                           : `${e.payer} 付款`
@@ -2701,6 +2701,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       {!isSettlement && !isPrivateExpense && (
                         <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
                           {splitModeLabel(e)}
+                          {(() => {
+                            const sw3 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+                            if (sw3.length <= 1) return null;
+                            const avg = Math.round(amtTWD / sw3.length);
+                            return <span style={{ color: C.barkLight }}> · 人均 NT$ {avg.toLocaleString()}</span>;
+                          })()}
                           {e.notes ? <> · <SmartText text={e.notes} /></> : ''}
                           {(() => {
                             const badge = currentUserName
@@ -2758,12 +2764,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <p style={{ fontSize: 15, fontWeight: 700, color: isIncome ? '#4A8A4A' : isSettlement ? C.sageDark : C.earth, margin: 0 }}>{isIncome ? '＋' : ''}NT$ {amtTWD.toLocaleString()}</p>
                           {e.currency !== 'TWD' && !isSettlement && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
-                          {!isSettlement && !isPrivateExpense && (() => {
-                            const sw3 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-                            if (sw3.length <= 1) return null;
-                            const avg = Math.round(amtTWD / sw3.length);
-                            return <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>人均 NT$ {avg.toLocaleString()} ×{sw3.length}</p>;
-                          })()}
                         </>
                       )}
                       {!isReadOnly && (
