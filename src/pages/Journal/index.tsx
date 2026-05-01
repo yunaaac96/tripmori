@@ -394,7 +394,13 @@ export default function JournalPage({ journals, members, journalComments, firest
                     <FontAwesomeIcon icon={faUsers} />所有成員
                   </button>
                   <button
-                    onClick={() => setVisibleToMode('restricted')}
+                    onClick={() => {
+                      setVisibleToMode('restricted');
+                      // Pre-select all members (except author) so user starts from full list and deselects
+                      if (visibleToMode !== 'restricted') {
+                        setFormVisibleTo(memberNames.filter(n => n !== (form.author || currentUser)));
+                      }
+                    }}
                     style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1.5px solid ${visibleToMode === 'restricted' ? C.earth : 'var(--tm-cream-dark)'}`, background: visibleToMode === 'restricted' ? '#FFF5E8' : 'var(--tm-card-bg)', color: visibleToMode === 'restricted' ? C.earth : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                     <FontAwesomeIcon icon={faUserLock} />指定成員
                   </button>
@@ -420,8 +426,8 @@ export default function JournalPage({ journals, members, journalComments, firest
                       })}
                     </div>
                     {formVisibleTo.length === 0 && (
-                      <p style={{ fontSize: 11, color: '#C05A00', margin: '8px 0 0', fontWeight: 600 }}>
-                        <FontAwesomeIcon icon={faEyeSlash} style={{ marginRight: 4 }} />尚未選取任何成員，儲存後此篇日誌只有你自己可見
+                      <p style={{ fontSize: 11, color: 'var(--tm-bark-light)', margin: '8px 0 0', fontWeight: 600 }}>
+                        <FontAwesomeIcon icon={faEyeSlash} style={{ marginRight: 4 }} />未選取任何成員，僅作者自己可見
                       </p>
                     )}
                   </div>
