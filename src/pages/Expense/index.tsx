@@ -946,7 +946,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // ── Category breakdown ───────────────────────────────────────────────────
   // Visible expenses: filter out private that belong to others
   const visibleExpenses = expenses.filter((e: any) =>
-    !e.isPrivate || (e.privateOwnerUid && e.privateOwnerUid === googleUid)
+    !e.isPrivate ||
+    (e.privateOwnerUid && e.privateOwnerUid === googleUid) ||  // I'm the principal
+    (e.loggedByUid && e.loggedByUid === googleUid)             // I'm the proxy who recorded it
   );
   // Base: further filter by "與我有關" if selected
   const baseExpenses = expenseView === 'mine'
@@ -2674,11 +2676,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     })()}
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      {/* ── Title (own line, ellipsis) ── */}
-                      <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                        {e._pending && <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block', marginRight: 3 }}>↻</span>}
-                        {e.description}
-                      </p>
+                      {/* ── Title row: title + receipt paperclip ── */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
+                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                          {e._pending && <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block', marginRight: 3 }}>↻</span>}
+                          {e.description}
+                        </p>
+                        {e.receiptUrl && !isVisitor && (
+                          <button
+                            onClick={() => setLightboxUrl(e.receiptUrl)}
+                            title="查看收據附件"
+                            style={{ flexShrink: 0, width: 22, height: 22, borderRadius: 6, border: `1px solid ${C.creamDark}`, background: 'var(--tm-input-bg)', color: C.sageDark, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>
+                            <FontAwesomeIcon icon={faPaperclip} style={{ fontSize: 10 }} />
+                          </button>
+                        )}
+                      </div>
                       {/* ── Badges (own row, wrappable) ── */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 3 }}>
                         {isPrivateExpense && (
@@ -2926,17 +2938,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     </div>
                   )}
 
-                  {/* Receipt thumbnail */}
-                  {e.receiptUrl && !isVisitor && (
-                    <div onClick={() => setLightboxUrl(e.receiptUrl)} style={{ marginTop: 8, borderRadius: 10, overflow: 'hidden', border: `1.5px solid ${C.creamDark}`, cursor: 'pointer', display: 'flex', alignItems: 'center', background: 'var(--tm-input-bg)' }}>
-                      <img src={e.receiptUrl} alt="附件" style={{ width: 56, height: 56, objectFit: 'cover', flexShrink: 0 }} />
-                      <div style={{ padding: '0 12px', flex: 1 }}>
-                        <p style={{ fontSize: 11, fontWeight: 700, color: C.sageDark, margin: '0 0 2px' }}><FontAwesomeIcon icon={faPaperclip} style={{ marginRight: 4 }} />收據附件</p>
-                        <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>點擊查看完整圖片</p>
-                      </div>
-                      <span style={{ fontSize: 18, marginRight: 12, color: C.barkLight }}>›</span>
-                    </div>
-                  )}
+                  {/* Receipt thumbnail: moved to paperclip icon on title row */}
 
                   {/* Sub-items toggle */}
                   {hasSubItems && (
