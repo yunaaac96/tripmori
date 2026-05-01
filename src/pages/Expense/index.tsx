@@ -863,21 +863,38 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // ── canDeleteExpense / handleDelete (placed here to access the maps above) ───────────────
   const canDeleteExpense = (e: any) => {
     if (isReadOnly) return false;
+
+    // ── Settlement records ───────────────────────────────────────────────────
     if (e.category === 'settlement') {
       const parties = [e.payer, ...(e.splitWith || [])];
       return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
     }
+
+    // ── Non-settlement: "already settled" guard (blocks everyone incl. Owner) ──
+    // Legacy method: settledAt / receivedAt fields
     if (e.settledAt || e.receivedAt) return false;
-    // Method B badge check: block deletion when a Method-B settlement badge is active
+
+    // Method B: check from current user's perspective (party's own badge)
     if (currentUserName) {
       const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
       if (badge !== 'none') return false;
     }
+    // Method B: when current user is NOT the payer (e.g. Owner viewing others'
+    // expense), also check from payer's perspective — payer's 'received' badge
+    // means every debtor has settled, so the expense is fully closed.
+    if (e.payer && e.payer !== currentUserName) {
+      const payerBadge = getSettlementBadge(e, e.payer, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+      if (payerBadge !== 'none') return false;
+    }
+
+    // ── Private expenses ─────────────────────────────────────────────────────
     if (e.isPrivate) {
       return isOwner ||
         !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
     }
-    // Non-private: must be a party (payer or in effective splitWith)
+
+    // ── Non-private: Owner can delete any unsettled expense;
+    //    others must be a party (payer or in effective splitWith) ─────────────
     const swD = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
     return isOwner || !!(currentUserName && (e.payer === currentUserName || swD.includes(currentUserName)));
   };
