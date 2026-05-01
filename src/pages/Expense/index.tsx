@@ -1125,33 +1125,45 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
                 </div>
                 <div>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: '0 0 4px' }}>匯率（1 {payModalCur} = __ TWD）</p>
-                  <input type="number" inputMode="decimal" placeholder="例：0.22" value={payModalRate}
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, margin: '0 0 4px' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: C.bark, margin: 0 }}>匯率（1 {payModalCur} = __ TWD）</p>
+                    <span style={{ fontSize: 10, color: C.barkLight, background: 'var(--tm-section-bg)', borderRadius: 4, padding: '1px 5px' }}>選填</span>
+                  </div>
+                  <input type="number" inputMode="decimal" placeholder={`留空使用系統匯率 ${CURRENCY_TO_TWD[payModalCur] ? `(≈${CURRENCY_TO_TWD[payModalCur]})` : ''}`} value={payModalRate}
                     onChange={e => setPayModalRate(e.target.value)}
                     style={{ ...inputStyle, width: '100%', boxSizing: 'border-box' }} />
                 </div>
-                {payModalAmt && payModalRate && (
+                {payModalAmt && (
                   <div style={{ padding: '8px 12px', background: '#F0F8E8', borderRadius: 10, border: `1px solid ${C.sageDark}` }}>
-                    <p style={{ fontSize: 12, color: C.sageDark, margin: 0, fontWeight: 600 }}>
-                      {payModalCur} {Number(payModalAmt).toLocaleString()} × {payModalRate} = NT$ {Math.round(Number(payModalAmt) * Number(payModalRate)).toLocaleString()}
-                    </p>
+                    {(() => {
+                      const rate = payModalRate ? Number(payModalRate) : (CURRENCY_TO_TWD[payModalCur] ?? null);
+                      if (!rate) return null;
+                      return (
+                        <p style={{ fontSize: 12, color: C.sageDark, margin: 0, fontWeight: 600 }}>
+                          {payModalCur} {Number(payModalAmt).toLocaleString()} × {rate} = NT$ {Math.round(Number(payModalAmt) * rate).toLocaleString()}
+                          {!payModalRate && <span style={{ fontSize: 10, opacity: 0.7, marginLeft: 4 }}>（系統匯率）</span>}
+                        </p>
+                      );
+                    })()}
                   </div>
                 )}
               </div>
             )}
             <button
-              disabled={payModalForeign && (!payModalAmt || !payModalRate || Number(payModalAmt) <= 0 || Number(payModalRate) <= 0)}
+              disabled={payModalForeign && (!payModalAmt || Number(payModalAmt) <= 0)}
               onClick={async () => {
                 let finalTWD = payModal.amountTWD;
                 let notes = `${payModal.from} → ${payModal.to}`;
-                if (payModalForeign && payModalAmt && payModalRate) {
-                  finalTWD = Math.round(Number(payModalAmt) * Number(payModalRate));
-                  notes = `${payModal.from} → ${payModal.to}（${payModalCur} ${Number(payModalAmt).toLocaleString()} @ ${payModalRate}）`;
+                if (payModalForeign && payModalAmt) {
+                  const rate = payModalRate ? Number(payModalRate) : (CURRENCY_TO_TWD[payModalCur] ?? 1);
+                  finalTWD = Math.round(Number(payModalAmt) * rate);
+                  const rateLabel = payModalRate ? payModalRate : `${rate}(系統)`;
+                  notes = `${payModal.from} → ${payModal.to}（${payModalCur} ${Number(payModalAmt).toLocaleString()} @ ${rateLabel}）`;
                 }
                 setPayModal(null);
                 await handleDebtorPay(payModal.from, payModal.to, finalTWD, notes);
               }}
-              style={{ width: '100%', padding: '13px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: (payModalForeign && (!payModalAmt || !payModalRate)) ? 0.5 : 1 }}>
+              style={{ width: '100%', padding: '13px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 14, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: (payModalForeign && !payModalAmt) ? 0.5 : 1 }}>
               ✓ 確認已付款
             </button>
           </div>
@@ -1412,7 +1424,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                   </p>
                                 ))}
                                 <p style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.6, margin: '2px 0 0', fontStyle: 'italic' }}>
-                                  可分次結清，系統自動更新餘額
+                                  外幣現金可與台幣分開結清
                                 </p>
                               </div>
                             )}
@@ -2475,7 +2487,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                     </p>
                                   ))}
                                   <p style={{ fontSize: 10, color: C.barkLight, opacity: 0.7, margin: '2px 0 0', fontStyle: 'italic' }}>
-                                    可分次結清，系統自動更新餘額
+                                    外幣現金可與台幣分開結清
                                   </p>
                                 </div>
                               );
