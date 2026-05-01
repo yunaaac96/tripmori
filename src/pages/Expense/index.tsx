@@ -2788,30 +2788,94 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               <FontAwesomeIcon icon={faArrowRightArrowLeft} />
                             </button>
                           )}
-                          {/* 結清這筆 — debtor can settle a single expense directly */}
-                          {!isSettlement && !isPrivateExpense && !isAdjustment && currentUserName && e.payer !== currentUserName && (() => {
+                          {/* 結清這筆 — debtor initiates (pending), creditor confirms directly */}
+                          {!isSettlement && !isPrivateExpense && !isAdjustment && currentUserName && (() => {
                             const sw2 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-                            if (!sw2.includes(currentUserName)) return null;
-                            const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
-                            if (badge2 !== 'none') return null; // already settled, don't show button
-                            const hasPendingPerExpense = (expenses as any[]).some((se: any) =>
-                              se.category === 'settlement' && se.status === 'pending' &&
-                              se.expenseRef === e.id && se.payer === currentUserName
-                            );
-                            if (hasPendingPerExpense) {
+
+                            // ── Debtor view ──
+                            if (e.payer !== currentUserName && sw2.includes(currentUserName)) {
+                              const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                              if (badge2 !== 'none') return null;
+                              const hasPendingPerExpense = (expenses as any[]).some((se: any) =>
+                                se.category === 'settlement' && se.status === 'pending' &&
+                                se.expenseRef === e.id && se.payer === currentUserName
+                              );
+                              if (hasPendingPerExpense) {
+                                return (
+                                  <span title="已記錄還款，等待對方確認" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, borderRadius: 8, background: '#FFF8E0', border: `1px solid #D4A800`, color: '#9A6800', fontSize: 9, fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap' }}>
+                                    待確認
+                                  </span>
+                                );
+                              }
+                              const myShare = getPersonalShare(e, currentUserName, memberNames);
                               return (
-                                <span title="已記錄還款，等待對方確認" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, borderRadius: 8, background: '#FFF8E0', border: `1px solid #D4A800`, color: '#9A6800', fontSize: 9, fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap' }}>
-                                  待確認
-                                </span>
+                                <button onClick={() => openPayModal(currentUserName, e.payer, myShare, e.id)} title={`結清這筆 NT$${myShare.toLocaleString()}`}
+                                  style={{ height: 28, borderRadius: 8, border: `1px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap' }}>
+                                  結清這筆
+                                </button>
                               );
                             }
-                            const myShare = getPersonalShare(e, currentUserName, memberNames);
-                            return (
-                              <button onClick={() => openPayModal(currentUserName, e.payer, myShare, e.id)} title={`結清這筆 NT$${myShare.toLocaleString()}`}
-                                style={{ height: 28, borderRadius: 8, border: `1px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap' }}>
-                                結清這筆
-                              </button>
-                            );
+
+                            // ── Creditor view (payer) ──
+                            if (e.payer === currentUserName) {
+                              const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                              if (badge2 !== 'none') return null; // already received
+                              const debtors = sw2.filter(n => n !== currentUserName);
+                              if (debtors.length === 0) return null;
+                              const creditorKey = `creditor-${e.id}`;
+                              const isProcessingThis = settlingId === creditorKey;
+                              return (
+                                <button
+                                  disabled={isProcessingThis}
+                                  onClick={async () => {
+                                    setSettlingId(creditorKey);
+                                    const today = new Date().toISOString().slice(0, 10);
+                                    try {
+                                      for (const debtor of debtors) {
+                                        if (perExpenseConfirmedSet.has(`${e.id}|${debtor}`)) continue;
+                                        const pendingEntry = (expenses as any[]).find((ex: any) =>
+                                          ex.category === 'settlement' && ex.status === 'pending' &&
+                                          ex.payer === debtor && ex.splitWith?.[0] === currentUserName &&
+                                          ex.expenseRef === e.id
+                                        );
+                                        if (pendingEntry) {
+                                          await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', pendingEntry.id), {
+                                            status: 'confirmed', confirmedAt: today,
+                                          });
+                                        } else {
+                                          const share = getPersonalShare(e, debtor, memberNames);
+                                          if (share <= 0) continue;
+                                          await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
+                                            description: '單筆結清',
+                                            amount: share, currency: 'TWD', amountTWD: share,
+                                            category: 'settlement',
+                                            payer: debtor,
+                                            paymentMethod: 'cash',
+                                            splitMode: 'equal',
+                                            splitWith: [currentUserName],
+                                            percentages: {}, customAmounts: {}, subItems: [],
+                                            date: today,
+                                            notes: `${debtor} → ${currentUserName}`,
+                                            status: 'confirmed',
+                                            confirmedAt: today,
+                                            paidAt: today,
+                                            expenseRef: e.id,
+                                            createdAt: Timestamp.now(),
+                                          });
+                                        }
+                                      }
+                                    } finally {
+                                      setSettlingId(null);
+                                    }
+                                  }}
+                                  title="標記此筆費用已收款（直接確認）"
+                                  style={{ height: 28, borderRadius: 8, border: `1px solid #4A7A35`, background: 'var(--tm-card-bg)', color: '#4A7A35', fontSize: 10, fontWeight: 700, cursor: isProcessingThis ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap', opacity: isProcessingThis ? 0.5 : 1 }}>
+                                  {isProcessingThis ? '處理中…' : '結清這筆'}
+                                </button>
+                              );
+                            }
+
+                            return null;
                           })()}
                           {canDeleteExpense(e) && (
                             <button
