@@ -191,8 +191,18 @@ export const getPersonalShare = (
   const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
   if (!sw.includes(name)) return 0;
   const eAmt = effectiveTWD(e);
-  if (e.splitMode === 'weighted' && e.percentages?.[name] != null) {
-    return Math.ceil(eAmt * e.percentages[name] / 100);
+  if (e.splitMode === 'weighted' && e.percentages != null) {
+    // Largest-remainder method: guarantees sum(shares) === eAmt (no phantom over-allocation)
+    const exact = (pct: number) => eAmt * pct / 100;
+    const sorted = [...sw].sort();           // deterministic order for remainder distribution
+    const floors = sorted.map(n => Math.floor(exact(e.percentages![n] ?? 0)));
+    const allocated = floors.reduce((s, v) => s + v, 0);
+    const rem = eAmt - allocated;
+    const fracs = sorted.map((n, i) => ({ idx: i, frac: exact(e.percentages![n] ?? 0) - floors[i] }))
+      .sort((a, b) => b.frac - a.frac);
+    const myIdx = sorted.indexOf(name);
+    const myRankInFracs = fracs.findIndex(f => f.idx === myIdx);
+    return floors[myIdx] + (myRankInFracs < rem ? 1 : 0);
   }
   if (e.splitMode === 'amount' && e.customAmounts?.[name] != null) {
     // Compute share proportionally from effectiveTWD so that sum(shares) == effectiveTWD
@@ -256,8 +266,18 @@ export const computeMemberStats = (
       // Income entries reduce everyone's owed share (they all benefit from the refund/income).
       const sign = e.isIncome ? -1 : 1;
       if (e.splitMode === 'weighted' && e.percentages && Object.keys(e.percentages).length > 0) {
-        const pct = e.percentages[name] ?? Math.floor(100 / sw.length);
-        return s + sign * Math.ceil(eAmt * pct / 100);
+        // Largest-remainder method — same algorithm as getPersonalShare
+        const exact2 = (pct: number) => eAmt * pct / 100;
+        const sorted2 = [...sw].sort();
+        const floors2 = sorted2.map(n2 => Math.floor(exact2(e.percentages![n2] ?? 0)));
+        const allocated2 = floors2.reduce((a, v) => a + v, 0);
+        const rem2 = eAmt - allocated2;
+        const fracs2 = sorted2.map((n2, i) => ({ idx: i, frac: exact2(e.percentages![n2] ?? 0) - floors2[i] }))
+          .sort((a, b) => b.frac - a.frac);
+        const myIdx2 = sorted2.indexOf(name);
+        const myRank2 = fracs2.findIndex(f => f.idx === myIdx2);
+        const share2 = floors2[myIdx2] + (myRank2 < rem2 ? 1 : 0);
+        return s + sign * share2;
       }
       if (e.splitMode === 'amount' && e.customAmounts && e.customAmounts[name] != null) {
         // Use proportional split from effectiveTWD — avoids FX-rate mismatch between

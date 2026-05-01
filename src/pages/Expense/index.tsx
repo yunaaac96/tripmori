@@ -270,6 +270,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   };
   // Settlement deletion confirm modal
   const [settlementDeleteTarget, setSettlementDeleteTarget] = useState<any | null>(null);
+  // Regular (non-settlement) expense deletion confirm modal
+  const [regularDeleteTarget, setRegularDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
   const [settlementExpanded, setSettlementExpanded] = useState(false);
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
@@ -608,37 +610,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     return true;
   };
 
-  const canDeleteExpense = (e: any) => {
-    if (isReadOnly) return false;
-    if (e.category === 'settlement') {
-      const parties = [e.payer, ...(e.splitWith || [])];
-      return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
-    }
-    if (e.settledAt || e.receivedAt) return false;
-    if (e.isPrivate) {
-      return isOwner ||
-        !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
-    }
-    return isOwner || !!(currentUserName);
-  };
-
-  const handleDelete = async (id: string, expense: any) => {
-    if (!canDeleteExpense(expense)) return;
-    // If deleting a settlement, clear settledAt/settledByRef AND receivedAt on all linked expenses
-    if (expense.category === 'settlement') {
-      const linked = (expenses as any[]).filter((e: any) => e.settledByRef === id);
-      if (linked.length > 0) {
-        await Promise.all(linked.map((e: any) =>
-          updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
-            settledAt: deleteField(),
-            settledByRef: deleteField(),
-            receivedAt: deleteField(),
-          })
-        ));
-      }
-    }
-    await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
-  };
+  // canDeleteExpense and handleDelete defined AFTER the settlement maps (see below ~line 880)
+  // so they can reference confirmedAmountsMap / pairDebtsMap / perExpenseConfirmedSet.
 
   // ── "與我有關" filter ─────────────────────────────────────────────────────
   const isMyExpense = (e: any): boolean => {
@@ -670,6 +643,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       subItems: [],
       date: new Date().toISOString().slice(0, 10),
       notes: `${from} → ${to}`,
+      status: 'pending',
+      paidAt: new Date().toISOString().slice(0, 10),
       createdAt: Timestamp.now(),
     };
     await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
@@ -681,6 +656,17 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     if (isReadOnly) return;
     const key = `${from}-${to}`;
     setSettlingId(key);
+    // Idempotency guard: skip if a pending settlement for the same pair (+ same expenseRef)
+    // was created within the last 60 seconds — prevents double-write on network reconnect.
+    const recentDuplicate = (expenses as any[]).find((ex: any) =>
+      ex.category === 'settlement' &&
+      ex.status === 'pending' &&
+      ex.payer === from &&
+      (ex.splitWith?.[0] === to) &&
+      (expenseRef ? ex.expenseRef === expenseRef : !ex.expenseRef) &&
+      ex.createdAt?.toMillis && (Date.now() - ex.createdAt.toMillis()) < 60_000
+    );
+    if (recentDuplicate) { setSettlingId(null); return; }
     const today = new Date().toISOString().slice(0, 10);
     const record: Record<string, unknown> = {
       description: expenseRef ? '單筆結清' : '結清款項',
@@ -868,6 +854,44 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const pairDebtsMap = new Map(settlements.map(s => [`${s.from}→${s.to}`, s.amount]));
   // Per-expense settlement set for "結清這筆" flow
   const perExpenseConfirmedSet = getPerExpenseConfirmedSet(expenses as any[]);
+
+  // ── canDeleteExpense / handleDelete (placed here to access the maps above) ───────────────
+  const canDeleteExpense = (e: any) => {
+    if (isReadOnly) return false;
+    if (e.category === 'settlement') {
+      const parties = [e.payer, ...(e.splitWith || [])];
+      return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
+    }
+    if (e.settledAt || e.receivedAt) return false;
+    // Method B badge check: block deletion when a Method-B settlement badge is active
+    if (currentUserName) {
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+      if (badge !== 'none') return false;
+    }
+    if (e.isPrivate) {
+      return isOwner ||
+        !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
+    }
+    return isOwner || !!(currentUserName);
+  };
+
+  const handleDelete = async (id: string, expense: any) => {
+    if (!canDeleteExpense(expense)) return;
+    // If deleting a settlement, clear settledAt/settledByRef AND receivedAt on all linked expenses
+    if (expense.category === 'settlement') {
+      const linked = (expenses as any[]).filter((e: any) => e.settledByRef === id);
+      if (linked.length > 0) {
+        await Promise.all(linked.map((e: any) =>
+          updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
+            settledAt: deleteField(),
+            settledByRef: deleteField(),
+            receivedAt: deleteField(),
+          })
+        ));
+      }
+    }
+    await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
+  };
 
   // ── Member card order ────────────────────────────────────────────────────
   // Owner can reorder; editors see own card first then rest
@@ -1685,6 +1709,50 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         );
       })()}
 
+      {/* ── Regular Expense Delete Confirm Modal ── */}
+      {regularDeleteTarget && (() => {
+        const e = regularDeleteTarget;
+        const amtTWD2 = effectiveTWD(e);
+        const cat = EXPENSE_CATEGORY_MAP[e.category] || EXPENSE_CATEGORY_MAP.other;
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 500 }}
+            onClick={ev => { if (ev.target === ev.currentTarget) setRegularDeleteTarget(null); }}>
+            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: '#9A3A3A', margin: '0 0 6px' }}>
+                <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />刪除費用
+              </p>
+              <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 16px', lineHeight: 1.6 }}>
+                確定要刪除此筆費用？刪除後無法復原。
+              </p>
+              <div style={{ background: 'var(--tm-section-bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FontAwesomeIcon icon={CATEGORY_ICONS[e.category] || CATEGORY_ICONS.other} style={{ fontSize: 14, color: avatarTextColor(cat?.bg) }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description}</p>
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>{e.payer} · {e.date || ''}</p>
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#9A3A3A', flexShrink: 0 }}>NT$ {amtTWD2.toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setRegularDeleteTarget(null)}
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  取消
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleDelete(e.id, e);
+                    setRegularDeleteTarget(null);
+                  }}
+                  style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: '#9A3A3A', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />確認刪除
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       {/* ── Settlement Delete Confirm Modal ── */}
       {settlementDeleteTarget && (() => {
         const t = settlementDeleteTarget;
@@ -2348,6 +2416,29 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     </p>
                     <span className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
                   </div>
+                  {/* Batch confirm button: shown when this creditor has ≥2 pending debts to confirm */}
+                  {!isReadOnly && (creditor === currentUserName || adminMode) && (() => {
+                    const pendingDebts = debts.filter(d => (expenses as any[]).find((ex: any) =>
+                      ex.category === 'settlement' && ex.status === 'pending' &&
+                      ex.payer === d.from && ex.splitWith?.[0] === d.to
+                    ));
+                    if (pendingDebts.length < 2) return null;
+                    return (
+                      <button
+                        onClick={async () => {
+                          for (const d of pendingDebts) {
+                            const pEntry = (expenses as any[]).find((ex: any) =>
+                              ex.category === 'settlement' && ex.status === 'pending' &&
+                              ex.payer === d.from && ex.splitWith?.[0] === d.to
+                            );
+                            await handleCreditorConfirm(pEntry?.id ?? null, d.from, d.to, d.amount);
+                          }
+                        }}
+                        style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                        <FontAwesomeIcon icon={faCheck} style={{ fontSize: 10 }} />一鍵確認全部收款（{pendingDebts.length} 筆）
+                      </button>
+                    );
+                  })()}
                   {/* Debtors */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {debts.map((debt, i) => {
@@ -2667,6 +2758,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <p style={{ fontSize: 15, fontWeight: 700, color: isIncome ? '#4A8A4A' : isSettlement ? C.sageDark : C.earth, margin: 0 }}>{isIncome ? '＋' : ''}NT$ {amtTWD.toLocaleString()}</p>
                           {e.currency !== 'TWD' && !isSettlement && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
+                          {!isSettlement && !isPrivateExpense && (() => {
+                            const sw3 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+                            if (sw3.length <= 1) return null;
+                            const avg = Math.round(amtTWD / sw3.length);
+                            return <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>人均 NT$ {avg.toLocaleString()} ×{sw3.length}</p>;
+                          })()}
                         </>
                       )}
                       {!isReadOnly && (
@@ -2723,7 +2820,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                   setSettlementDeleteTarget(e);
                                   setSettlementDeleteInput('');
                                 } else {
-                                  handleDelete(e.id, e);
+                                  setRegularDeleteTarget(e);
                                 }
                               }}
                               className="tm-btn-delete-soft"
