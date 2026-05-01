@@ -607,6 +607,11 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       if (googleUid && e.loggedByUid === googleUid) return true;
       return false;
     }
+    // Non-private: must be a party to the expense (payer or in effective splitWith)
+    if (currentUserName) {
+      const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      if (e.payer !== currentUserName && !sw.includes(currentUserName)) return false;
+    }
     return true;
   };
 
@@ -872,7 +877,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       return isOwner ||
         !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
     }
-    return isOwner || !!(currentUserName);
+    // Non-private: must be a party (payer or in effective splitWith)
+    const swD = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+    return isOwner || !!(currentUserName && (e.payer === currentUserName || swD.includes(currentUserName)));
   };
 
   const handleDelete = async (id: string, expense: any) => {
@@ -2771,11 +2778,20 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                         </>
                       )}
+                      {/* Settlement delete: inline in right column (keeps card compact) */}
+                      {isSettlement && !isReadOnly && canDeleteExpense(e) && (
+                        <button
+                          onClick={() => { setSettlementDeleteTarget(e); setSettlementDeleteInput(''); }}
+                          className="tm-btn-delete-soft"
+                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', marginTop: 4 }}>
+                          <FontAwesomeIcon icon={faTrashCan} />
+                        </button>
+                      )}
                     </div>
                   </div>
 
-                  {/* ── Button row (below main content, right-aligned) ── */}
-                  {!isReadOnly && (
+                  {/* ── Button row: non-settlement only (keeps settlement cards compact) ── */}
+                  {!isReadOnly && !isSettlement && (
                     <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
                       {canEditExpense(e) && (
                         <button onClick={() => openEdit(e)}
@@ -2783,15 +2799,15 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <FontAwesomeIcon icon={faPen} />
                         </button>
                       )}
-                      {/* 補實際金額 */}
-                      {!isSettlement && isForeignCard && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
+                      {/* 補實際金額: payer only (they have the card statement) */}
+                      {isForeignCard && e.payer === currentUserName && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
                         <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <FontAwesomeIcon icon={faReceipt} />
                         </button>
                       )}
-                      {/* 補記差額 */}
-                      {!isSettlement && !isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
+                      {/* 補記差額: parties only */}
+                      {!isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && currentUserName && (() => { const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames; return e.payer === currentUserName || sw.includes(currentUserName); })() && (
                         <button onClick={() => openAdjustForm(e)} title="補記差額"
                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <FontAwesomeIcon icon={faArrowRightArrowLeft} />
@@ -2880,14 +2896,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       })()}
                       {canDeleteExpense(e) && (
                         <button
-                          onClick={() => {
-                            if (isSettlement) {
-                              setSettlementDeleteTarget(e);
-                              setSettlementDeleteInput('');
-                            } else {
-                              setRegularDeleteTarget(e);
-                            }
-                          }}
+                          onClick={() => setRegularDeleteTarget(e)}
                           className="tm-btn-delete-soft"
                           style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <FontAwesomeIcon icon={faTrashCan} />
