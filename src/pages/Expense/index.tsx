@@ -1103,7 +1103,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               {(['twd', 'foreign'] as const).map(mode => (
                 <button key={mode} onClick={() => setPayModalForeign(mode === 'foreign')}
                   style={{ flex: 1, padding: '8px 0', borderRadius: 10, border: `1.5px solid ${payModalForeign === (mode === 'foreign') ? C.earth : C.creamDark}`, background: payModalForeign === (mode === 'foreign') ? '#FEF0E6' : 'var(--tm-card-bg)', color: payModalForeign === (mode === 'foreign') ? C.earth : C.barkLight, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-                  {mode === 'twd' ? '💳 台幣轉帳' : '💵 外幣現金'}
+                  <FontAwesomeIcon icon={mode === 'twd' ? faCreditCard : faMoneyBill1} style={{ marginRight: 5 }} />
+                  {mode === 'twd' ? '台幣轉帳' : '外幣現金'}
                 </button>
               ))}
             </div>
@@ -1419,9 +1420,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 2 }}>
                                 {hints.map(h => (
                                   <p key={h.cur} style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.75, margin: 0 }}>
+                                    <FontAwesomeIcon icon={h.cur === 'TWD' ? faCreditCard : faMoneyBill1} style={{ marginRight: 4, fontSize: 9 }} />
                                     {h.cur === 'TWD'
-                                      ? `💳 台幣 NT$ ${h.twdEquiv.toLocaleString()}`
-                                      : `💵 外幣現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
+                                      ? `台幣 NT$ ${h.twdEquiv.toLocaleString()}`
+                                      : `外幣現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
                                   </p>
                                 ))}
                                 <p style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.6, margin: '2px 0 0', fontStyle: 'italic' }}>
@@ -2482,9 +2484,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 1 }}>
                                   {hints.map(h => (
                                     <p key={h.cur} style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>
+                                      <FontAwesomeIcon icon={h.cur === 'TWD' ? faCreditCard : faMoneyBill1} style={{ marginRight: 4, fontSize: 9 }} />
                                       {h.cur === 'TWD'
-                                        ? `💳 台幣 NT$ ${h.twdEquiv.toLocaleString()}`
-                                        : `💵 外幣現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
+                                        ? `台幣 NT$ ${h.twdEquiv.toLocaleString()}`
+                                        : `外幣現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
                                     </p>
                                   ))}
                                   <p style={{ fontSize: 10, color: C.barkLight, opacity: 0.7, margin: '2px 0 0', fontStyle: 'italic' }}>
