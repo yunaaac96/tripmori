@@ -1364,44 +1364,107 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 <button onClick={() => setSettlementDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight, lineHeight: 1 }}>✕</button>
               </div>
 
-              {/* ── ① 結算建議（頂部，最重要的行動項目）── */}
-              {mySettlements.length > 0 && (
-                <div style={{ marginBottom: 14 }}>
-                  <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>結算建議</p>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              {/* ── ① 結算行動（合併原「結算建議」+「待辦結算」，加入操作按鈕）── */}
+              <div style={{ marginBottom: 14 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>結算行動</p>
+                {mySettlements.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                    <p style={{ fontSize: 13, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 帳目已結清，無待辦項目</p>
+                  </div>
+                ) : (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     {mySettlements.map((s, i) => {
-                      const isPayer = s.from === name;
-                      const other = isPayer ? s.to : s.from;
+                      const isPayer    = s.from === name;
+                      const other      = isPayer ? s.to : s.from;
                       const otherColor = getMemberColor(other);
+                      const sKey       = `${s.from}-${s.to}`;
+                      const isProcessing = settlingId === sKey;
+                      const pendingEntry = (expenses as any[]).find((e: any) =>
+                        e.category === 'settlement' && e.status === 'pending' &&
+                        e.payer === s.from && e.splitWith?.[0] === s.to
+                      );
+                      const hints = getPairCurrencyHints(s.from, s.to);
+                      const isPrimaryDebtor   = isPayer  && name === currentUserName;
+                      const isPrimaryCreditor = !isPayer && name === currentUserName;
                       return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--tm-card-bg)', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${C.creamDark}` }}>
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: isPayer ? '#FAE0E0' : '#EAF3DE', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${isPayer ? '#F0C0C0' : '#B5CFA7'}` }}>
+                          {/* Avatar */}
+                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
                             {getMemberAvatar(other)
                               ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
+                              : <span style={{ fontSize: 12, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
                           </div>
+                          {/* Labels + amount + currency hints */}
                           <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>
+                            <p style={{ fontSize: 13, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0 }}>
                               {isPayer ? `付給 ${other}` : `收自 ${other}`}
                             </p>
-                            <p style={{ fontSize: 10, color: C.barkLight, margin: '1px 0 0' }}>
-                              {isPayer ? `${name} → ${other}` : `${other} → ${name}`}
+                            <p style={{ fontSize: 11, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: '2px 0 0' }}>
+                              NT$ {s.amount.toLocaleString()}
                             </p>
+                            {hints.length > 0 && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 1, marginTop: 2 }}>
+                                {hints.map(h => (
+                                  <p key={h.cur} style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.75, margin: 0 }}>
+                                    {h.cur === 'TWD'
+                                      ? `💳 台幣 NT$ ${h.twdEquiv.toLocaleString()}`
+                                      : `💵 現金 ${h.cur} ${h.origAmt.toLocaleString()} ≈ NT$ ${h.twdEquiv.toLocaleString()}`}
+                                  </p>
+                                ))}
+                              </div>
+                            )}
                           </div>
-                          <p style={{ fontSize: 15, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0, flexShrink: 0 }}>
-                            {isPayer ? '−' : '＋'}NT$ {s.amount.toLocaleString()}
-                          </p>
+                          {/* Action buttons */}
+                          {isProcessing
+                            ? <span style={{ flexShrink: 0, fontSize: 11, color: C.barkLight, fontWeight: 600 }}>處理中...</span>
+                            : !isReadOnly && (() => {
+                                // Debtor view: this member owes someone
+                                if (isPrimaryDebtor) {
+                                  if (pendingEntry) return (
+                                    <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>等待確認</span>
+                                  );
+                                  return (
+                                    <button onClick={() => {
+                                      const cashHint = hints.find(h => h.cur !== 'TWD' && h.isCash);
+                                      setPayModal({ from: s.from, to: s.to, amountTWD: s.amount });
+                                      if (cashHint) {
+                                        setPayModalForeign(true); setPayModalCur(cashHint.cur);
+                                        setPayModalAmt(String(cashHint.origAmt)); setPayModalRate('');
+                                      } else {
+                                        setPayModalForeign(false);
+                                        setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY');
+                                        setPayModalAmt(''); setPayModalRate('');
+                                      }
+                                    }} style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#9A3A3A', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                      確認已付
+                                    </button>
+                                  );
+                                }
+                                // Creditor view: this member is owed by someone
+                                if (isPrimaryCreditor) return (
+                                  <button onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
+                                    style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                    {pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                  </button>
+                                );
+                                // Admin viewing another member's modal
+                                if (adminMode) return (
+                                  <button onClick={() => isPayer
+                                    ? (() => { setPayModal({ from: s.from, to: s.to, amountTWD: s.amount }); setPayModalForeign(false); setPayModalCur(projCurrency !== 'TWD' ? projCurrency : Object.keys(CURRENCY_TO_TWD).find(c => c !== 'TWD') || 'JPY'); setPayModalAmt(''); setPayModalRate(''); })()
+                                    : handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
+                                    style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: isPayer ? '#5A8ACF' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                    {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                  </button>
+                                );
+                                return null;
+                              })()
+                          }
                         </div>
                       );
                     })}
                   </div>
-                </div>
-              )}
-              {ms.net === 0 && mySettlements.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '10px 0 14px' }}>
-                  <p style={{ fontSize: 13, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 已結清，帳目平衡</p>
-                </div>
-              )}
+                )}
+              </div>
 
               {/* ── ② 帳目摘要（垂直計算鏈：毛差額 → 已結清 → 目前餘額）── */}
               {(() => {
@@ -1477,43 +1540,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 </div>
               )}
 
-              {/* ── ③ 待辦結算項目 ── */}
-              <div style={{ marginBottom: 4 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', letterSpacing: 0.3 }}>待辦結算</p>
-                {mySettlements.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '14px 0' }}>
-                    <p style={{ fontSize: 13, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 帳目已結清，無待辦項目</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {mySettlements.map((s, i) => {
-                      const isPayer = s.from === name;
-                      const other = isPayer ? s.to : s.from;
-                      const otherColor = getMemberColor(other);
-                      return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: isPayer ? '#FAE0E0' : '#EAF3DE', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${isPayer ? '#F0C0C0' : '#B5CFA7'}` }}>
-                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
-                            {getMemberAvatar(other)
-                              ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <span style={{ fontSize: 12, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0 }}>
-                              {isPayer ? `付給 ${other}` : `收自 ${other}`}
-                            </p>
-                            <p style={{ fontSize: 10, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.7, margin: '2px 0 0' }}>
-                              {isPayer ? '尚未完成付款' : '等待對方付款'}
-                            </p>
-                          </div>
-                          <p style={{ fontSize: 16, fontWeight: 800, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0, flexShrink: 0 }}>
-                            {isPayer ? '−' : '＋'}NT$ {s.amount.toLocaleString()}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                )}
-              </div>
 
               {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
               {(() => {
