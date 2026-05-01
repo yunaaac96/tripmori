@@ -561,6 +561,12 @@ export const getConfirmedSettlementAmountsMap = (expenses: Expense[]): Map<strin
   expenses.forEach(e => {
     if (e.category !== 'settlement') return;
     if (e.status === 'pending') return;
+    // Exclude per-expense settlements (those with expenseRef): they contribute to
+    // perExpenseConfirmedSet for individual expense badges but must NOT trigger the
+    // pair-level isFullySettled check — otherwise settling one expense whose share
+    // happens to equal the net pair debt would incorrectly mark ALL shared expenses
+    // between the pair as settled.
+    if (e.expenseRef) return;
     const to = e.splitWith?.[0];
     if (!e.payer || !to) return;
     const key = `${e.payer}→${to}`;

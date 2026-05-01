@@ -2646,11 +2646,13 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     })()}
                     {/* Info */}
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', marginBottom: 2 }}>
-                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', maxWidth: '100%' }}>{e.description}</p>
-                        {e._pending && (
-                          <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block' }}>↻</span>
-                        )}
+                      {/* ── Title (own line, ellipsis) ── */}
+                      <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: '0 0 3px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {e._pending && <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block', marginRight: 3 }}>↻</span>}
+                        {e.description}
+                      </p>
+                      {/* ── Badges (own row, wrappable) ── */}
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 3 }}>
                         {isPrivateExpense && (
                           <span className="tm-badge-private" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} /> 私人</span>
                         )}
@@ -2687,7 +2689,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           ) : null
                         )}
                       </div>
-                      <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
                         {isIncome
                           ? `${e.payer} 代收 · ${e.splitWith && e.splitWith.length === 1 ? `${e.splitWith[0]} 受益` : '全體均分'}`
                           : `${e.payer} 付款`
@@ -2699,7 +2701,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         )}
                       </p>
                       {!isSettlement && !isPrivateExpense && (
-                        <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>
+                        <p style={{ fontSize: 11, color: C.barkLight, margin: e.notes ? '0 0 2px' : 0 }}>
                           {splitModeLabel(e)}
                           {(() => {
                             const sw3 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
@@ -2707,7 +2709,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             const avg = Math.round(amtTWD / sw3.length);
                             return <span style={{ color: C.barkLight }}> · 人均 NT$ {avg.toLocaleString()}</span>;
                           })()}
-                          {e.notes ? <> · <SmartText text={e.notes} /></> : ''}
                           {(() => {
                             const badge = currentUserName
                               ? getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet)
@@ -2740,6 +2741,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           })()}
                         </p>
                       )}
+                      {/* Notes: separate line (non-settlement, non-private only) */}
+                      {!isSettlement && !isPrivateExpense && e.notes && (
+                        <p style={{ fontSize: 11, color: C.barkLight, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={e.notes} /></p>
+                      )}
                       {isSettlement && e.notes && (
                         <p style={{ fontSize: 11, color: C.sageDark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={e.notes} /></p>
                       )}
@@ -2766,136 +2771,130 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                         </>
                       )}
-                      {!isReadOnly && (
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          {canEditExpense(e) && (
-                            <button onClick={() => openEdit(e)}
-                              style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <FontAwesomeIcon icon={faPen} />
-                            </button>
-                          )}
-                          {/* 補實際金額 — foreign-card expense, whether awaiting or already estimated */}
-                          {!isSettlement && isForeignCard && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
-                            <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
-                              style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <FontAwesomeIcon icon={faReceipt} />
-                            </button>
-                          )}
-                          {/* 補記差額 — only for shared (non-settlement, non-private, non-settled) rows */}
-                          {!isSettlement && !isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
-                            <button onClick={() => openAdjustForm(e)} title="補記差額"
-                              style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <FontAwesomeIcon icon={faArrowRightArrowLeft} />
-                            </button>
-                          )}
-                          {/* 結清這筆 — debtor initiates (pending), creditor confirms directly */}
-                          {!isSettlement && !isPrivateExpense && !isAdjustment && currentUserName && (() => {
-                            const sw2 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-
-                            // ── Debtor view ──
-                            if (e.payer !== currentUserName && sw2.includes(currentUserName)) {
-                              const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
-                              if (badge2 !== 'none') return null;
-                              const hasPendingPerExpense = (expenses as any[]).some((se: any) =>
-                                se.category === 'settlement' && se.status === 'pending' &&
-                                se.expenseRef === e.id && se.payer === currentUserName
-                              );
-                              if (hasPendingPerExpense) {
-                                return (
-                                  <span title="已記錄還款，等待對方確認" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, borderRadius: 8, background: '#FFF8E0', border: `1px solid #D4A800`, color: '#9A6800', fontSize: 9, fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap' }}>
-                                    待確認
-                                  </span>
-                                );
-                              }
-                              const myShare = getPersonalShare(e, currentUserName, memberNames);
-                              return (
-                                <button onClick={() => openPayModal(currentUserName, e.payer, myShare, e.id)} title={`結清這筆 NT$${myShare.toLocaleString()}`}
-                                  style={{ height: 28, borderRadius: 8, border: `1px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap' }}>
-                                  結清這筆
-                                </button>
-                              );
-                            }
-
-                            // ── Creditor view (payer) ──
-                            if (e.payer === currentUserName) {
-                              const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
-                              if (badge2 !== 'none') return null; // already received
-                              const debtors = sw2.filter(n => n !== currentUserName);
-                              if (debtors.length === 0) return null;
-                              const creditorKey = `creditor-${e.id}`;
-                              const isProcessingThis = settlingId === creditorKey;
-                              return (
-                                <button
-                                  disabled={isProcessingThis}
-                                  onClick={async () => {
-                                    setSettlingId(creditorKey);
-                                    const today = new Date().toISOString().slice(0, 10);
-                                    try {
-                                      for (const debtor of debtors) {
-                                        if (perExpenseConfirmedSet.has(`${e.id}|${debtor}`)) continue;
-                                        const pendingEntry = (expenses as any[]).find((ex: any) =>
-                                          ex.category === 'settlement' && ex.status === 'pending' &&
-                                          ex.payer === debtor && ex.splitWith?.[0] === currentUserName &&
-                                          ex.expenseRef === e.id
-                                        );
-                                        if (pendingEntry) {
-                                          await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', pendingEntry.id), {
-                                            status: 'confirmed', confirmedAt: today,
-                                          });
-                                        } else {
-                                          const share = getPersonalShare(e, debtor, memberNames);
-                                          if (share <= 0) continue;
-                                          await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
-                                            description: '單筆結清',
-                                            amount: share, currency: 'TWD', amountTWD: share,
-                                            category: 'settlement',
-                                            payer: debtor,
-                                            paymentMethod: 'cash',
-                                            splitMode: 'equal',
-                                            splitWith: [currentUserName],
-                                            percentages: {}, customAmounts: {}, subItems: [],
-                                            date: today,
-                                            notes: `${debtor} → ${currentUserName}`,
-                                            status: 'confirmed',
-                                            confirmedAt: today,
-                                            paidAt: today,
-                                            expenseRef: e.id,
-                                            createdAt: Timestamp.now(),
-                                          });
-                                        }
-                                      }
-                                    } finally {
-                                      setSettlingId(null);
-                                    }
-                                  }}
-                                  title="標記此筆費用已收款（直接確認）"
-                                  style={{ height: 28, borderRadius: 8, border: `1px solid #4A7A35`, background: 'var(--tm-card-bg)', color: '#4A7A35', fontSize: 10, fontWeight: 700, cursor: isProcessingThis ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap', opacity: isProcessingThis ? 0.5 : 1 }}>
-                                  {isProcessingThis ? '處理中…' : '結清這筆'}
-                                </button>
-                              );
-                            }
-
-                            return null;
-                          })()}
-                          {canDeleteExpense(e) && (
-                            <button
-                              onClick={() => {
-                                if (isSettlement) {
-                                  setSettlementDeleteTarget(e);
-                                  setSettlementDeleteInput('');
-                                } else {
-                                  setRegularDeleteTarget(e);
-                                }
-                              }}
-                              className="tm-btn-delete-soft"
-                              style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                              <FontAwesomeIcon icon={faTrashCan} />
-                            </button>
-                          )}
-                        </div>
-                      )}
                     </div>
                   </div>
+
+                  {/* ── Button row (below main content, right-aligned) ── */}
+                  {!isReadOnly && (
+                    <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 4, marginTop: 8 }}>
+                      {canEditExpense(e) && (
+                        <button onClick={() => openEdit(e)}
+                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FontAwesomeIcon icon={faPen} />
+                        </button>
+                      )}
+                      {/* 補實際金額 */}
+                      {!isSettlement && isForeignCard && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
+                        <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
+                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FontAwesomeIcon icon={faReceipt} />
+                        </button>
+                      )}
+                      {/* 補記差額 */}
+                      {!isSettlement && !isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
+                        <button onClick={() => openAdjustForm(e)} title="補記差額"
+                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FontAwesomeIcon icon={faArrowRightArrowLeft} />
+                        </button>
+                      )}
+                      {/* 結清這筆 */}
+                      {!isSettlement && !isPrivateExpense && !isAdjustment && currentUserName && (() => {
+                        const sw2 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+                        // ── Debtor view ──
+                        if (e.payer !== currentUserName && sw2.includes(currentUserName)) {
+                          const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                          if (badge2 !== 'none') return null;
+                          const hasPendingPerExpense = (expenses as any[]).some((se: any) =>
+                            se.category === 'settlement' && se.status === 'pending' &&
+                            se.expenseRef === e.id && se.payer === currentUserName
+                          );
+                          if (hasPendingPerExpense) {
+                            return (
+                              <span title="已記錄還款，等待對方確認" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, borderRadius: 8, background: '#FFF8E0', border: `1px solid #D4A800`, color: '#9A6800', fontSize: 9, fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap' }}>
+                                待確認
+                              </span>
+                            );
+                          }
+                          const myShare = getPersonalShare(e, currentUserName, memberNames);
+                          return (
+                            <button onClick={() => openPayModal(currentUserName, e.payer, myShare, e.id)} title={`結清這筆 NT$${myShare.toLocaleString()}`}
+                              style={{ height: 28, borderRadius: 8, border: `1px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap' }}>
+                              結清這筆
+                            </button>
+                          );
+                        }
+                        // ── Creditor view (payer) ──
+                        if (e.payer === currentUserName) {
+                          const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                          if (badge2 !== 'none') return null;
+                          const debtors = sw2.filter(n => n !== currentUserName);
+                          if (debtors.length === 0) return null;
+                          const creditorKey = `creditor-${e.id}`;
+                          const isProcessingThis = settlingId === creditorKey;
+                          return (
+                            <button
+                              disabled={isProcessingThis}
+                              onClick={async () => {
+                                setSettlingId(creditorKey);
+                                const today = new Date().toISOString().slice(0, 10);
+                                try {
+                                  for (const debtor of debtors) {
+                                    if (perExpenseConfirmedSet.has(`${e.id}|${debtor}`)) continue;
+                                    const pendingEntry = (expenses as any[]).find((ex: any) =>
+                                      ex.category === 'settlement' && ex.status === 'pending' &&
+                                      ex.payer === debtor && ex.splitWith?.[0] === currentUserName &&
+                                      ex.expenseRef === e.id
+                                    );
+                                    if (pendingEntry) {
+                                      await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', pendingEntry.id), {
+                                        status: 'confirmed', confirmedAt: today,
+                                      });
+                                    } else {
+                                      const share = getPersonalShare(e, debtor, memberNames);
+                                      if (share <= 0) continue;
+                                      await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
+                                        description: '單筆結清',
+                                        amount: share, currency: 'TWD', amountTWD: share,
+                                        category: 'settlement', payer: debtor,
+                                        paymentMethod: 'cash', splitMode: 'equal',
+                                        splitWith: [currentUserName],
+                                        percentages: {}, customAmounts: {}, subItems: [],
+                                        date: today, notes: `${debtor} → ${currentUserName}`,
+                                        status: 'confirmed', confirmedAt: today,
+                                        paidAt: today, expenseRef: e.id,
+                                        createdAt: Timestamp.now(),
+                                      });
+                                    }
+                                  }
+                                } finally {
+                                  setSettlingId(null);
+                                }
+                              }}
+                              title="標記此筆費用已收款（直接確認）"
+                              style={{ height: 28, borderRadius: 8, border: `1px solid #4A7A35`, background: 'var(--tm-card-bg)', color: '#4A7A35', fontSize: 10, fontWeight: 700, cursor: isProcessingThis ? 'default' : 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap', opacity: isProcessingThis ? 0.5 : 1 }}>
+                              {isProcessingThis ? '處理中…' : '結清這筆'}
+                            </button>
+                          );
+                        }
+                        return null;
+                      })()}
+                      {canDeleteExpense(e) && (
+                        <button
+                          onClick={() => {
+                            if (isSettlement) {
+                              setSettlementDeleteTarget(e);
+                              setSettlementDeleteInput('');
+                            } else {
+                              setRegularDeleteTarget(e);
+                            }
+                          }}
+                          className="tm-btn-delete-soft"
+                          style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <FontAwesomeIcon icon={faTrashCan} />
+                        </button>
+                      )}
+                    </div>
+                  )}
 
                   {/* Receipt thumbnail */}
                   {e.receiptUrl && !isVisitor && (
