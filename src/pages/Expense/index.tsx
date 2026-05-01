@@ -948,36 +948,37 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // TWD equivalent separately. Only shown when at least one non-TWD currency
   // exists, so that: TWD expenses → "台幣 NT$ X", JPY expenses → "JPY Y ≈ NT$ Z".
   const getPairCurrencyHints = (
-    from: string, to: string,
+    from: string, _to: string,
   ): { cur: string; origAmt: number; twdEquiv: number; isCash: boolean }[] => {
+    // NOTE: computeSettlements uses a greedy optimisation algorithm so the
+    // settlement pair (from→to) may be *indirect* — they may share no direct
+    // expenses. Looking up only pair-specific expenses would return nothing.
+    // Instead, bucket ALL of `from`'s outstanding shares (expenses paid by
+    // someone else where `from` is in splitWith). This correctly reflects the
+    // currency composition of `from`'s overall debt regardless of who the
+    // optimised creditor is.
     const active = (expenses as any[]).filter((e: any) =>
       !e.awaitCardStatement && !e.isPrivate && e.category !== 'settlement'
     );
     const buckets: Record<string, { origSum: number; twdSum: number; isCash: boolean }> = {};
     active.forEach((e: any) => {
       const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      // Only consider expenses where `from` owes someone (not the payer, but in split)
+      if (e.payer === from || !sw.includes(from)) return;
       const cur: string = e.currency || 'TWD';
       // Card + foreign → settle in TWD; cash + foreign → settle in original currency
       const isCashForeign = cur !== 'TWD' && e.paymentMethod !== 'card';
       const bucketCur = isCashForeign ? cur : 'TWD';
-      const origAmt: number = e.amount || 0;
+      const origAmt: number = Number(e.amount) || 0;
       const twdAmt: number = effectiveTWD(e);
       if (twdAmt <= 0) return;
-      if (e.payer === to && sw.includes(from)) {
-        const shareTWD = getPersonalShare(e, from, memberNames);
-        if (!buckets[bucketCur]) buckets[bucketCur] = { origSum: 0, twdSum: 0, isCash: isCashForeign };
-        if (isCashForeign && origAmt > 0) {
-          buckets[bucketCur].origSum += origAmt * (shareTWD / twdAmt);
-        }
-        buckets[bucketCur].twdSum += shareTWD;
-      } else if (e.payer === from && sw.includes(to)) {
-        const shareTWD = getPersonalShare(e, to, memberNames);
-        if (!buckets[bucketCur]) buckets[bucketCur] = { origSum: 0, twdSum: 0, isCash: isCashForeign };
-        if (isCashForeign && origAmt > 0) {
-          buckets[bucketCur].origSum -= origAmt * (shareTWD / twdAmt);
-        }
-        buckets[bucketCur].twdSum -= shareTWD;
+      const shareTWD = getPersonalShare(e, from, memberNames);
+      if (shareTWD <= 0) return;
+      if (!buckets[bucketCur]) buckets[bucketCur] = { origSum: 0, twdSum: 0, isCash: isCashForeign };
+      if (isCashForeign && origAmt > 0) {
+        buckets[bucketCur].origSum += origAmt * (shareTWD / twdAmt);
       }
+      buckets[bucketCur].twdSum += shareTWD;
     });
     const hints = Object.entries(buckets)
       .filter(([, { twdSum }]) => twdSum > 0.5)
