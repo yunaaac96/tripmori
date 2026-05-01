@@ -896,6 +896,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       return !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
     }
 
+
     // ── Non-private: Owner can delete any unsettled expense;
     //    others must be a party (payer or in effective splitWith) ─────────────
     const swD = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
