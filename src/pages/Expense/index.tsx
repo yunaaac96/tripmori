@@ -2,14 +2,14 @@ import { useState, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, ExpandableNotes, SmartText } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
-import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD, buildPersonalStatement, getConfirmedSettlementPairMap, getSettlementBadge } from '../../utils/expenseCalc';
+import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD, buildPersonalStatement, getConfirmedSettlementPairMap, getConfirmedSettlementAmountsMap, getPerExpenseConfirmedSet, getSettlementBadge } from '../../utils/expenseCalc';
 import type { StatementLineItem } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -259,10 +259,19 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // Settlement
   const [showSettleForm, setShowSettleForm] = useState(false);
   const [settlingId, setSettlingId] = useState<string | null>(null);
-  // Debtor pay modal — supports TWD or foreign currency cash repayment
+  // Debtor pay modal — partial or full repayment, optionally linked to a single expense
   const [payModal, setPayModal] = useState<{ from: string; to: string; amountTWD: number } | null>(null);
+  const [payModalAmt, setPayModalAmt] = useState('');
+  const [payModalExpenseRef, setPayModalExpenseRef] = useState<string | undefined>(undefined);
+  const openPayModal = (from: string, to: string, amountTWD: number, expenseRef?: string) => {
+    setPayModal({ from, to, amountTWD });
+    setPayModalAmt(String(amountTWD));
+    setPayModalExpenseRef(expenseRef);
+  };
   // Settlement deletion confirm modal
   const [settlementDeleteTarget, setSettlementDeleteTarget] = useState<any | null>(null);
+  // Regular (non-settlement) expense deletion confirm modal
+  const [regularDeleteTarget, setRegularDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
   const [settlementExpanded, setSettlementExpanded] = useState(false);
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
@@ -588,7 +597,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     if (isReadOnly || e.category === 'settlement') return false;
     if (e.settledAt || e.receivedAt) return false;
     if (currentUserName) {
-      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap);
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
       if (badge !== 'none') return false;
     }
     if (e.isPrivate) {
@@ -601,37 +610,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     return true;
   };
 
-  const canDeleteExpense = (e: any) => {
-    if (isReadOnly) return false;
-    if (e.category === 'settlement') {
-      const parties = [e.payer, ...(e.splitWith || [])];
-      return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
-    }
-    if (e.settledAt || e.receivedAt) return false;
-    if (e.isPrivate) {
-      return isOwner ||
-        !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
-    }
-    return isOwner || !!(currentUserName);
-  };
-
-  const handleDelete = async (id: string, expense: any) => {
-    if (!canDeleteExpense(expense)) return;
-    // If deleting a settlement, clear settledAt/settledByRef AND receivedAt on all linked expenses
-    if (expense.category === 'settlement') {
-      const linked = (expenses as any[]).filter((e: any) => e.settledByRef === id);
-      if (linked.length > 0) {
-        await Promise.all(linked.map((e: any) =>
-          updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
-            settledAt: deleteField(),
-            settledByRef: deleteField(),
-            receivedAt: deleteField(),
-          })
-        ));
-      }
-    }
-    await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
-  };
+  // canDeleteExpense and handleDelete defined AFTER the settlement maps (see below ~line 880)
+  // so they can reference confirmedAmountsMap / pairDebtsMap / perExpenseConfirmedSet.
 
   // ── "與我有關" filter ─────────────────────────────────────────────────────
   const isMyExpense = (e: any): boolean => {
@@ -663,6 +643,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       subItems: [],
       date: new Date().toISOString().slice(0, 10),
       notes: `${from} → ${to}`,
+      status: 'pending',
+      paidAt: new Date().toISOString().slice(0, 10),
       createdAt: Timestamp.now(),
     };
     await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), payload);
@@ -670,13 +652,24 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   // Phase 1: debtor initiates — creates a pending settlement record.
   // Individual expenses are NOT stamped; Method B derives status from the record.
-  const handleDebtorPay = async (from: string, to: string, amount: number, extraNotes?: string) => {
+  const handleDebtorPay = async (from: string, to: string, amount: number, extraNotes?: string, expenseRef?: string) => {
     if (isReadOnly) return;
     const key = `${from}-${to}`;
     setSettlingId(key);
+    // Idempotency guard: skip if a pending settlement for the same pair (+ same expenseRef)
+    // was created within the last 60 seconds — prevents double-write on network reconnect.
+    const recentDuplicate = (expenses as any[]).find((ex: any) =>
+      ex.category === 'settlement' &&
+      ex.status === 'pending' &&
+      ex.payer === from &&
+      (ex.splitWith?.[0] === to) &&
+      (expenseRef ? ex.expenseRef === expenseRef : !ex.expenseRef) &&
+      ex.createdAt?.toMillis && (Date.now() - ex.createdAt.toMillis()) < 60_000
+    );
+    if (recentDuplicate) { setSettlingId(null); return; }
     const today = new Date().toISOString().slice(0, 10);
-    await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), {
-      description: '結清款項',
+    const record: Record<string, unknown> = {
+      description: expenseRef ? '單筆結清' : '結清款項',
       amount, currency: 'TWD', amountTWD: amount,
       category: 'settlement',
       payer: from,
@@ -689,7 +682,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       status: 'pending',
       paidAt: today,
       createdAt: Timestamp.now(),
-    });
+    };
+    if (expenseRef) record.expenseRef = expenseRef;
+    await addDoc(collection(db, 'trips', TRIP_ID, 'expenses'), record);
     setSettlingId(null);
   };
 
@@ -854,6 +849,49 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   // Method B: per-pair settlement state derived from settlement records (not individual stamps)
   const confirmedPairMap = getConfirmedSettlementPairMap(expenses as any[]);
+  // Amount-based maps for badge logic: confirmed total paid + remaining debt per pair
+  const confirmedAmountsMap = getConfirmedSettlementAmountsMap(expenses as any[]);
+  const pairDebtsMap = new Map(settlements.map(s => [`${s.from}→${s.to}`, s.amount]));
+  // Per-expense settlement set for "結清這筆" flow
+  const perExpenseConfirmedSet = getPerExpenseConfirmedSet(expenses as any[]);
+
+  // ── canDeleteExpense / handleDelete (placed here to access the maps above) ───────────────
+  const canDeleteExpense = (e: any) => {
+    if (isReadOnly) return false;
+    if (e.category === 'settlement') {
+      const parties = [e.payer, ...(e.splitWith || [])];
+      return isOwner || (currentUserName ? parties.includes(currentUserName) : false);
+    }
+    if (e.settledAt || e.receivedAt) return false;
+    // Method B badge check: block deletion when a Method-B settlement badge is active
+    if (currentUserName) {
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+      if (badge !== 'none') return false;
+    }
+    if (e.isPrivate) {
+      return isOwner ||
+        !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
+    }
+    return isOwner || !!(currentUserName);
+  };
+
+  const handleDelete = async (id: string, expense: any) => {
+    if (!canDeleteExpense(expense)) return;
+    // If deleting a settlement, clear settledAt/settledByRef AND receivedAt on all linked expenses
+    if (expense.category === 'settlement') {
+      const linked = (expenses as any[]).filter((e: any) => e.settledByRef === id);
+      if (linked.length > 0) {
+        await Promise.all(linked.map((e: any) =>
+          updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', e.id), {
+            settledAt: deleteField(),
+            settledByRef: deleteField(),
+            receivedAt: deleteField(),
+          })
+        ));
+      }
+    }
+    await deleteDoc(doc(db, 'trips', TRIP_ID, 'expenses', id));
+  };
 
   // ── Member card order ────────────────────────────────────────────────────
   // Owner can reorder; editors see own card first then rest
@@ -963,7 +1001,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       if (!hideSettled) return true;
       if (e.category === 'settlement') return true;
       if (!currentUserName) return true;
-      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap);
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
       return badge === 'none';
     })
     .sort((a: any, b: any) => {
@@ -1030,30 +1068,52 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         </div>
       )}
 
-      {/* ── 補實際金額 Modal ── */}
-      {/* ── Debtor pay modal ── */}
+      {/* ── Debtor pay modal (partial or full repayment) ── */}
       {payModal && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 550 }}
-          onClick={ev => { if (ev.target === ev.currentTarget) setPayModal(null); }}>
+          onClick={ev => { if (ev.target === ev.currentTarget) { setPayModal(null); setPayModalExpenseRef(undefined); } }}>
           <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, boxSizing: 'border-box' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
               <p style={{ fontSize: 17, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 7 }}>
-                <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 14 }} /> 確認已付款
+                <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 14 }} /> {payModalExpenseRef ? '結清這筆' : '記錄還款'}
               </p>
-              <button onClick={() => setPayModal(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
+              <button onClick={() => { setPayModal(null); setPayModalExpenseRef(undefined); }} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight }}>✕</button>
             </div>
-            <div style={{ padding: '14px 16px', background: 'var(--tm-section-bg)', borderRadius: 14, border: `1px dashed ${C.creamDark}`, marginBottom: 20 }}>
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 4px', fontWeight: 600 }}>結清金額</p>
-              <p style={{ fontSize: 26, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {payModal.amountTWD.toLocaleString()}</p>
-              <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0' }}>{payModal.from} → {payModal.to}</p>
+            {/* Outstanding amount reference */}
+            <div style={{ padding: '10px 14px', background: 'var(--tm-section-bg)', borderRadius: 12, border: `1px dashed ${C.creamDark}`, marginBottom: 16 }}>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px', fontWeight: 600 }}>目前待還金額</p>
+              <p style={{ fontSize: 20, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {payModal.amountTWD.toLocaleString()}</p>
+              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>{payModal.from} → {payModal.to}</p>
+            </div>
+            {/* Editable repayment amount */}
+            <div style={{ marginBottom: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                <label style={{ fontSize: 12, fontWeight: 700, color: C.bark }}>還款金額（NT$）</label>
+                <span style={{ fontSize: 11, color: C.barkLight }}>可部分還款</span>
+              </div>
+              <input
+                type="number" inputMode="decimal"
+                value={payModalAmt}
+                onChange={ev => setPayModalAmt(ev.target.value)}
+                style={{ ...inputStyle, width: '100%', boxSizing: 'border-box', fontSize: 18, fontWeight: 700 }}
+              />
+              {payModalAmt && Number(payModalAmt) > 0 && Number(payModalAmt) < payModal.amountTWD && (
+                <p style={{ fontSize: 11, color: C.barkLight, margin: '5px 0 0' }}>
+                  還款後剩餘：NT$ {(payModal.amountTWD - Math.round(Number(payModalAmt))).toLocaleString()}
+                </p>
+              )}
             </div>
             <button
+              disabled={!payModalAmt || Number(payModalAmt) <= 0}
               onClick={async () => {
+                const amt = Math.round(Number(payModalAmt));
+                const ref = payModalExpenseRef;
                 setPayModal(null);
-                await handleDebtorPay(payModal.from, payModal.to, payModal.amountTWD);
+                setPayModalExpenseRef(undefined);
+                await handleDebtorPay(payModal.from, payModal.to, amt, undefined, ref);
               }}
-              style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
-              <FontAwesomeIcon icon={faCheck} style={{ marginRight: 8 }} />確認已付款
+              style={{ width: '100%', padding: '14px 0', borderRadius: 12, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 15, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, opacity: (!payModalAmt || Number(payModalAmt) <= 0) ? 0.5 : 1 }}>
+              <FontAwesomeIcon icon={faCheck} style={{ marginRight: 8 }} />確認還款
             </button>
           </div>
         </div>
@@ -1313,9 +1373,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                     <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>等待確認</span>
                                   );
                                   return (
-                                    <button onClick={() => setPayModal({ from: s.from, to: s.to, amountTWD: s.amount })}
+                                    <button onClick={() => openPayModal(s.from, s.to, s.amount)}
                                       style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#9A3A3A', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                      確認已付
+                                      記錄還款
                                     </button>
                                   );
                                 }
@@ -1323,16 +1383,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                 if (isPrimaryCreditor) return (
                                   <button onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
                                     style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                    {pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                    {pendingEntry ? '✓ 確認收款' : '確認收款'}
                                   </button>
                                 );
                                 // Admin viewing another member's modal
                                 if (adminMode) return (
                                   <button onClick={() => isPayer
-                                    ? setPayModal({ from: s.from, to: s.to, amountTWD: s.amount })
+                                    ? openPayModal(s.from, s.to, s.amount)
                                     : handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
                                     style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: isPayer ? '#5A8ACF' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                    {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                    {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收款' : '確認收款'}
                                   </button>
                                 );
                                 return null;
@@ -1424,17 +1484,19 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               {(() => {
                 // Show only: paid by someone else + not covered by a confirmed settlement.
                 // Method A: respects the legacy per-expense `settledAt` stamp.
-                // Method B: an expense is considered settled if a confirmed settlement for
-                //   this pair (name→payer) exists AND the expense date ≤ settlement date.
-                //   Only expenses created *after* the latest settlement are shown.
+                // Method B (amount-based): hide all shares for a pair only when the entire
+                //   net debt has been fully confirmed (confirmedAmt > 0 AND remainingDebt = 0).
+                //   Partial payments do NOT hide any shares.
                 const unpaidShares = stmt.myShares.filter(item => {
                   if (item.payer === name) return false;
                   if (item.settledAt) return false; // legacy Method A stamp
                   const pairKey = `${name}→${item.payer}`;
-                  const settledDate = confirmedPairMap.get(pairKey);
-                  if (!settledDate) return true; // no settlement yet → show
-                  // Show only expenses newer than the settlement date
-                  return (item.date || '') > settledDate;
+                  const confirmedAmt = confirmedAmountsMap.get(pairKey) ?? 0;
+                  const remainingDebt = pairDebtsMap.get(pairKey) ?? 0;
+                  // Hidden when pair is fully settled OR per-expense settlement exists
+                  const pairSettled = confirmedAmt > 0 && remainingDebt === 0;
+                  const perExpenseSettled = perExpenseConfirmedSet.has(`${item.id}|${name}`);
+                  return !(pairSettled || perExpenseSettled);
                 });
                 const unpaidTotal = unpaidShares.reduce((sum, item) => sum + (item.myShare || 0), 0);
                 if (unpaidShares.length === 0) return null;
@@ -1641,6 +1703,50 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 {tabExpenses.length === 0 && (
                   <p style={{ textAlign: 'center', fontSize: 13, color: C.barkLight, padding: '24px 0' }}>此分類目前沒有記帳</p>
                 )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* ── Regular Expense Delete Confirm Modal ── */}
+      {regularDeleteTarget && (() => {
+        const e = regularDeleteTarget;
+        const amtTWD2 = effectiveTWD(e);
+        const cat = EXPENSE_CATEGORY_MAP[e.category] || EXPENSE_CATEGORY_MAP.other;
+        return (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.55)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 500 }}
+            onClick={ev => { if (ev.target === ev.currentTarget) setRegularDeleteTarget(null); }}>
+            <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT }}>
+              <p style={{ fontSize: 17, fontWeight: 700, color: '#9A3A3A', margin: '0 0 6px' }}>
+                <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />刪除費用
+              </p>
+              <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 16px', lineHeight: 1.6 }}>
+                確定要刪除此筆費用？刪除後無法復原。
+              </p>
+              <div style={{ background: 'var(--tm-section-bg)', borderRadius: 12, padding: '12px 14px', marginBottom: 20, display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 36, height: 36, borderRadius: 10, background: cat?.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                  <FontAwesomeIcon icon={CATEGORY_ICONS[e.category] || CATEGORY_ICONS.other} style={{ fontSize: 14, color: avatarTextColor(cat?.bg) }} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.description}</p>
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>{e.payer} · {e.date || ''}</p>
+                </div>
+                <span style={{ fontSize: 14, fontWeight: 700, color: '#9A3A3A', flexShrink: 0 }}>NT$ {amtTWD2.toLocaleString()}</span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setRegularDeleteTarget(null)}
+                  style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  取消
+                </button>
+                <button
+                  onClick={async () => {
+                    await handleDelete(e.id, e);
+                    setRegularDeleteTarget(null);
+                  }}
+                  style={{ flex: 2, padding: 12, borderRadius: 12, border: 'none', background: '#9A3A3A', color: 'white', fontWeight: 700, cursor: 'pointer', fontFamily: FONT, fontSize: 14 }}>
+                  <FontAwesomeIcon icon={faTrashCan} style={{ marginRight: 8 }} />確認刪除
+                </button>
               </div>
             </div>
           </div>
@@ -2310,6 +2416,29 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     </p>
                     <span className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
                   </div>
+                  {/* Batch confirm button: shown when this creditor has ≥2 pending debts to confirm */}
+                  {!isReadOnly && (creditor === currentUserName || adminMode) && (() => {
+                    const pendingDebts = debts.filter(d => (expenses as any[]).find((ex: any) =>
+                      ex.category === 'settlement' && ex.status === 'pending' &&
+                      ex.payer === d.from && ex.splitWith?.[0] === d.to
+                    ));
+                    if (pendingDebts.length < 2) return null;
+                    return (
+                      <button
+                        onClick={async () => {
+                          for (const d of pendingDebts) {
+                            const pEntry = (expenses as any[]).find((ex: any) =>
+                              ex.category === 'settlement' && ex.status === 'pending' &&
+                              ex.payer === d.from && ex.splitWith?.[0] === d.to
+                            );
+                            await handleCreditorConfirm(pEntry?.id ?? null, d.from, d.to, d.amount);
+                          }
+                        }}
+                        style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                        <FontAwesomeIcon icon={faCheck} style={{ fontSize: 10 }} />一鍵確認全部收款（{pendingDebts.length} 筆）
+                      </button>
+                    );
+                  })()}
                   {/* Debtors */}
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                     {debts.map((debt, i) => {
@@ -2355,10 +2484,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               }
                               return (
                                 <button
-                                  onClick={() => setPayModal({ from: debt.from, to: debt.to, amountTWD: debt.amount })}
+                                  onClick={() => openPayModal(debt.from, debt.to, debt.amount)}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                  確認已付
+                                  記錄還款
                                 </button>
                               );
                             }
@@ -2369,7 +2498,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                   onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, debt.from, debt.to, debt.amount)}
                                   className="tm-settle-confirm-btn"
                                   style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: pendingEntry ? '#4A7A35' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                  {pendingEntry ? '✓ 確認收訖' : '確認收訖'}
+                                  {pendingEntry ? '✓ 確認收款' : '確認收款'}
                                 </button>
                               );
                             }
@@ -2471,7 +2600,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
             </div>
             {/* 剔除已結清 toggle — only shown if any expense is settled from viewer's perspective */}
             {currentUserName && (expenses as any[]).some((e: any) =>
-              e.category !== 'settlement' && getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap) !== 'none'
+              e.category !== 'settlement' && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none'
             ) && (
               <button
                 onClick={() => setHideSettled(v => !v)}
@@ -2575,7 +2704,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           {e.notes ? <> · <SmartText text={e.notes} /></> : ''}
                           {(() => {
                             const badge = currentUserName
-                              ? getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap)
+                              ? getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet)
                               : 'none';
                             if (badge === 'settled') return (
                               <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
@@ -2587,6 +2716,20 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                 <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已收回
                               </span>
                             );
+                            // Payer side: show pending per-expense confirmations waiting
+                            if (badge === 'none' && e.payer === currentUserName && !isSettlement && !isPrivateExpense) {
+                              const pendingCount = (expenses as any[]).filter((se: any) =>
+                                se.category === 'settlement' && se.status === 'pending' &&
+                                se.expenseRef === e.id
+                              ).length;
+                              if (pendingCount > 0) {
+                                return (
+                                  <span style={{ marginLeft: 4, color: '#9A6800', fontSize: 10, fontWeight: 700 }}>
+                                    <FontAwesomeIcon icon={faHourglass} style={{ marginRight: 2 }} />{pendingCount} 人待確認
+                                  </span>
+                                );
+                              }
+                            }
                             return null;
                           })()}
                         </p>
@@ -2615,6 +2758,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <p style={{ fontSize: 15, fontWeight: 700, color: isIncome ? '#4A8A4A' : isSettlement ? C.sageDark : C.earth, margin: 0 }}>{isIncome ? '＋' : ''}NT$ {amtTWD.toLocaleString()}</p>
                           {e.currency !== 'TWD' && !isSettlement && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
+                          {!isSettlement && !isPrivateExpense && (() => {
+                            const sw3 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+                            if (sw3.length <= 1) return null;
+                            const avg = Math.round(amtTWD / sw3.length);
+                            return <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>人均 NT$ {avg.toLocaleString()} ×{sw3.length}</p>;
+                          })()}
                         </>
                       )}
                       {!isReadOnly && (
@@ -2626,19 +2775,44 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             </button>
                           )}
                           {/* 補實際金額 — foreign-card expense, whether awaiting or already estimated */}
-                          {!isSettlement && isForeignCard && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap) !== 'none') && (
+                          {!isSettlement && isForeignCard && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
                             <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faReceipt} />
                             </button>
                           )}
                           {/* 補記差額 — only for shared (non-settlement, non-private, non-settled) rows */}
-                          {!isSettlement && !isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedPairMap) !== 'none') && (
+                          {!isSettlement && !isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
                             <button onClick={() => openAdjustForm(e)} title="補記差額"
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                               <FontAwesomeIcon icon={faArrowRightArrowLeft} />
                             </button>
                           )}
+                          {/* 結清這筆 — debtor can settle a single expense directly */}
+                          {!isSettlement && !isPrivateExpense && !isAdjustment && currentUserName && e.payer !== currentUserName && (() => {
+                            const sw2 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+                            if (!sw2.includes(currentUserName)) return null;
+                            const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                            if (badge2 !== 'none') return null; // already settled, don't show button
+                            const hasPendingPerExpense = (expenses as any[]).some((se: any) =>
+                              se.category === 'settlement' && se.status === 'pending' &&
+                              se.expenseRef === e.id && se.payer === currentUserName
+                            );
+                            if (hasPendingPerExpense) {
+                              return (
+                                <span title="已記錄還款，等待對方確認" style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', height: 28, borderRadius: 8, background: '#FFF8E0', border: `1px solid #D4A800`, color: '#9A6800', fontSize: 9, fontWeight: 700, padding: '0 6px', whiteSpace: 'nowrap' }}>
+                                  待確認
+                                </span>
+                              );
+                            }
+                            const myShare = getPersonalShare(e, currentUserName, memberNames);
+                            return (
+                              <button onClick={() => openPayModal(currentUserName, e.payer, myShare, e.id)} title={`結清這筆 NT$${myShare.toLocaleString()}`}
+                                style={{ height: 28, borderRadius: 8, border: `1px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap' }}>
+                                結清這筆
+                              </button>
+                            );
+                          })()}
                           {canDeleteExpense(e) && (
                             <button
                               onClick={() => {
@@ -2646,7 +2820,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                                   setSettlementDeleteTarget(e);
                                   setSettlementDeleteInput('');
                                 } else {
-                                  handleDelete(e.id, e);
+                                  setRegularDeleteTarget(e);
                                 }
                               }}
                               className="tm-btn-delete-soft"
