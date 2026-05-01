@@ -119,6 +119,12 @@ export interface Expense {
   paidAt?: string;
   /** ISO date when creditor confirmed receipt (confirmed phase). */
   confirmedAt?: string;
+  /**
+   * Links a settlement record to a specific expense (per-expense "結清這筆" flow).
+   * When set, this settlement covers only that one expense for this debtor,
+   * rather than a whole pair-level batch.
+   */
+  expenseRef?: string;
 }
 
 // ── Resolve effective TWD ────────────────────────────────────────────────────
@@ -486,6 +492,7 @@ export const getExpenseInsertDate = (e: Expense): string => {
  * Key: "debtor→creditor", Value: confirmed date (ISO string).
  * Records without a `status` field are treated as confirmed (backward compat).
  * Only the most recent date per pair is kept.
+ * Still used for `isConfirmedPair` boolean checks in the UI.
  */
 export const getConfirmedSettlementPairMap = (expenses: Expense[]): Map<string, string> => {
   const map = new Map<string, string>();
@@ -504,45 +511,100 @@ export const getConfirmedSettlementPairMap = (expenses: Expense[]): Map<string, 
 };
 
 /**
+ * Build a set of confirmed per-expense settlements.
+ * Entry format: "expenseId|debtorName"
+ * A per-expense settlement is a confirmed settlement record that has an expenseRef field.
+ * Used to show 已結清 badge on individual expense cards without needing a full pair settlement.
+ */
+export const getPerExpenseConfirmedSet = (expenses: Expense[]): Set<string> => {
+  const set = new Set<string>();
+  expenses.forEach(e => {
+    if (e.category !== 'settlement') return;
+    if (e.status === 'pending') return;
+    if (!e.expenseRef) return;
+    const to = e.splitWith?.[0];
+    if (!e.payer || !to) return;
+    // e.payer = debtor, to = creditor; expenseRef = the expense being settled
+    set.add(`${e.expenseRef}|${e.payer}`);
+  });
+  return set;
+};
+
+/**
+ * Build a map of cumulative confirmed settlement amounts per pair.
+ * Key: "debtor→creditor", Value: total confirmed TWD paid so far.
+ * Used together with pairDebtsMap (remaining debt from computeSettlements)
+ * to determine if a pair is fully settled.
+ */
+export const getConfirmedSettlementAmountsMap = (expenses: Expense[]): Map<string, number> => {
+  const map = new Map<string, number>();
+  expenses.forEach(e => {
+    if (e.category !== 'settlement') return;
+    if (e.status === 'pending') return;
+    const to = e.splitWith?.[0];
+    if (!e.payer || !to) return;
+    const key = `${e.payer}→${to}`;
+    const amt = effectiveTWD(e);
+    map.set(key, (map.get(key) ?? 0) + amt);
+  });
+  return map;
+};
+
+/**
  * Returns the settlement badge state for an expense from a specific viewer's perspective.
- * 'settled'  → viewer is a debtor for this expense and their pair is confirmed
- * 'received' → viewer is the payer (creditor) and all debtors' pairs are confirmed
- * 'none'     → no confirmed settlement covers this viewer's pair
+ * 'settled'  → viewer is a debtor for this expense and their pair is fully settled,
+ *              or a per-expense settlement specifically covers this expense for this debtor.
+ * 'received' → viewer is the payer (creditor) and all debtors' pairs are fully settled
+ *              (or each debtor has a per-expense settlement for this expense).
+ * 'none'     → outstanding debt still remains for this viewer's pair
  *
- * Checks both legacy stamp fields (settledAt / receivedAt) for backward compatibility
- * and the new per-pair confirmed settlement map.
+ * Uses amount-based comparison for pair-level: a pair is fully settled when
+ *   confirmedAmountsMap[pair] > 0  AND  pairDebtsMap[pair] == 0
+ * (i.e. at least one payment has been confirmed and no remaining debt exists).
+ * This correctly handles partial payments: partial payment alone does NOT
+ * mark older expenses as settled.
+ *
+ * Also checks:
+ *   - legacy stamp fields (settledAt / receivedAt) for backward compatibility
+ *   - perExpenseConfirmedSet for the "結清這筆" per-expense settlement flow
  */
 export const getSettlementBadge = (
   e: Expense,
   viewerName: string,
   memberNames: string[],
-  confirmedPairMap: Map<string, string>,
+  confirmedAmountsMap: Map<string, number>,
+  pairDebtsMap: Map<string, number>,
+  perExpenseConfirmedSet?: Set<string>,
 ): 'settled' | 'received' | 'none' => {
   const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-  // Use createdAt (actual Firestore write time) so backdated expenses created
-  // after a settlement are NOT incorrectly marked as already settled.
-  // Falls back to e.date only for old records without createdAt.
-  const insertDate = getExpenseInsertDate(e);
 
-  // Helper: does a confirmed settlement cover this expense?
-  // Covered = expense was inserted on or before the settlement confirmation date.
-  const isCoveredBy = (settlementDate: string | undefined): boolean => {
-    if (settlementDate == null) return false;
-    if (!insertDate) return false;
-    return insertDate <= settlementDate;
+  /** True when the debtor→creditor pair has been fully settled. */
+  const isFullySettled = (debtorName: string, creditorName: string): boolean => {
+    const pairKey = `${debtorName}→${creditorName}`;
+    const confirmedAmt = confirmedAmountsMap.get(pairKey) ?? 0;
+    const remainingDebt = pairDebtsMap.get(pairKey) ?? 0;
+    // At least one confirmed payment AND no remaining debt left.
+    return confirmedAmt > 0 && remainingDebt === 0;
   };
+
+  /** True when this specific expense has a per-expense settlement for this debtor. */
+  const isPerExpenseSettled = (debtorName: string): boolean =>
+    !!e.id && !!perExpenseConfirmedSet?.has(`${e.id}|${debtorName}`);
 
   // Viewer is a debtor for this expense (in splitWith, not the payer)
   if (e.payer !== viewerName && sw.includes(viewerName)) {
     if (e.settledAt) return 'settled';  // legacy stamp
-    if (isCoveredBy(confirmedPairMap.get(`${viewerName}→${e.payer}`))) return 'settled';
+    if (isFullySettled(viewerName, e.payer)) return 'settled';
+    if (isPerExpenseSettled(viewerName)) return 'settled';
   }
 
-  // Viewer is the payer (creditor): show 'received' when all debtors confirmed
+  // Viewer is the payer (creditor): show 'received' when all debtors fully settled
   if (e.payer === viewerName) {
     if (e.receivedAt) return 'received';  // legacy stamp
     const debtors = sw.filter(n => n !== viewerName);
-    if (debtors.length > 0 && debtors.every(d => isCoveredBy(confirmedPairMap.get(`${d}→${viewerName}`)))) {
+    if (debtors.length > 0 && debtors.every(d =>
+      isFullySettled(d, viewerName) || isPerExpenseSettled(d)
+    )) {
       return 'received';
     }
   }
