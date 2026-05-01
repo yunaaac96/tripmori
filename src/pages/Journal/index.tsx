@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { C, FONT, cardStyle, inputStyle, btnPrimary, SmartText } from '../../App';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage, faXmark, faChevronLeft, faChevronRight, faPen } from '@fortawesome/free-solid-svg-icons';
+import { faBook, faTrashCan, faLock, faCamera, faLink, faMessage, faXmark, faChevronLeft, faChevronRight, faPen, faEye, faEyeSlash, faUsers, faUserLock } from '@fortawesome/free-solid-svg-icons';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useGoogleUid } from '../../hooks/useAuth';
 import { arrayUnion, arrayRemove } from 'firebase/firestore';
@@ -41,6 +41,9 @@ export default function JournalPage({ journals, members, journalComments, firest
   const [uploading, setUploading] = useState(false);
   const [form, setForm]        = useState({ content: '', date: '', author: '', photos: [] as string[] });
   const [lightbox, setLightbox] = useState<{ photos: string[]; idx: number } | null>(null);
+  // Visibility restriction form state
+  const [visibleToMode, setVisibleToMode] = useState<'all' | 'restricted'>('all');
+  const [formVisibleTo, setFormVisibleTo] = useState<string[]>([]);
 
   // Lightbox keyboard navigation: Esc closes, ←/→ swap photos.
   useEffect(() => {
@@ -103,12 +106,17 @@ export default function JournalPage({ journals, members, journalComments, firest
   const openForm = () => {
     setEditingId(null);
     setForm({ content: '', date: new Date().toISOString().slice(0, 10), author: currentUser, photos: [] });
+    setVisibleToMode('all');
+    setFormVisibleTo([]);
     setShowForm(true);
   };
 
   const openEdit = (j: any) => {
     setEditingId(j.id);
     setForm({ content: j.content || '', date: j.date || '', author: j.authorName || '', photos: j.photos || [] });
+    const vt: string[] = j.visibleTo || [];
+    setVisibleToMode(vt.length > 0 ? 'restricted' : 'all');
+    setFormVisibleTo(vt);
     setShowForm(true);
   };
 
@@ -146,12 +154,14 @@ export default function JournalPage({ journals, members, journalComments, firest
     if (!form.content || !authorToSave || !googleUid) return;
     setSaving(true);
     try {
+      const visibleTo = visibleToMode === 'restricted' ? formVisibleTo : [];
       if (editingId) {
-        // Edit mode: update content, date, photos only (never change author)
+        // Edit mode: update content, date, photos, visibleTo (never change author)
         await updateDoc(doc(db, 'trips', TRIP_ID, 'journals', editingId), {
           content: form.content,
           date: form.date || new Date().toISOString().slice(0, 10),
           photos: form.photos,
+          visibleTo,
           updatedAt: Timestamp.now(),
         });
       } else {
@@ -160,6 +170,7 @@ export default function JournalPage({ journals, members, journalComments, firest
           content: form.content, date: form.date || new Date().toISOString().slice(0,10),
           authorName: authorToSave, photos: form.photos,
           reactions: {},
+          visibleTo,
           createdAt: Timestamp.now(),
         });
       }
@@ -183,6 +194,8 @@ export default function JournalPage({ journals, members, journalComments, firest
     setShowForm(false);
     setEditingId(null);
     setForm({ content: '', date: '', author: '', photos: [] });
+    setVisibleToMode('all');
+    setFormVisibleTo([]);
   };
 
   // ── Reactions ──────────────────────────────────────────────────
@@ -369,6 +382,52 @@ export default function JournalPage({ journals, members, journalComments, firest
                   </div>
                 )}
               </div>
+              {/* 觀看限制 */}
+              <div>
+                <label style={{ fontSize: 11, fontWeight: 600, color: 'var(--tm-bark-light)', display: 'block', marginBottom: 8 }}>
+                  <FontAwesomeIcon icon={faEye} style={{ marginRight: 4 }} />觀看限制
+                </label>
+                <div style={{ display: 'flex', gap: 6, marginBottom: visibleToMode === 'restricted' ? 10 : 0 }}>
+                  <button
+                    onClick={() => setVisibleToMode('all')}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1.5px solid ${visibleToMode === 'all' ? C.sage : 'var(--tm-cream-dark)'}`, background: visibleToMode === 'all' ? C.sageLight : 'var(--tm-card-bg)', color: visibleToMode === 'all' ? C.sageDark : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <FontAwesomeIcon icon={faUsers} />所有成員
+                  </button>
+                  <button
+                    onClick={() => setVisibleToMode('restricted')}
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1.5px solid ${visibleToMode === 'restricted' ? C.earth : 'var(--tm-cream-dark)'}`, background: visibleToMode === 'restricted' ? '#FFF5E8' : 'var(--tm-card-bg)', color: visibleToMode === 'restricted' ? C.earth : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    <FontAwesomeIcon icon={faUserLock} />指定成員
+                  </button>
+                </div>
+                {visibleToMode === 'restricted' && (
+                  <div>
+                    <p style={{ fontSize: 11, color: 'var(--tm-bark-light)', margin: '0 0 8px' }}>
+                      選取可閱讀的成員（作者本人永遠可見）
+                    </p>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+                      {memberNames.filter(n => n !== (form.author || currentUser)).map(name => {
+                        const selected = formVisibleTo.includes(name);
+                        return (
+                          <button key={name}
+                            onClick={() => setFormVisibleTo(prev =>
+                              selected ? prev.filter(n => n !== name) : [...prev, name]
+                            )}
+                            style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${selected ? C.sageDark : 'var(--tm-cream-dark)'}`, background: selected ? C.sageLight : 'var(--tm-card-bg)', color: selected ? C.sageDark : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ width: 18, height: 18, borderRadius: '50%', background: members.find((m: any) => m.name === name)?.color || C.blush, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white', flexShrink: 0 }}>{name[0]?.toUpperCase()}</span>
+                            {name}
+                          </button>
+                        );
+                      })}
+                    </div>
+                    {formVisibleTo.length === 0 && (
+                      <p style={{ fontSize: 11, color: '#C05A00', margin: '8px 0 0', fontWeight: 600 }}>
+                        <FontAwesomeIcon icon={faEyeSlash} style={{ marginRight: 4 }} />尚未選取任何成員，儲存後此篇日誌只有你自己可見
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button onClick={closeForm} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid var(--tm-cream-dark)`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.content || !(form.author || currentUser)}
@@ -419,6 +478,18 @@ export default function JournalPage({ journals, members, journalComments, firest
         ) : (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12, marginBottom: 20 }}>
             {[...journals].sort((a, b) => (b.date || '').localeCompare(a.date || '')).map((j: any) => {
+              // ── Visibility gating ──────────────────────────────────────────
+              const visibleTo: string[] = j.visibleTo || [];
+              const isRestricted = visibleTo.length > 0;
+              const canView = !isRestricted ||
+                currentUser === j.authorName ||
+                visibleTo.includes(currentUser);
+              // Restricted journal: completely hidden for unauthorized viewers & guests
+              if (isRestricted && !canView) return null;
+              // Unrestricted journal shown to guest: blur content (but show card)
+              const isGuestBlur = !isRestricted && isReadOnly;
+              // ──────────────────────────────────────────────────────────────
+
               const comments = getCommentsFor(j.id);
               const isExpanded = expandedJournal === j.id;
               const commentInput = journalCommentInputs[j.id] || '';
@@ -433,7 +504,15 @@ export default function JournalPage({ journals, members, journalComments, firest
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                         <MemberAvatar name={j.authorName} members={members} size={32} fontSize={14} />
                         <div>
-                          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--tm-bark)', margin: 0 }}>{j.authorName}</p>
+                          <p style={{ fontSize: 13, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 5 }}>
+                            {j.authorName}
+                            {isRestricted && (
+                              <span title={`僅 ${visibleTo.length > 0 ? visibleTo.join('、') + '、' : ''}${j.authorName} 可見`}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 3, fontSize: 9, fontWeight: 700, color: C.earth, background: '#FFF5E8', border: `1px solid #FFCF8A`, borderRadius: 6, padding: '1px 5px' }}>
+                                <FontAwesomeIcon icon={faUserLock} />指定成員
+                              </span>
+                            )}
+                          </p>
                           <p style={{ fontSize: 10, color: 'var(--tm-bark-light)', margin: 0 }}>{j.date}</p>
                         </div>
                       </div>
@@ -452,46 +531,66 @@ export default function JournalPage({ journals, members, journalComments, firest
                         </div>
                       )}
                     </div>
-                    <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={j.content || ''} /></p>
+                    {/* Content — blurred for guests on unrestricted journals */}
+                    {isGuestBlur ? (
+                      <div style={{ position: 'relative', marginBottom: 8 }}>
+                        <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: 0, whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere', filter: 'blur(4px)', userSelect: 'none', pointerEvents: 'none' }}>
+                          <SmartText text={j.content || ''} />
+                        </p>
+                        <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                          <span style={{ background: 'rgba(255,255,255,0.85)', border: `1px solid var(--tm-cream-dark)`, borderRadius: 20, padding: '5px 12px', fontSize: 11, fontWeight: 700, color: 'var(--tm-bark-light)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                            <FontAwesomeIcon icon={faLock} />登入後即可閱讀
+                          </span>
+                        </div>
+                      </div>
+                    ) : (
+                      <p style={{ fontSize: 14, color: 'var(--tm-bark)', lineHeight: 1.7, margin: '0 0 8px', whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={j.content || ''} /></p>
+                    )}
                     {/* 照片 */}
                     {j.photos?.length > 0 && (
                       <div className="tm-hscroll" style={{ display: 'flex', gap: 8, overflowX: 'auto', flexWrap: 'nowrap', marginBottom: 8, paddingBottom: 4, WebkitOverflowScrolling: 'touch' as any }}>
                         {j.photos.map((url: string, i: number) => (
-                          <img key={i} src={url} alt="" onClick={() => setLightbox({ photos: j.photos, idx: i })}
-                            style={{ width: 110, height: 110, objectFit: 'cover', borderRadius: 12, flexShrink: 0, cursor: 'pointer' }} />
+                          isGuestBlur
+                            ? <div key={i} style={{ width: 110, height: 110, borderRadius: 12, flexShrink: 0, overflow: 'hidden', filter: 'blur(6px)', pointerEvents: 'none' }}>
+                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              </div>
+                            : <img key={i} src={url} alt="" onClick={() => setLightbox({ photos: j.photos, idx: i })}
+                                style={{ width: 110, height: 110, objectFit: 'cover', borderRadius: 12, flexShrink: 0, cursor: 'pointer' }} />
                         ))}
                       </div>
                     )}
 
-                    {/* ── Reaction bar ── */}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
-                      {REACTION_EMOJIS.map(emoji => {
-                        const reactors = reactions[emoji] || [];
-                        const hasMyReact = reactors.includes(currentUser);
-                        return (
-                          <button key={emoji} onClick={() => !isReadOnly && currentUser && handleReaction(j.id, emoji, reactions)}
-                            style={{
-                              padding: '4px 8px', borderRadius: 20,
-                              border: `1.5px solid ${hasMyReact ? C.sageDark : 'var(--tm-cream-dark)'}`,
-                              background: hasMyReact ? C.sageLight : 'var(--tm-card-bg)',
-                              fontSize: 14, cursor: (!isReadOnly && currentUser) ? 'pointer' : 'default',
-                              display: 'flex', alignItems: 'center', gap: 4, fontFamily: FONT,
-                              opacity: (!isReadOnly && currentUser) ? 1 : 0.6,
-                            }}>
-                            {emoji}
-                            {reactors.length > 0 && (
-                              <span style={{ fontSize: 11, color: hasMyReact ? C.sageDark : 'var(--tm-bark-light)', fontWeight: 600 }}>
-                                {reactors.length}
-                              </span>
-                            )}
-                          </button>
-                        );
-                      })}
-                    </div>
+                    {/* ── Reaction bar (hidden for guests) ── */}
+                    {!isGuestBlur && (
+                      <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 4 }}>
+                        {REACTION_EMOJIS.map(emoji => {
+                          const reactors = reactions[emoji] || [];
+                          const hasMyReact = reactors.includes(currentUser);
+                          return (
+                            <button key={emoji} onClick={() => !isReadOnly && currentUser && handleReaction(j.id, emoji, reactions)}
+                              style={{
+                                padding: '4px 8px', borderRadius: 20,
+                                border: `1.5px solid ${hasMyReact ? C.sageDark : 'var(--tm-cream-dark)'}`,
+                                background: hasMyReact ? C.sageLight : 'var(--tm-card-bg)',
+                                fontSize: 14, cursor: (!isReadOnly && currentUser) ? 'pointer' : 'default',
+                                display: 'flex', alignItems: 'center', gap: 4, fontFamily: FONT,
+                                opacity: (!isReadOnly && currentUser) ? 1 : 0.6,
+                              }}>
+                              {emoji}
+                              {reactors.length > 0 && (
+                                <span style={{ fontSize: 11, color: hasMyReact ? C.sageDark : 'var(--tm-bark-light)', fontWeight: 600 }}>
+                                  {reactors.length}
+                                </span>
+                              )}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
 
-                  {/* Comment toggle button */}
-                  <div style={{ borderTop: `1px solid var(--tm-card-border, var(--tm-cream-dark))` }}>
+                  {/* Comment section (toggle + expanded) — hidden for guests on blurred journals */}
+                  {!isGuestBlur && <><div style={{ borderTop: `1px solid var(--tm-card-border, var(--tm-cream-dark))` }}>
                     <button
                       onClick={() => setExpandedJournal(isExpanded ? null : j.id)}
                       style={{ width: '100%', padding: '10px 16px', background: 'transparent', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, fontFamily: FONT, fontSize: 13, color: 'var(--tm-bark-light)', fontWeight: 600 }}
@@ -506,8 +605,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                   </div>
 
                   {/* Expanded comment section */}
-                  {isExpanded && (
-                    <div style={{ background: 'var(--tm-input-bg)', borderRadius: '0 0 16px 16px', padding: '12px 16px 16px' }}>
+                  {isExpanded && <div style={{ background: 'var(--tm-input-bg)', borderRadius: '0 0 16px 16px', padding: '12px 16px 16px' }}>
                       {comments.length === 0 ? (
                         <p style={{ fontSize: 12, color: 'var(--tm-bark-light)', textAlign: 'center', padding: '8px 0 12px', fontStyle: 'italic', margin: 0 }}>
                           還沒有回應，來說說你的感受吧！
@@ -597,8 +695,8 @@ export default function JournalPage({ journals, members, journalComments, firest
                           請先登入 Google 並綁定成員卡後即可留言
                         </p>
                       )}
-                    </div>
-                  )}
+                    </div>}
+                  </>}
                 </div>
               );
             })}
