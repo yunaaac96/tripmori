@@ -2636,7 +2636,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 onClick={() => setHideSettled(v => !v)}
                 style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 10, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${hideSettled ? C.sageDark : C.creamDark}`, background: hideSettled ? '#EAF3DE' : 'var(--tm-card-bg)', color: hideSettled ? C.sageDark : C.barkLight, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
                 <FontAwesomeIcon icon={hideSettled ? faCheck : faLock} style={{ fontSize: 10 }} />
-                {hideSettled ? '已結清項目已隱藏' : '顯示全部（含已結清）'}
+                {hideSettled ? '收還款記錄已隱藏' : '顯示全部（含收還款記錄）'}
               </button>
             )}
           </>
