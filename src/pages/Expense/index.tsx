@@ -2608,7 +2608,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         {isVisitor && (
           <div className="tm-visitor-note" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
             <span style={{ fontSize: 13, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
-            <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>訪客模式：僅顯示分類佔比，明細資料僅旅伴可查看</span>
+            <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用記錄僅行程成員可查看，取得行程邀請後即可閱讀</span>
           </div>
         )}
 
