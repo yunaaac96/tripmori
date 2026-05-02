@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="600" viewBox="0 0 1500 600">
+  <defs>
+    <!-- Main brand gradient: deep navy → bay teal -->
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%"   stop-color="#0D1F3C"/>
+      <stop offset="45%"  stop-color="#0D3A5C"/>
+      <stop offset="100%" stop-color="#0A7C6E"/>
+    </linearGradient>
+    <!-- Subtle highlight gradient for geometric shapes -->
+    <linearGradient id="lineGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#1AB5A0" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#1AB5A0" stop-opacity="0.6"/>
+      <stop offset="100%" stop-color="#1AB5A0" stop-opacity="0"/>
+    </linearGradient>
+    <linearGradient id="lineGrad2" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%"   stop-color="#4A90D9" stop-opacity="0"/>
+      <stop offset="50%"  stop-color="#4A90D9" stop-opacity="0.35"/>
+      <stop offset="100%" stop-color="#4A90D9" stop-opacity="0"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="3" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background -->
+  <rect width="1500" height="600" fill="url(#bg)"/>
+
+  <!-- Subtle radial glow on left (deep blue side) -->
+  <radialGradient id="glowLeft" cx="15%" cy="50%" r="55%">
+    <stop offset="0%"   stop-color="#1A4A8A" stop-opacity="0.4"/>
+    <stop offset="100%" stop-color="#0D1F3C" stop-opacity="0"/>
+  </radialGradient>
+  <rect width="1500" height="600" fill="url(#glowLeft)"/>
+
+  <!-- Subtle radial glow on right (teal side) -->
+  <radialGradient id="glowRight" cx="88%" cy="55%" r="45%">
+    <stop offset="0%"   stop-color="#0AA890" stop-opacity="0.3"/>
+    <stop offset="100%" stop-color="#0A7C6E" stop-opacity="0"/>
+  </radialGradient>
+  <rect width="1500" height="600" fill="url(#glowRight)"/>
+
+  <!-- === Geometric lines: diagonal grid === -->
+  <!-- Far-left diagonal set (navy region) -->
+  <g opacity="0.12" stroke="#7AB8E8" stroke-width="1" fill="none">
+    <line x1="-100" y1="600" x2="400"  y2="-100"/>
+    <line x1="0"    y1="600" x2="500"  y2="-100"/>
+    <line x1="100"  y1="600" x2="600"  y2="-100"/>
+    <line x1="200"  y1="600" x2="700"  y2="-100"/>
+    <line x1="300"  y1="600" x2="800"  y2="-100"/>
+    <line x1="400"  y1="600" x2="900"  y2="-100"/>
+    <line x1="500"  y1="600" x2="1000" y2="-100"/>
+    <line x1="600"  y1="600" x2="1100" y2="-100"/>
+    <line x1="700"  y1="600" x2="1200" y2="-100"/>
+    <line x1="800"  y1="600" x2="1300" y2="-100"/>
+    <line x1="900"  y1="600" x2="1400" y2="-100"/>
+    <line x1="1000" y1="600" x2="1500" y2="-100"/>
+    <line x1="1100" y1="600" x2="1600" y2="-100"/>
+    <line x1="1200" y1="600" x2="1700" y2="-100"/>
+    <line x1="1300" y1="600" x2="1800" y2="-100"/>
+  </g>
+
+  <!-- Counter-diagonal set (creates grid diamond pattern) -->
+  <g opacity="0.07" stroke="#1AB5A0" stroke-width="1" fill="none">
+    <line x1="-100" y1="-100" x2="700"  y2="700"/>
+    <line x1="0"    y1="-100" x2="800"  y2="700"/>
+    <line x1="100"  y1="-100" x2="900"  y2="700"/>
+    <line x1="200"  y1="-100" x2="1000" y2="700"/>
+    <line x1="300"  y1="-100" x2="1100" y2="700"/>
+    <line x1="400"  y1="-100" x2="1200" y2="700"/>
+    <line x1="500"  y1="-100" x2="1300" y2="700"/>
+    <line x1="600"  y1="-100" x2="1400" y2="700"/>
+    <line x1="700"  y1="-100" x2="1500" y2="700"/>
+    <line x1="800"  y1="-100" x2="1600" y2="700"/>
+    <line x1="900"  y1="-100" x2="1700" y2="700"/>
+    <line x1="1000" y1="-100" x2="1800" y2="700"/>
+  </g>
+
+  <!-- === Horizontal accent lines with gradient fade === -->
+  <rect x="0" y="198" width="1500" height="1" fill="url(#lineGrad2)" opacity="0.5"/>
+  <rect x="0" y="300" width="1500" height="1" fill="url(#lineGrad)"  opacity="0.5"/>
+  <rect x="0" y="402" width="1500" height="1" fill="url(#lineGrad2)" opacity="0.5"/>
+
+  <!-- === Geometric polygon accents === -->
+  <!-- Large hexagon outline — left area -->
+  <polygon points="180,120 280,60 380,120 380,240 280,300 180,240"
+    fill="none" stroke="#4A90D9" stroke-width="1.2" opacity="0.18"/>
+  <!-- Inner hexagon -->
+  <polygon points="210,145 270,110 330,145 330,215 270,250 210,215"
+    fill="none" stroke="#4A90D9" stroke-width="0.8" opacity="0.12"/>
+
+  <!-- Triangle right-center -->
+  <polygon points="1250,80 1450,480 1050,480"
+    fill="none" stroke="#1AB5A0" stroke-width="1.2" opacity="0.15"/>
+  <!-- Inner triangle -->
+  <polygon points="1250,160 1380,440 1120,440"
+    fill="none" stroke="#1AB5A0" stroke-width="0.7" opacity="0.09"/>
+
+  <!-- Small diamond — top center -->
+  <polygon points="750,40 800,100 750,160 700,100"
+    fill="none" stroke="#7AB8E8" stroke-width="1" opacity="0.2"/>
+
+  <!-- Small diamond — bottom right area -->
+  <polygon points="1100,400 1130,440 1100,480 1070,440"
+    fill="none" stroke="#1AB5A0" stroke-width="0.8" opacity="0.16"/>
+
+  <!-- Dotted accent corners -->
+  <circle cx="80"  cy="80"  r="2.5" fill="#4A90D9" opacity="0.4"/>
+  <circle cx="140" cy="80"  r="2.5" fill="#4A90D9" opacity="0.25"/>
+  <circle cx="80"  cy="140" r="2.5" fill="#4A90D9" opacity="0.25"/>
+
+  <circle cx="1420" cy="520" r="2.5" fill="#1AB5A0" opacity="0.4"/>
+  <circle cx="1460" cy="520" r="2.5" fill="#1AB5A0" opacity="0.22"/>
+  <circle cx="1420" cy="555" r="2.5" fill="#1AB5A0" opacity="0.22"/>
+
+  <!-- === Compass rose (subtle, center-right) === -->
+  <g transform="translate(1320, 300)" opacity="0.13" stroke="#1AB5A0" stroke-width="1.2" fill="none">
+    <circle cx="0" cy="0" r="55"/>
+    <circle cx="0" cy="0" r="38"/>
+    <line x1="0" y1="-65" x2="0"  y2="65"/>
+    <line x1="-65" y1="0" x2="65" y2="0"/>
+    <line x1="-46" y1="-46" x2="46" y2="46"/>
+    <line x1="46"  y1="-46" x2="-46" y2="46"/>
+    <!-- North pointer -->
+    <polygon points="0,-55 6,-35 -6,-35" fill="#1AB5A0" opacity="0.5"/>
+  </g>
+
+  <!-- === Thin border lines at top & bottom === -->
+  <rect x="0" y="0"   width="1500" height="2" fill="url(#lineGrad)" opacity="0.3"/>
+  <rect x="0" y="598" width="1500" height="2" fill="url(#lineGrad)" opacity="0.3"/>
+</svg>
