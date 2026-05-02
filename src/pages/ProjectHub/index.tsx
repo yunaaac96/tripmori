@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLock, faPen, faTrashCan, faClipboardList, faFileImport, faUsers, faAddressBook, faCalendarPlus, faArrowRight, faTowerBroadcast, faPlus, faChevronDown, faChevronUp, faXmark, faArrowUpRightFromSquare, faBookOpen } from '@fortawesome/free-solid-svg-icons';
+import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLock, faPen, faTrashCan, faClipboardList, faFileImport, faUsers, faAddressBook, faCalendarPlus, faArrowRight, faTowerBroadcast, faPlus, faChevronDown, faChevronUp, faXmark, faArrowUpRightFromSquare, faBookOpen, faCoins, faBell } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { db, auth } from '../../config/firebase';
 import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../../utils/universalImporter';
@@ -163,10 +163,11 @@ const DEFAULT_PACKING: string[] = [
 ];
 
 // ── FAQ data ──────────────────────────────────────────────────────
-const FAQ_CATEGORIES = [
+const FAQ_CATEGORIES: { id: string; icon: typeof faCoins; color: string; title: string; items: { q: string; a: string }[] }[] = [
   {
     id: 'accounting',
-    icon: '💰',
+    icon: faCoins,
+    color: '#9A7200',
     title: '結算與對帳',
     items: [
       {
@@ -185,7 +186,8 @@ const FAQ_CATEGORIES = [
   },
   {
     id: 'members',
-    icon: '👥',
+    icon: faUsers,
+    color: '#2A6A9A',
     title: '成員與代錄',
     items: [
       {
@@ -204,7 +206,8 @@ const FAQ_CATEGORIES = [
   },
   {
     id: 'system',
-    icon: '🔔',
+    icon: faBell,
+    color: '#7A3A9A',
     title: '系統與通知',
     items: [
       {
@@ -1012,8 +1015,9 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                   {FAQ_CATEGORIES.map(cat => (
                     <div key={cat.id} style={{ marginBottom: 12 }}>
                       {/* Category header */}
-                      <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 6px', letterSpacing: 0.8 }}>
-                        {cat.icon} {cat.title.toUpperCase()}
+                      <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 6px', letterSpacing: 0.8, display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <FontAwesomeIcon icon={cat.icon} style={{ color: cat.color, fontSize: 11 }} />
+                        {cat.title.toUpperCase()}
                       </p>
                       {/* Items */}
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
@@ -1040,7 +1044,9 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
 
                   {/* Notion link */}
                   <a href="https://www.notion.so/TripMori-35416712263f81b9aa02dcb24487d822" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--tm-section-bg)', border: `1.5px solid ${C.creamDark}`, textDecoration: 'none', marginTop: 4, marginBottom: 8 }}>
-                    <span style={{ fontSize: 18 }}>📖</span>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: '#EDE0F8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <FontAwesomeIcon icon={faBookOpen} style={{ fontSize: 13, color: '#7A3A9A' }} />
+                    </div>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>查看完整使用者說明書</span>
                     <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 11, color: C.barkLight }} />
                   </a>
