@@ -300,11 +300,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     if (settlementDetailName) { setStmtPaymentsOpen(false); setStmtSharesOpen(false); }
   }, [settlementDetailName]);
 
-  // Member card scroll ref (for arrow nav) + edge-mask state so we can show
-  // gradient hints when more cards exist outside the viewport — important on
-  // mobile (8-person trips) where the desktop arrow buttons are hidden.
+  // Member card scroll ref (used by the desktop arrow nav buttons below).
   const memberScrollRef = useRef<HTMLDivElement>(null);
-  const [memberScrollEdges, setMemberScrollEdges] = useState({ left: false, right: false });
 
   // Receipt photo attachment
   const descRef = useRef<HTMLInputElement>(null);
@@ -1047,29 +1044,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     ...orderedMemberNames.filter(n => n === currentUserName),
     ...orderedMemberNames.filter(n => n !== currentUserName),
   ];
-
-  // Track whether the member-card scroll has more content off-screen on either
-  // edge, so we can render gradient masks + arrow hints. Re-check on scroll
-  // and on container resize (orientation change, devtools toggle, etc.).
-  useEffect(() => {
-    const el = memberScrollRef.current;
-    if (!el) return;
-    const update = () => {
-      const left  = el.scrollLeft > 4;
-      const right = el.scrollLeft + el.clientWidth < el.scrollWidth - 4;
-      setMemberScrollEdges(prev =>
-        prev.left === left && prev.right === right ? prev : { left, right }
-      );
-    };
-    update();
-    el.addEventListener('scroll', update, { passive: true });
-    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(update) : null;
-    ro?.observe(el);
-    return () => {
-      el.removeEventListener('scroll', update);
-      ro?.disconnect();
-    };
-  }, [displayMemberNames.length]);
 
   // Build per-member settlement totals for card display (consistent with suggestion row)
   const settlementReceive: Record<string, number> = {};
@@ -2692,17 +2666,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               style={{ display: 'none', position: 'absolute', right: -14, top: '50%', transform: 'translateY(-50%)', width: 28, height: 28, borderRadius: '50%', border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', zIndex: 2, alignItems: 'center', justifyContent: 'center', fontSize: 14, color: C.bark, boxShadow: C.shadowSm }}
               className="tm-member-arrow tm-member-arrow-right"
             >›</button>
-            {/* Edge gradient masks — show when there are more cards off-screen.
-                Mobile-first hint: the desktop arrow buttons are display:none on
-                small screens, so 8-person trips need this to feel scrollable. */}
-            {memberScrollEdges.left && (
-              <div aria-hidden="true" style={{ position: 'absolute', left: 0, top: 0, bottom: 4, width: 28, pointerEvents: 'none', background: 'linear-gradient(to right, var(--tm-bg, #F7F4EB), transparent)' }} />
-            )}
-            {memberScrollEdges.right && (
-              <div aria-hidden="true" style={{ position: 'absolute', right: 0, top: 0, bottom: 4, width: 32, pointerEvents: 'none', background: 'linear-gradient(to left, var(--tm-bg, #F7F4EB), transparent)', display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: 4 }}>
-                <span style={{ fontSize: 16, fontWeight: 700, color: C.barkLight, opacity: 0.65, lineHeight: 1 }}>›</span>
-              </div>
-            )}
           </div>
         )}
 
