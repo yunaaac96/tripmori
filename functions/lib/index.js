@@ -92,7 +92,11 @@ async function notifyMember(tripId, memberName, title, body, data = {}) {
     if (membersSnap.empty)
         return;
     const member = membersSnap.docs[0].data();
-    const tokens = member.fcmTokens || [];
+    // Prefer standalone (PWA home-screen) tokens so only the installed app
+    // shows the notification. Fall back to all tokens if none are standalone.
+    const standaloneTokens = member.fcmTokensStandalone || [];
+    const allTokens = member.fcmTokens || [];
+    const tokens = standaloneTokens.length > 0 ? standaloneTokens : allTokens;
     if (!tokens.length)
         return;
     // Write to Firestore notifications collection so the badge dot appears
@@ -137,6 +141,7 @@ async function notifyMember(tripId, memberName, title, body, data = {}) {
     if (staleTokens.length) {
         await membersSnap.docs[0].ref.update({
             fcmTokens: admin.firestore.FieldValue.arrayRemove(...staleTokens),
+            fcmTokensStandalone: admin.firestore.FieldValue.arrayRemove(...staleTokens),
         });
     }
 }
