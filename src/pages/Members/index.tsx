@@ -1066,8 +1066,11 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                           </button>
                         )}
                         {showDelete && (
+                          // Destructive admin-only action — solid red so it stands out
+                          // from the same-row 解除綁定 (recoverable) button.
                           <button onClick={() => handleDeleteMember(m.id, m.name)}
-                            style={{ fontSize: 10, color: '#9A3A3A', background: 'none', border: '1px solid #E8C4C4', borderRadius: 6, padding: '1px 7px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
+                            title="刪除成員（管理模式 / 不可復原）"
+                            style={{ fontSize: 10, color: 'white', background: '#9A3A3A', border: '1px solid #9A3A3A', borderRadius: 6, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
                             <FontAwesomeIcon icon={faTrashCan} style={{ fontSize: 9 }} />刪除成員
                           </button>
                         )}
