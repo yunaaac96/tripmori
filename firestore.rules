@@ -153,13 +153,25 @@ service cloud.firestore {
           isAuthorizedProxyFor(tripId, request.resource.data.privateOwnerUid)
         );
 
-        // Update: editor/owner; proxy can only update what they originally logged
+        // Update: editor/owner; proxy can only update what they originally logged.
+        // Defense-in-depth: settlement records are state-machine-locked at the
+        // server too — confirmed (or status-less legacy) records are immutable
+        // from the client; only the pending→confirmed transition is permitted.
+        // (The notifSentAt / proxyNotifSentAt writes happen via Admin SDK from
+        // Cloud Functions, which bypass these rules.)
+        // Note: regular expenses settled via Method B (no individual stamp) are
+        // still defended only at the client. Adding cross-doc settlement-state
+        // verification here would require expensive get() calls per write.
         allow update: if canWrite(tripId) && (
           !request.resource.data.get('isPrivate', false) ||
           request.resource.data.privateOwnerUid == request.auth.uid ||
           isOwner(tripId) ||
           (resource.data.get('loggedByUid', null) == request.auth.uid &&
            isAuthorizedProxyFor(tripId, resource.data.privateOwnerUid))
+        ) && (
+          resource.data.get('category', '') != 'settlement' ||
+          (resource.data.get('status', '') == 'pending' &&
+           request.resource.data.get('status', '') == 'confirmed')
         );
 
         // Delete: proxy can only delete what they originally logged
