@@ -84,7 +84,10 @@ async function notifyMember(
 
   const messages = tokens.map(token => ({
     token,
-    notification: { title, body },
+    // Do NOT include top-level notification field for web push:
+    // with onBackgroundMessage registered in the SW, the browser would
+    // auto-display from the notification field AND our SW handler calls
+    // showNotification again → duplicate. webpush.notification handles display.
     webpush: {
       notification: {
         title,
@@ -979,12 +982,29 @@ export const onSettlementPending = onDocumentCreated(
     if (expense.category !== 'settlement') return;
     if (expense.status !== 'pending') return;
 
-    const { tripId } = event.params;
-    const debtor: string   = expense.payer        || '';
+    const { tripId, expenseId } = event.params;
+    const debtor: string   = expense.payer         || '';
     const creditor: string = expense.splitWith?.[0] || '';
-    const amount: number   = expense.amountTWD    ?? expense.amount ?? 0;
+    const amount: number   = expense.amountTWD     ?? expense.amount ?? 0;
 
     if (!debtor || !creditor) return;
+
+    // Idempotency guard: Cloud Functions may fire more than once for the same
+    // Firestore event. Use a transaction to atomically claim the right to send;
+    // if notifSentAt is already set, a previous invocation already sent it.
+    const expenseRef = db
+      .collection('trips').doc(tripId)
+      .collection('expenses').doc(expenseId);
+
+    const claimed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(expenseRef);
+      if (!snap.exists) return false;
+      if (snap.data()?.notifSentAt) return false; // already sent
+      tx.update(expenseRef, { notifSentAt: admin.firestore.FieldValue.serverTimestamp() });
+      return true;
+    });
+
+    if (!claimed) return;
 
     const amountStr = `NT$ ${Math.round(amount).toLocaleString('zh-TW')}`;
 
@@ -993,7 +1013,7 @@ export const onSettlementPending = onDocumentCreated(
       creditor,
       `💸 ${debtor} 已記錄還款`,
       `${debtor} 已還款 ${amountStr}，請到費用頁點「確認收款」完成結清`,
-      { tag: `settlement-pending-${event.params.expenseId}`, url: '/' },
+      { tag: `settlement-pending-${expenseId}`, url: '/' },
     );
   }
 );
