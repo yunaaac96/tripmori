@@ -424,12 +424,55 @@ function App() {
   const [bookings, setBookings] = useState<any[]>([]);
   const [expenses, setExpenses] = useState<any[]>([]);
   const [proxyGrants, setProxyGrants] = useState<any[]>([]);
-  const [adminMode, setAdminMode] = useState(() => sessionStorage.getItem('tm-admin') === '1');
-  const toggleAdminMode = () => setAdminMode(prev => {
-    const next = !prev;
-    next ? sessionStorage.setItem('tm-admin', '1') : sessionStorage.removeItem('tm-admin');
-    return next;
+  // adminMode persistence: localStorage so the choice survives page reloads
+  // (PWA cold-starts, browser restarts). Legacy sessionStorage flag from
+  // before this change is migrated to localStorage on first read.
+  // The single setAdminMode → localStorage sync below means every code path
+  // that flips adminMode (including auto-exit) keeps storage in sync.
+  const ADMIN_LS_KEY = 'tm-admin';
+  const [adminMode, setAdminMode] = useState(() => {
+    try {
+      if (sessionStorage.getItem(ADMIN_LS_KEY) === '1') {
+        localStorage.setItem(ADMIN_LS_KEY, '1');
+        sessionStorage.removeItem(ADMIN_LS_KEY);
+      }
+      return localStorage.getItem(ADMIN_LS_KEY) === '1';
+    } catch { return false; }
   });
+  useEffect(() => {
+    try {
+      adminMode ? localStorage.setItem(ADMIN_LS_KEY, '1') : localStorage.removeItem(ADMIN_LS_KEY);
+    } catch { /* storage quota / privacy mode — fail-soft */ }
+  }, [adminMode]);
+  const toggleAdminMode = () => setAdminMode(p => !p);
+
+  // Auto-exit admin mode for safety:
+  //   • 10-minute idle timeout — handed phone to a friend, walk away, etc.
+  //   • Tab/page hidden (visibilitychange) — switching apps, locking phone
+  // Effect only attaches listeners while adminMode is true so we don't pay
+  // the cost when the toggle is off.
+  useEffect(() => {
+    if (!adminMode) return;
+    const IDLE_MS = 10 * 60 * 1000;
+    let timer: ReturnType<typeof setTimeout>;
+    const exit = () => setAdminMode(false);
+    const reset = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(exit, IDLE_MS);
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === 'hidden') exit();
+    };
+    reset();
+    const events: (keyof WindowEventMap)[] = ['mousedown', 'touchstart', 'keydown', 'scroll'];
+    events.forEach(e => window.addEventListener(e, reset, { passive: true }));
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => {
+      if (timer) clearTimeout(timer);
+      events.forEach(e => window.removeEventListener(e, reset));
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
+  }, [adminMode]);
   const [journals, setJournals] = useState<any[]>([]);
   // Journal pagination — live-subscribe to newest N entries, let user click
   // "載入更多" to grow. Avoids pulling 100+ docs + their photo URLs on every
@@ -1175,10 +1218,24 @@ function App() {
             <div style={{ display: 'flex', gap: 6 }}>
               {activeProject.role === 'owner' && (
                 <button onClick={toggleAdminMode}
-                  title={adminMode ? '離開管理模式' : '進入管理模式'}
-                  style={{ fontSize: 11, color: adminMode ? '#E87A30' : C.barkLight, background: adminMode ? '#FEF0E6' : 'none', border: `1px solid ${adminMode ? '#E87A30' : C.creamDark}`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 4 }}>
+                  title={adminMode ? '離開管理模式（10 分鐘無操作或切換 app 會自動退出）' : '進入管理模式：解鎖編輯旅行、批次匯入、成員管理等操作'}
+                  style={{
+                    fontSize: 11, fontWeight: 700,
+                    color: adminMode ? 'white' : '#7A4A0A',
+                    background: adminMode ? '#E87A30' : '#FEF0E6',
+                    border: `1px solid ${adminMode ? '#E87A30' : '#E8B96A'}`,
+                    borderRadius: 8,
+                    padding: '4px 10px',
+                    cursor: 'pointer',
+                    fontFamily: FONT,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    boxShadow: adminMode ? '0 1px 3px rgba(232,122,48,0.3)' : 'none',
+                    whiteSpace: 'nowrap',
+                  }}>
                   <FontAwesomeIcon icon={faGear} style={{ fontSize: 10 }} />
-                  {adminMode ? '管理中' : '管理'}
+                  {adminMode ? '管理中' : '管理模式'}
                 </button>
               )}
               <button
@@ -1194,17 +1251,47 @@ function App() {
           </div>
         )}
 
-        {/* ── Admin mode banner ── */}
+        {/* ── Admin mode banner: quick-link chips so admin actions are discoverable
+              instead of scattered. Each chip switches tabs (admin-only buttons
+              on each page were previously invisible until the user happened to
+              navigate there). Banner is sticky-positioned via the parent
+              container's flow so it scrolls with the page header naturally. ── */}
         {activeProject.role === 'owner' && adminMode && (
-          <div style={{ background: '#E87A30', color: 'white', padding: '7px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, fontWeight: 700, fontFamily: FONT }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-              <FontAwesomeIcon icon={faGear} style={{ fontSize: 11 }} />
-              管理模式 — 顯示管理操作
-            </span>
-            <button onClick={toggleAdminMode}
-              style={{ fontSize: 11, fontWeight: 700, color: 'white', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 8, padding: '2px 10px', cursor: 'pointer', fontFamily: FONT }}>
-              離開
-            </button>
+          <div style={{ background: '#E87A30', color: 'white', padding: '7px 16px 8px', fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <FontAwesomeIcon icon={faGear} style={{ fontSize: 11 }} />
+                管理模式
+              </span>
+              <button onClick={toggleAdminMode}
+                style={{ fontSize: 11, fontWeight: 700, color: 'white', background: 'rgba(255,255,255,0.2)', border: '1px solid rgba(255,255,255,0.4)', borderRadius: 8, padding: '2px 10px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+                離開
+              </button>
+            </div>
+            <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
+              {([
+                ['行程', '編輯行程'],
+                ['成員', '成員管理'],
+                ['記帳', '結算管理'],
+              ] as [string, string][]).map(([tab, label]) => (
+                <button key={tab}
+                  onClick={() => handleTabChange(tab)}
+                  style={{
+                    fontSize: 11,
+                    fontWeight: 700,
+                    color: 'white',
+                    background: activeTab === tab ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.12)',
+                    border: '1px solid rgba(255,255,255,0.4)',
+                    borderRadius: 999,
+                    padding: '3px 11px',
+                    cursor: 'pointer',
+                    fontFamily: FONT,
+                    whiteSpace: 'nowrap',
+                  }}>
+                  {label}{activeTab === tab && ' •'}
+                </button>
+              ))}
+            </div>
           </div>
         )}
 
