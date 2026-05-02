@@ -19,7 +19,7 @@ async function goToExpense(page: any) {
 }
 
 async function openAddForm(page: any) {
-  await page.locator('button').filter({ hasText: '＋ 新增支出' }).first().click();
+  await page.locator('button').filter({ hasText: '＋ 新增' }).first().click();
   await page.waitForTimeout(300);
 }
 
@@ -32,8 +32,8 @@ test.describe('記帳頁 CRUD（Owner）', () => {
     await goToExpense(page);
   });
 
-  test('顯示「＋ 新增支出」按鈕', async ({ page }) => {
-    await expect(page.locator('button').filter({ hasText: '＋ 新增支出' }).first()).toBeVisible({ timeout: 8_000 });
+  test('顯示「＋ 新增」按鈕', async ({ page }) => {
+    await expect(page.locator('button').filter({ hasText: '＋ 新增' }).first()).toBeVisible({ timeout: 8_000 });
   });
 
   test('點擊後開啟新增支出表單', async ({ page }) => {
@@ -105,7 +105,7 @@ test.describe('記帳頁 CRUD（Visitor）', () => {
     await goToExpense(page);
   });
 
-  test('Visitor：看不到「＋ 新增支出」按鈕', async ({ page }) => {
-    await expect(page.locator('button').filter({ hasText: '＋ 新增支出' })).not.toBeVisible();
+  test('Visitor：看不到「＋ 新增」按鈕', async ({ page }) => {
+    await expect(page.locator('button').filter({ hasText: '＋ 新增' })).not.toBeVisible();
   });
 });
