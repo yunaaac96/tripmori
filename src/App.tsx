@@ -623,9 +623,15 @@ function App() {
 
   useEffect(() => {
     // 等 Firebase auth 就緒後再隱藏 splash（至少顯示 5 秒：動畫 ~2.7s + 停留 ~2.3s）
+    // .catch fallback: dismiss the splash even if auth.authStateReady() rejects
+    // (e.g. apiKey misconfigured or backend unreachable) so the user never
+    // gets stuck staring at the logo. This also keeps E2E tests resilient
+    // when env vars haven't been wired up.
     const minDelay = new Promise<void>(r => setTimeout(r, 5000));
     const authReady = auth.authStateReady();
-    Promise.all([minDelay, authReady]).then(() => setSplashDone(true));
+    Promise.all([minDelay, authReady])
+      .then(() => setSplashDone(true))
+      .catch(() => setSplashDone(true));
   }, []);
 
   const activeTripId = activeProject?.id || TRIP_ID;

@@ -19,9 +19,13 @@ export default defineConfig({
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
   ],
-  // Start vite dev server before tests
+  // Start vite dev server in --mode test so Vite loads .env.test (fake-but-
+  // valid Firebase creds). Real network calls are intercepted by helpers.ts
+  // mockFirebase. Without --mode test, a checkout missing .env.local would
+  // give Firebase apiKey: undefined and auth.authStateReady() would never
+  // resolve, freezing the splash and timing out every test.
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run dev -- --mode test',
     url: 'http://localhost:5173',
     reuseExistingServer: true,
     timeout: 30_000,
