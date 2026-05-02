@@ -50,9 +50,13 @@ if (_fbApiKey) {
   const messaging = getMessaging(firebaseApp);
 
   onBackgroundMessage(messaging, (payload) => {
-    const title = payload.notification?.title ?? 'TripMori';
-    const body  = payload.notification?.body  ?? '';
-    const icon  = payload.notification?.icon  ?? '/icons/icon-192-light.png';
+    // Messages are sent as data-only (no notification field) to prevent the
+    // browser from auto-displaying a notification before this handler fires,
+    // which would cause a duplicate. Read title/body from payload.data instead.
+    const d     = (payload.data ?? {}) as Record<string, string>;
+    const title = d.title ?? payload.notification?.title ?? 'TripMori';
+    const body  = d.body  ?? payload.notification?.body  ?? '';
+    const icon  = '/icons/icon-192-light.png';
 
     self.registration.showNotification(title, {
       body,

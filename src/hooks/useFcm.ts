@@ -90,14 +90,17 @@ export function useFcm(tripId: string | null, memberId: string | null) {
       }
 
       unsubForeground = onMessage(messaging, (payload) => {
-        const title = payload.notification?.title ?? 'TripMori';
-        const body  = payload.notification?.body  ?? '';
+        // Messages are data-only — read title/body from payload.data.
+        // payload.notification will be undefined by design (see notifyMember in Cloud Functions).
+        const d     = (payload.data ?? {}) as Record<string, string>;
+        const title = d.title ?? payload.notification?.title ?? 'TripMori';
+        const body  = d.body  ?? payload.notification?.body  ?? '';
         if (Notification.permission === 'granted') {
           new Notification(title, {
             body,
             icon: '/icons/icon-192-light.png',
             badge: '/icons/icon-192-light.png',
-            tag: (payload.data as any)?.tag ?? 'tripmori-notification',
+            tag: d.tag ?? 'tripmori-notification',
           });
         }
       });
