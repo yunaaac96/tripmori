@@ -2607,8 +2607,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         {/* ── Visitor note: only category breakdown visible ── */}
         {isVisitor && (
           <div className="tm-visitor-note" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 13, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
-            <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>費用記錄僅行程成員可查看，取得行程邀請後即可閱讀</span>
+            <span style={{ fontSize: 12, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
+            <span style={{ fontSize: 12, color: C.barkLight, fontWeight: 600 }}>費用記錄僅行程成員可查看，取得行程邀請後即可閱讀</span>
           </div>
         )}
 

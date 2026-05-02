@@ -911,7 +911,7 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
         {firestore.isReadOnly ? (
           /* Visitor lock screen */
           <div style={{ textAlign: 'center', padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 52, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
+            <div style={{ fontSize: 44, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
             <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>成員資訊僅限協作者查看</p>
             <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.7 }}>
               請聯繫行程擁有者取得協作金鑰，<br />即可以編輯者身份加入並查看所有成員資訊
