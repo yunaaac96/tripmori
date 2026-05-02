@@ -230,6 +230,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [showSubItems, setShowSubItems] = useState(false);
   const [expandedExpense, setExpandedExpense] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const [descOnlyEdit, setDescOnlyEdit] = useState(false); // editing description/notes only on a settled expense
 
   // Filter / Sort / View
   const [filterCat, setFilterCat] = useState<string>('all');
@@ -432,11 +433,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     setShowSubItems(false);
     setForm({ ...defaultForm });
     setEditingId(null);
+    setDescOnlyEdit(false);
     setPrivateSuggestion(false);
     setProxyTarget(null);
   };
 
-  const openEdit = (e: any) => {
+  const openEdit = (e: any, descOnly = false) => {
     setForm({
       description: e.description || '',
       amount: String(e.amount || ''),
@@ -462,6 +464,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       incomeBeneficiary: (e.isIncome && e.splitWith && e.splitWith.length === 1) ? e.splitWith[0] : '',
     });
     setEditingId(e.id);
+    setDescOnlyEdit(descOnly);
     setShowForm(true);
     // Restore proxy context when editing a proxy-recorded expense
     if (googleUid && e.loggedByUid === googleUid && e.privateOwnerUid && e.privateOwnerUid !== googleUid) {
@@ -506,12 +509,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // ── Save / Update ────────────────────────────────────────────────────────
   const handleSave = async (forcePublic = false) => {
     if (isReadOnly) return;
-    if (!form.description || !form.amount) return;
-    // Private expense doesn't require payer
-    if (!form.isPrivate && !form.isIncome && !form.payer) return;
+    if (!form.description) return;
+    // Skip financial validation in description-only edit mode
+    if (!descOnlyEdit) {
+      if (!form.amount) return;
+      // Private expense doesn't require payer
+      if (!form.isPrivate && !form.isIncome && !form.payer) return;
+    }
 
     // Smart detection: if only the payer is in the split, suggest switching to private
-    if (!forcePublic && !form.isPrivate && !form.isIncome && form.payer) {
+    if (!descOnlyEdit && !forcePublic && !form.isPrivate && !form.isIncome && form.payer) {
       const effectiveSplit = form.splitMode === 'equal' && form.splitWith.length > 0
         ? form.splitWith : memberNames;
       if (effectiveSplit.length === 1 && effectiveSplit[0] === form.payer) {
@@ -576,7 +583,14 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     };
 
     try {
-      if (editingId) {
+      if (editingId && descOnlyEdit) {
+        // Description-only edit: only update non-financial fields
+        await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', editingId), {
+          description: form.description,
+          notes: form.notes,
+          date: form.date,
+        });
+      } else if (editingId) {
         await updateDoc(doc(db, 'trips', TRIP_ID, 'expenses', editingId), payload);
       } else {
         payload.createdAt = Timestamp.now();
@@ -608,12 +622,32 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       if (googleUid && e.loggedByUid === googleUid) return true;
       return false;
     }
+    // Non-private proxy: the recorder can edit even if not a party to the expense
+    if (googleUid && e.loggedByUid === googleUid) return true;
     // Non-private: must be a party to the expense (payer or in effective splitWith)
     if (currentUserName) {
       const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
       if (e.payer !== currentUserName && !sw.includes(currentUserName)) return false;
     }
     return true;
+  };
+
+  // Description-only edit: settled expenses can still have description/notes/date updated.
+  // Financial fields (amount, payer, split) are locked to preserve accounting integrity.
+  // Note: canDeleteExpense is defined later (needs settlement maps).
+  const canEditDescOnly = (e: any): boolean => {
+    if (isReadOnly || e.category === 'settlement') return false;
+    if (canEditExpense(e)) return false; // already fully editable, no need for desc-only mode
+    // Private: principal or proxy can still update description
+    if (e.isPrivate) {
+      return !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
+    }
+    // Non-private proxy recorder
+    if (googleUid && e.loggedByUid === googleUid) return true;
+    // Must be a party (payer or in splitWith)
+    if (!currentUserName) return false;
+    const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+    return e.payer === currentUserName || sw.includes(currentUserName);
   };
 
   // canDeleteExpense and handleDelete defined AFTER the settlement maps (see below ~line 880)
@@ -896,6 +930,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       return !!(googleUid && (e.privateOwnerUid === googleUid || e.loggedByUid === googleUid));
     }
 
+    // ── Non-private proxy: recorder can delete even if not a party ───────────
+    if (googleUid && e.loggedByUid === googleUid) return true;
 
     // ── Non-private: Owner can delete any unsettled expense;
     //    others must be a party (payer or in effective splitWith) ─────────────
@@ -1870,6 +1906,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               </div>
             </div>
 
+            {/* ── Desc-only mode banner — shown when editing a settled expense ── */}
+            {descOnlyEdit && (
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, background: '#FFF8E0', borderRadius: 12, padding: '10px 14px', marginBottom: 14, border: '1.5px solid #E8C96A' }}>
+                <FontAwesomeIcon icon={faLock} style={{ fontSize: 13, color: '#9A7200', flexShrink: 0, marginTop: 1 }} />
+                <p style={{ fontSize: 12, color: '#7A5A00', margin: 0, lineHeight: 1.6 }}>
+                  此費用已結清，<strong>金額與分帳設定</strong>已鎖定。<br />僅可修改名稱、日期與備註。
+                </p>
+              </div>
+            )}
+
             {/* ── Proxy mode banner — always visible when proxyTarget is set ── */}
             {proxyTarget && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#EDE8FF', borderRadius: 12, padding: '10px 14px', marginBottom: 14, border: '1.5px solid #B8A8F0' }}>
@@ -1941,9 +1987,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   <input style={iStyle} type="date" value={form.date} onChange={e => set('date', e.target.value)} />
                 </div>
 
-                {/* Category — hidden for income */}
+                {/* Category — hidden for income, locked in descOnly mode */}
                 {!form.isIncome && (
-                  <div>
+                  <div style={descOnlyEdit ? { pointerEvents: 'none', opacity: 0.4 } : {}}>
                     <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>類別</label>
                     <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
                       {Object.entries(EXPENSE_CATEGORY_MAP).filter(([key]) => key !== 'income').map(([key, info]) => (
@@ -1959,7 +2005,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 )}
               </div>
 
-              {/* ── Block 2：費用明細 ── */}
+              {/* ── Block 2：費用明細 — locked in descOnly mode ── */}
+              <div style={descOnlyEdit ? { pointerEvents: 'none', opacity: 0.4, userSelect: 'none' } : {}}>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 14px', background: 'var(--tm-section-bg)', borderRadius: 14 }}>
                 <p style={{ fontSize: 10, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: '0.06em', textTransform: 'uppercase' }}>費用明細</p>
 
@@ -2224,6 +2271,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   </div>
                 )}
               </div>
+              </div>{/* end Block 2 lock wrapper */}
 
               {/* ── Block 3：補充資訊 ── */}
               <div style={{ display: 'flex', flexDirection: 'column', gap: 12, padding: '12px 14px', background: 'var(--tm-section-bg)', borderRadius: 14 }}>
@@ -2849,8 +2897,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <FontAwesomeIcon icon={faPen} />
                         </button>
                       )}
-                      {/* 補實際金額: payer only (they have the card statement) */}
-                      {isForeignCard && e.payer === currentUserName && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && (
+                      {/* Settled expenses: desc-only edit (name / date / notes only) */}
+                      {!canEditExpense(e) && canEditDescOnly(e) && (
+                        <button onClick={() => openEdit(e, true)} title="修改備註說明"
+                          style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.6 }}>
+                          <FontAwesomeIcon icon={faPen} />
+                        </button>
+                      )}
+                      {/* 補實際金額: payer only (they have the card statement).
+                          awaitCardStatement expenses bypass the settled guard —
+                          the actual TWD must always be updatable by the payer,
+                          even after other members have confirmed settlement. */}
+                      {isForeignCard && e.payer === currentUserName && (
+                        e.awaitCardStatement ||
+                        !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none')
+                      ) && (
                         <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <FontAwesomeIcon icon={faReceipt} />

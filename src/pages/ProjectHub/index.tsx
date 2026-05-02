@@ -175,8 +175,8 @@ const FAQ_CATEGORIES: { id: string; icon: typeof faCoins; color: string; title: 
         a: 'TripMori 使用「債務抵銷」演算法，自動計算每個人的淨額後配對轉帳，讓最少次數的轉帳就能讓所有人結清。例如 4 人旅行本來需要 6 筆，系統可能只需要 3 筆就能解決。',
       },
       {
-        q: '記帳頁面裡，個人名字下方的虛線金額是什麼？',
-        a: '那是一個可點擊的展開按鈕。點擊後會展開「我付了哪些帳」與「我分了哪些帳」的完整明細，以及個人淨額（正數表示別人欠你，負數表示你欠別人）。',
+        q: '記帳頁面裡，個人名字下方的代墊金額或需還款金額可以點擊嗎？',
+        a: '可以。點擊後會展開個人對帳單，顯示「我付了哪些帳」與「我分了哪些帳」的完整明細。綠色「代墊金額」代表別人還欠你；紅色「需還款金額」代表你還欠別人。若帳目已全部結清，該區塊會顯示「已結清 ✓」並停用點擊。',
       },
       {
         q: '「結清這筆」和「確認還款」有什麼不同？',
@@ -248,6 +248,14 @@ type View = 'hub' | 'create' | 'create-step2' | 'create-step3' | 'join-collab';
 
 const googleProvider = new GoogleAuthProvider();
 
+const HELP_DISMISSED_KEY = 'tripmori_help_dismissed_at';
+const HELP_DISMISS_MS    = 7 * 24 * 60 * 60 * 1000; // 7 days
+function isHelpDismissed(): boolean {
+  const ts = localStorage.getItem(HELP_DISMISSED_KEY);
+  if (!ts) return false;
+  return Date.now() - Number(ts) < HELP_DISMISS_MS;
+}
+
 export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
   const [projects, setProjects] = useState<StoredProject[]>(() => loadProjects());
   const [view, setView]       = useState<View>('hub');
@@ -316,8 +324,14 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
   const [keyInput, setKeyInput]       = useState('');
 
   // Help center
-  const [showHelp, setShowHelp]             = useState(false);
-  const [openFaq, setOpenFaq]               = useState<string | null>(null);
+  const [showHelp, setShowHelp]               = useState(false);
+  const [openFaq, setOpenFaq]                 = useState<string | null>(null);
+  const [helpBannerDismissed, setHelpBannerDismissed] = useState(() => isHelpDismissed());
+
+  const dismissHelpBanner = () => {
+    localStorage.setItem(HELP_DISMISSED_KEY, String(Date.now()));
+    setHelpBannerDismissed(true);
+  };
 
   // Edit mode (project management)
   const [isEditMode, setIsEditMode]         = useState(false);
@@ -976,19 +990,37 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
             </div>
           )}
 
-          {/* Help center banner */}
-          <button
-            onClick={() => { setShowHelp(true); setOpenFaq(null); }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 18, background: 'linear-gradient(135deg, #EDF5F4 0%, #EEE8F8 100%)', border: '1.5px solid #D0CBE8', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm, marginBottom: 20 }}>
-            <div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #9B8EC4 0%, #7AB8B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, color: 'white' }}>
-              <FontAwesomeIcon icon={faBookOpen} />
+          {/* Help center banner — full when active, mini when dismissed */}
+          {helpBannerDismissed ? (
+            <button
+              onClick={() => { setShowHelp(true); setOpenFaq(null); }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 12, background: 'var(--tm-section-bg)', border: `1px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', marginBottom: 16 }}>
+              <FontAwesomeIcon icon={faBookOpen} style={{ fontSize: 12, color: '#9B8EC4', flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 12, color: C.barkLight, fontWeight: 600 }}>關於 TripMori</span>
+              <span style={{ fontSize: 12, color: C.barkLight }}>›</span>
+            </button>
+          ) : (
+            <div style={{ position: 'relative', marginBottom: 20 }}>
+              <button
+                onClick={() => { setShowHelp(true); setOpenFaq(null); }}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', paddingRight: 44, borderRadius: 18, background: 'linear-gradient(135deg, #EDF5F4 0%, #EEE8F8 100%)', border: '1.5px solid #D0CBE8', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm, boxSizing: 'border-box' }}>
+                <div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #9B8EC4 0%, #7AB8B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, color: 'white' }}>
+                  <FontAwesomeIcon icon={faBookOpen} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <p style={{ fontSize: 14, fontWeight: 700, color: '#4A3E70', margin: 0 }}>快速上手指南</p>
+                  <p style={{ fontSize: 11, color: '#7A6EA0', margin: '2px 0 0' }}>解決 90% 的記帳與同步問題</p>
+                </div>
+                <span style={{ fontSize: 18, color: '#9B8EC4' }}>›</span>
+              </button>
+              {/* Dismiss × */}
+              <button
+                onClick={e => { e.stopPropagation(); dismissHelpBanner(); }}
+                style={{ position: 'absolute', top: 8, right: 10, width: 26, height: 26, borderRadius: '50%', background: 'rgba(155,142,196,0.15)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9B8EC4', fontSize: 11, lineHeight: 1 }}>
+                <FontAwesomeIcon icon={faXmark} />
+              </button>
             </div>
-            <div style={{ flex: 1 }}>
-              <p style={{ fontSize: 14, fontWeight: 700, color: '#4A3E70', margin: 0 }}>快速上手指南</p>
-              <p style={{ fontSize: 11, color: '#7A6EA0', margin: '2px 0 0' }}>解決 90% 的記帳與同步問題</p>
-            </div>
-            <span style={{ fontSize: 18, color: '#9B8EC4' }}>›</span>
-          </button>
+          )}
 
           {/* Help modal */}
           {showHelp && (
@@ -1012,6 +1044,19 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
 
                 {/* Scrollable body */}
                 <div style={{ overflowY: 'auto', padding: '16px 20px', flex: 1 }}>
+
+                  {/* 製作理念 */}
+                  <div style={{ marginBottom: 20, padding: '14px 16px', borderRadius: 16, background: 'linear-gradient(135deg, #EDF5F4 0%, #EEE8F8 100%)', border: '1.5px solid #D0CBE8' }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: '#9B8EC4', margin: '0 0 7px', letterSpacing: 0.8 }}>ABOUT TRIPMORI</p>
+                    <p style={{ fontSize: 13, color: '#4A3E70', margin: 0, lineHeight: 1.75 }}>
+                      TripMori 誕生於一個很簡單的挫折：每次旅行結束，總有一筆帳算不清、一張照片找不到、一段對話記不起來。那些最值得留下的，往往最先消失。
+                    </p>
+                    <p style={{ fontSize: 13, color: '#4A3E70', margin: '8px 0 0', lineHeight: 1.75 }}>
+                      於是我們做的不是旅行管理系統，而是一本大家可以一起寫的旅行手帳。費用不只是數字，是誰替大家多墊了一碗拉麵的證明。日誌不只是文字，是凌晨三點看到煙火、無法用照片代替的感受。
+                    </p>
+                    <p style={{ fontSize: 12, color: '#9B8EC4', margin: '10px 0 0', fontWeight: 600 }}>— TripMori，陪你把每段旅程好好記下來。</p>
+                  </div>
+
                   {FAQ_CATEGORIES.map(cat => (
                     <div key={cat.id} style={{ marginBottom: 12 }}>
                       {/* Category header */}
