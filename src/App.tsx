@@ -1334,14 +1334,14 @@ function App() {
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <p style={{ fontSize: 13, fontWeight: 800, color: C.bark, margin: '0 0 4px' }}>
-                    {onboardingStep === 'install' ? '加入主畫面，才能收到推播通知' : '開啟通知，不漏掉同伴訊息'}
+                    {onboardingStep === 'install' ? '加入主畫面，體驗更順手' : '開啟通知，不漏掉同伴訊息'}
                   </p>
                   <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', lineHeight: 1.45 }}>
                     {onboardingStep === 'install'
-                      ? '把 TripMori 加入手機主畫面，推播通知才能確實送達，開啟速度也更快。'
+                      ? '裝進主畫面才能收到推播通知，開啟速度也更快。'
                       : isStandalone
-                        ? '收到日記留言、貼紙便條、還款請求、航班／待辦提醒時跳出通知。'
-                        : '建議先將 TripMori 加入主畫面，通知才能確實送達。在瀏覽器開啟通知也可，但推播效果較不穩定。'}
+                        ? '旅伴的留言、便條、還款請求、航班提醒，我都會第一時間通知你。'
+                        : '先把我加入主畫面，推播通知才能穩定送到你哦！'}
                   </p>
                   <div style={{ display: 'flex', gap: 8 }}>
                     <button
