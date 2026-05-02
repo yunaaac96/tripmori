@@ -685,8 +685,8 @@ export default function PlanningPage({ lists, members, firestore, project }: any
           <div key={s.id}>
             {isReadOnly && s.id === 'todo' ? (
               <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                <div style={{ fontSize: 36, marginBottom: 12, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
-                <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>待辦清單僅旅伴可查看</p>
+                <div style={{ fontSize: 44, marginBottom: 12, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
+                <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>待辦清單僅旅伴可查看</p>
                 <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>請輸入協作金鑰加入旅行團</p>
               </div>
             ) : (() => {
