@@ -64,9 +64,15 @@ test.describe('記帳頁 UI（Owner）', () => {
     const customBtn = page.locator('button').filter({ hasText: '自訂' }).first();
     if (await customBtn.isVisible({ timeout: 3_000 })) {
       await customBtn.click();
-      // 搜尋輸入框或貨幣清單出現
+      // CurrencySearch starts in closed state showing the placeholder text inside
+      // a button; once clicked it expands to the input. Either form indicates the
+      // picker successfully opened. Also accept the JPY pill as a fallback.
       await expect(
-        page.locator('input[placeholder*="搜尋"]').or(page.locator('text=JPY')).first()
+        page.locator('input[placeholder*="搜尋"]')
+          .or(page.locator('button').filter({ hasText: '搜尋貨幣' }))
+          .or(page.locator('text=搜尋貨幣'))
+          .or(page.locator('text=JPY'))
+          .first()
       ).toBeVisible({ timeout: 3_000 });
     }
   });

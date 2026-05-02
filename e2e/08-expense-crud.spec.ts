@@ -49,7 +49,9 @@ test.describe('記帳頁 CRUD（Owner）', () => {
 
   test('未填名稱時提交按鈕為 disabled', async ({ page }) => {
     await openAddForm(page);
-    const submitBtn = page.locator('button').filter({ hasText: '新增' }).last();
+    // The form's submit button reads "新增支出" by default; the page-level "＋ 新增"
+    // trigger also has "新增" text, so filter on "新增支出" specifically.
+    const submitBtn = page.locator('button').filter({ hasText: '新增支出' }).last();
     await expect(submitBtn).toBeDisabled({ timeout: 5_000 });
   });
 
