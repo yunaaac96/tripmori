@@ -2604,11 +2604,28 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
           </div>
         )}
 
-        {/* ── Visitor note: only category breakdown visible ── */}
+        {/* ── Visitor skeleton + blur: list not accessible, show dummy cards ── */}
         {isVisitor && (
-          <div className="tm-visitor-note" style={{ background: '#F5F5F5', borderRadius: 12, padding: '9px 14px', marginBottom: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 12, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></span>
-            <span style={{ fontSize: 12, color: C.barkLight, fontWeight: 600 }}>費用記錄僅行程成員可查看，取得行程邀請後即可閱讀</span>
+          <div style={{ position: 'relative', marginBottom: 12 }}>
+            {/* Skeleton expense cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, filter: 'blur(3px)', userSelect: 'none', pointerEvents: 'none' }}>
+              {[{ w1: '55%', w2: '30%' }, { w1: '45%', w2: '25%' }, { w1: '60%', w2: '35%' }].map((sk, i) => (
+                <div key={i} style={{ background: 'var(--tm-card-bg)', borderRadius: 14, padding: '10px 12px', border: `1px solid ${C.creamDark}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#EBEBEB', flexShrink: 0 }} />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <div style={{ height: 12, borderRadius: 6, background: '#EBEBEB', width: sk.w1 }} />
+                    <div style={{ height: 10, borderRadius: 5, background: '#EBEBEB', width: sk.w2 }} />
+                  </div>
+                  <div style={{ width: 48, height: 16, borderRadius: 8, background: '#EBEBEB', flexShrink: 0 }} />
+                </div>
+              ))}
+            </div>
+            {/* Overlay badge */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              <span style={{ background: 'rgba(255,255,255,0.92)', border: `1px solid ${C.creamDark}`, borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6, boxShadow: C.shadowSm }}>
+                <FontAwesomeIcon icon={faLock} style={{ fontSize: 12 }} />費用記錄僅行程成員可查看，取得行程邀請後即可閱讀
+              </span>
+            </div>
           </div>
         )}
 

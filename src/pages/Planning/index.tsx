@@ -684,10 +684,23 @@ export default function PlanningPage({ lists, members, firestore, project }: any
         {SECTIONS.map(s => s.id === activeSection && (
           <div key={s.id}>
             {isReadOnly && s.id === 'todo' ? (
-              <div style={{ textAlign: 'center', padding: '60px 20px' }}>
-                <div style={{ fontSize: 44, marginBottom: 12, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
-                <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: '0 0 6px' }}>待辦清單僅旅伴可查看</p>
-                <p style={{ fontSize: 13, color: C.barkLight, margin: 0 }}>請輸入協作金鑰加入旅行團</p>
+              /* Visitor skeleton + blur */
+              <div style={{ position: 'relative', padding: '8px 0' }}>
+                {/* Skeleton todo items */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8, filter: 'blur(3px)', userSelect: 'none', pointerEvents: 'none' }}>
+                  {[{ w: '65%' }, { w: '45%' }, { w: '70%' }, { w: '50%' }].map((sk, i) => (
+                    <div key={i} style={{ background: 'var(--tm-card-bg)', borderRadius: 12, padding: '11px 14px', border: `1px solid ${C.creamDark}`, display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{ width: 18, height: 18, borderRadius: 5, background: '#EBEBEB', flexShrink: 0 }} />
+                      <div style={{ height: 12, borderRadius: 6, background: '#EBEBEB', width: sk.w }} />
+                    </div>
+                  ))}
+                </div>
+                {/* Overlay badge */}
+                <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <span style={{ background: 'rgba(255,255,255,0.92)', border: `1px solid ${C.creamDark}`, borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6, boxShadow: C.shadowSm }}>
+                    <FontAwesomeIcon icon={faLock} style={{ fontSize: 12 }} />待辦清單僅旅伴可查看
+                  </span>
+                </div>
               </div>
             ) : (() => {
               // ── Packing：三分區渲染 ──────────────────────────────────

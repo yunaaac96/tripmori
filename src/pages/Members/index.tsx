@@ -909,13 +909,29 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
       {/* Member cards + note boards */}
       <div style={{ padding: '12px 16px 80px' }}>
         {firestore.isReadOnly ? (
-          /* Visitor lock screen */
-          <div style={{ textAlign: 'center', padding: '48px 24px', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
-            <div style={{ fontSize: 44, color: C.barkLight }}><FontAwesomeIcon icon={faLock} /></div>
-            <p style={{ fontSize: 16, fontWeight: 700, color: C.bark, margin: 0 }}>成員資訊僅限協作者查看</p>
-            <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.7 }}>
-              請聯繫行程擁有者取得協作金鑰，<br />即可以編輯者身份加入並查看所有成員資訊
-            </p>
+          /* Visitor skeleton + blur */
+          <div style={{ position: 'relative', paddingTop: 4 }}>
+            {/* Skeleton member cards */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 10, filter: 'blur(3px)', userSelect: 'none', pointerEvents: 'none' }}>
+              {[{ w: '40%' }, { w: '55%' }, { w: '35%' }].map((sk, i) => (
+                <div key={i} style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', border: `1px solid ${C.creamDark}`, display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', background: '#EBEBEB', flexShrink: 0 }} />
+                  <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div style={{ height: 13, borderRadius: 6, background: '#EBEBEB', width: sk.w }} />
+                    <div style={{ height: 10, borderRadius: 5, background: '#EBEBEB', width: '25%' }} />
+                  </div>
+                </div>
+              ))}
+            </div>
+            {/* Overlay badge */}
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
+              <span style={{ background: 'rgba(255,255,255,0.92)', border: `1px solid ${C.creamDark}`, borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6, boxShadow: C.shadowSm }}>
+                <FontAwesomeIcon icon={faLock} style={{ fontSize: 12 }} />成員資訊僅限協作者查看
+              </span>
+              <p style={{ fontSize: 12, color: C.barkLight, margin: 0, lineHeight: 1.6, textAlign: 'center', background: 'rgba(255,255,255,0.85)', borderRadius: 10, padding: '4px 12px' }}>
+                請聯繫行程擁有者取得協作金鑰，<br />即可以編輯者身份加入並查看所有成員資訊
+              </p>
+            </div>
           </div>
         ) : (
           <>
