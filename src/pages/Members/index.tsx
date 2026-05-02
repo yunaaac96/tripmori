@@ -1212,9 +1212,8 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
           </>
         )}
 
-        {/* ── Notion backup（Owner only）— moved to bottom of page so the
-            administrative actions sit below the member cards ── */}
-        {firestore.role === 'owner' && (
+        {/* ── Notion backup — personal dev tool, restricted to site owner only ── */}
+        {firestore.role === 'owner' && googleEmail === 'yunaaac96@gmail.com' && (
           <div style={{ marginTop: 12, background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
             <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}>
               <FontAwesomeIcon icon={faBookmark} style={{ fontSize: 13 }} /> 備份到 Notion
