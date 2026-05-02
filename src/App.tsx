@@ -446,6 +446,23 @@ function App() {
   }, [adminMode]);
   const toggleAdminMode = () => setAdminMode(p => !p);
 
+  // First-time discovery hint for owners: a one-shot inline banner pointing
+  // at the 管理模式 button. Dismissed permanently once acknowledged or once
+  // the owner enters admin mode for the first time.
+  const ADMIN_ONBOARD_KEY = 'tm-admin-onboarded';
+  const [adminOnboarded, setAdminOnboarded] = useState(() => {
+    try { return localStorage.getItem(ADMIN_ONBOARD_KEY) === '1'; }
+    catch { return true; }  // fail-soft: assume onboarded so we never spam
+  });
+  const dismissAdminOnboard = () => {
+    setAdminOnboarded(true);
+    try { localStorage.setItem(ADMIN_ONBOARD_KEY, '1'); } catch { /* fail-soft */ }
+  };
+  // First time the owner toggles admin mode counts as acknowledgement too.
+  useEffect(() => {
+    if (adminMode && !adminOnboarded) dismissAdminOnboard();
+  }, [adminMode, adminOnboarded]);
+
   // Auto-exit admin mode for safety:
   //   • 10-minute idle timeout — handed phone to a friend, walk away, etc.
   //   • Tab/page hidden (visibilitychange) — switching apps, locking phone
@@ -1251,13 +1268,32 @@ function App() {
           </div>
         )}
 
+        {/* ── First-time owner hint pointing at the 管理模式 button. Renders
+              only for owners who haven't dismissed it AND aren't already in
+              admin mode (the live banner replaces this once active). ── */}
+        {activeProject.role === 'owner' && !adminMode && !adminOnboarded && (
+          <div style={{ background: '#FEF0E6', borderBottom: '1px solid #E8B96A', color: '#7A4A0A', padding: '8px 16px', fontFamily: FONT, fontSize: 12, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 6, lineHeight: 1.4 }}>
+              <FontAwesomeIcon icon={faGear} style={{ fontSize: 11, flexShrink: 0 }} />
+              <span><strong>你是擁有者 —</strong> 點右上「管理模式」可解鎖編輯行程、成員管理、撤銷結算等操作</span>
+            </span>
+            <button onClick={dismissAdminOnboard}
+              style={{ flexShrink: 0, fontSize: 11, fontWeight: 700, color: '#7A4A0A', background: 'rgba(255,255,255,0.6)', border: '1px solid #E8B96A', borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
+              知道了
+            </button>
+          </div>
+        )}
+
         {/* ── Admin mode banner: quick-link chips so admin actions are discoverable
               instead of scattered. Each chip switches tabs (admin-only buttons
               on each page were previously invisible until the user happened to
               navigate there). Banner is sticky-positioned via the parent
               container's flow so it scrolls with the page header naturally. ── */}
         {activeProject.role === 'owner' && adminMode && (
-          <div style={{ background: '#E87A30', color: 'white', padding: '7px 16px 8px', fontFamily: FONT, fontSize: 12, fontWeight: 700 }}>
+          // Sticky pinned to viewport top so user always knows admin mode is on,
+          // even after scrolling deep into a long expense list. Shadow + high
+          // z-index keep it visually above page content.
+          <div style={{ position: 'sticky', top: 0, zIndex: 200, background: '#E87A30', color: 'white', padding: '7px 16px 8px', fontFamily: FONT, fontSize: 12, fontWeight: 700, boxShadow: '0 2px 8px rgba(232,122,48,0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <FontAwesomeIcon icon={faGear} style={{ fontSize: 11 }} />
