@@ -966,7 +966,39 @@ export const backupTripToNotion = onCall(
   }
 );
 
-// ── 8. Proxy grant notification ───────────────────────────────────────────────
+// ── 8. Settlement pending notification ───────────────────────────────────────
+// Triggers when a new expense is created.
+// If it's a pending settlement (debtor initiated), notify the creditor to confirm receipt.
+export const onSettlementPending = onDocumentCreated(
+  'trips/{tripId}/expenses/{expenseId}',
+  async (event) => {
+    const expense = event.data?.data();
+    if (!expense) return;
+
+    // Only handle pending settlement records (Phase 1: debtor initiated)
+    if (expense.category !== 'settlement') return;
+    if (expense.status !== 'pending') return;
+
+    const { tripId } = event.params;
+    const debtor: string   = expense.payer        || '';
+    const creditor: string = expense.splitWith?.[0] || '';
+    const amount: number   = expense.amountTWD    ?? expense.amount ?? 0;
+
+    if (!debtor || !creditor) return;
+
+    const amountStr = `NT$ ${Math.round(amount).toLocaleString('zh-TW')}`;
+
+    await notifyMember(
+      tripId,
+      creditor,
+      `💸 ${debtor} 已記錄還款`,
+      `${debtor} 已還款 ${amountStr}，請到費用頁點「確認收款」完成結清`,
+      { tag: `settlement-pending-${event.params.expenseId}`, url: '/' },
+    );
+  }
+);
+
+// ── 9. Proxy grant notification ───────────────────────────────────────────────
 // Triggers when proxyGrants/{grantorUid} is created or updated.
 // Sends a push notification to any member whose UID was newly added to proxyUids.
 export const onProxyGrantChanged = onDocumentWritten(

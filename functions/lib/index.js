@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.backupTripToNotion = exports.claimOwnership = exports.addEditor = exports.pruneOldNotifications = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
+exports.onProxyGrantChanged = exports.onSettlementPending = exports.backupTripToNotion = exports.claimOwnership = exports.addEditor = exports.pruneOldNotifications = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -906,5 +906,56 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
             warning: `備份不完整：第 ${truncatedAt + 1} 個 block 開始寫入失敗，Notion 頁面狀態已標記為「備份不完整」`,
         }),
     };
+});
+// ── 8. Settlement pending notification ───────────────────────────────────────
+// Triggers when a new expense is created.
+// If it's a pending settlement (debtor initiated), notify the creditor to confirm receipt.
+exports.onSettlementPending = (0, firestore_1.onDocumentCreated)('trips/{tripId}/expenses/{expenseId}', async (event) => {
+    const expense = event.data?.data();
+    if (!expense)
+        return;
+    // Only handle pending settlement records (Phase 1: debtor initiated)
+    if (expense.category !== 'settlement')
+        return;
+    if (expense.status !== 'pending')
+        return;
+    const { tripId } = event.params;
+    const debtor = expense.payer || '';
+    const creditor = expense.splitWith?.[0] || '';
+    const amount = expense.amountTWD ?? expense.amount ?? 0;
+    if (!debtor || !creditor)
+        return;
+    const amountStr = `NT$ ${Math.round(amount).toLocaleString('zh-TW')}`;
+    await notifyMember(tripId, creditor, `💸 ${debtor} 已記錄還款`, `${debtor} 已還款 ${amountStr}，請到費用頁點「確認收款」完成結清`, { tag: `settlement-pending-${event.params.expenseId}`, url: '/' });
+});
+// ── 9. Proxy grant notification ───────────────────────────────────────────────
+// Triggers when proxyGrants/{grantorUid} is created or updated.
+// Sends a push notification to any member whose UID was newly added to proxyUids.
+exports.onProxyGrantChanged = (0, firestore_1.onDocumentWritten)('trips/{tripId}/proxyGrants/{grantorUid}', async (event) => {
+    const before = event.data?.before?.data();
+    const after = event.data?.after?.data();
+    if (!after)
+        return; // deletion — no notification
+    const { tripId, grantorUid } = event.params;
+    const prevUids = before?.proxyUids ?? [];
+    const nextUids = after.proxyUids ?? [];
+    // Only notify for newly added UIDs (not revocations)
+    const newlyGranted = nextUids.filter(uid => !prevUids.includes(uid));
+    if (newlyGranted.length === 0)
+        return;
+    // Look up all members to resolve UIDs → names
+    const membersSnap = await db
+        .collection('trips').doc(tripId)
+        .collection('members').get();
+    const allMembers = membersSnap.docs.map(d => ({ ...d.data() }));
+    const grantor = allMembers.find(m => m.googleUid === grantorUid);
+    const grantorName = grantor?.name ?? '旅伴';
+    for (const uid of newlyGranted) {
+        const target = allMembers.find(m => m.googleUid === uid);
+        const targetName = target?.name;
+        if (!targetName)
+            continue;
+        await notifyMember(tripId, targetName, '🔑 代錄授權通知', `${grantorName} 授權你可以協助代錄私人帳目`, { tag: `proxy-grant-${grantorUid}`, url: '/' });
+    }
 });
 //# sourceMappingURL=index.js.map
