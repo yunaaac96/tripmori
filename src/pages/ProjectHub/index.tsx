@@ -5,7 +5,7 @@
 import { useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLock, faPen, faTrashCan, faClipboardList, faFileImport, faUsers, faAddressBook, faCalendarPlus, faArrowRight, faTowerBroadcast, faPlus } from '@fortawesome/free-solid-svg-icons';
+import { faPlane, faKey, faTriangleExclamation, faLocationDot, faLightbulb, faLock, faPen, faTrashCan, faClipboardList, faFileImport, faUsers, faAddressBook, faCalendarPlus, faArrowRight, faTowerBroadcast, faPlus, faChevronDown, faChevronUp, faXmark, faArrowUpRightFromSquare, faBookOpen } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
 import { db, auth } from '../../config/firebase';
 import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../../utils/universalImporter';
@@ -162,6 +162,71 @@ const DEFAULT_PACKING: string[] = [
   '眼鏡 / 隱形眼鏡', '耳機', '相機',
 ];
 
+// ── FAQ data ──────────────────────────────────────────────────────
+const FAQ_CATEGORIES = [
+  {
+    id: 'accounting',
+    icon: '💰',
+    title: '結算與對帳',
+    items: [
+      {
+        q: '為什麼建議的轉帳次數比想像的少？',
+        a: 'TripMori 使用「債務抵銷」演算法，自動計算每個人的淨額後配對轉帳，讓最少次數的轉帳就能讓所有人結清。例如 4 人旅行本來需要 6 筆，系統可能只需要 3 筆就能解決。',
+      },
+      {
+        q: '個人帳目頁面的虛線金額點了沒反應？',
+        a: '虛線金額是可互動的展開按鈕。點擊後會展開「我付了哪些帳」與「我分了哪些帳」的完整明細，以及淨額（正數表示別人欠你，負數表示你欠別人）。',
+      },
+      {
+        q: '「結清這筆」和「確認還款」有什麼不同？',
+        a: '「確認還款」是結清你與某人之間所有欠款的整體動作；「結清這筆」是針對單一費用獨立結清，不影響其他費用的計算。兩者可混用。',
+      },
+    ],
+  },
+  {
+    id: 'members',
+    icon: '👥',
+    title: '成員與代錄',
+    items: [
+      {
+        q: '訪客看不到哪些內容？如何升級為編輯者？',
+        a: '訪客無法查看費用明細、成員資訊、日誌內文（模糊處理）和 PIN 碼等機敏資料。請聯絡行程擁有者取得協作金鑰，在首頁輸入後即可升級為編輯者。',
+      },
+      {
+        q: '什麼是「代錄帳目」？怎麼使用？',
+        a: '當旅伴需要幫你記錄私人費用時，你可以在成員頁授予「代錄權限」。對方新增私人帳目時可指定你為主體，帳目記錄後你會收到推播通知確認。',
+      },
+      {
+        q: '如何讓旅伴收到推播通知？',
+        a: '旅伴需要完成兩步驟：① 在成員頁將自己的 Google 帳號綁定到成員卡；② 點擊通知鈴鐺允許推播權限。iOS 用戶需先將網站加入主畫面才能收到推播。',
+      },
+    ],
+  },
+  {
+    id: 'system',
+    icon: '🔔',
+    title: '系統與通知',
+    items: [
+      {
+        q: '「等待確認中」是什麼意思？帳目為什麼沒變？',
+        a: 'TripMori 採用兩段式確認：欠款方點「確認還款」後進入等待狀態，需要收款方點「✓ 確認收款」才算正式結清。這樣設計是為了避免單方面操作造成帳目混亂。',
+      },
+      {
+        q: '離線時 TripMori 還能用嗎？',
+        a: '可以讀取之前載入過的所有資料（行程、費用、日誌等）。離線時新增或修改的內容會暫存在本機，重新連線後自動同步，不會遺失。',
+      },
+      {
+        q: '如何安裝到手機主畫面（離線也能開）？',
+        a: 'Android（Chrome）：點右上角選單 ⋮ → 「新增到主畫面」。iOS（Safari）：點底部分享按鈕 ⬆ → 「加入主畫面」。安裝後以全螢幕模式運行，體驗與原生 App 相同，也能收到推播通知。',
+      },
+      {
+        q: '記帳的「收入記錄 💚」可以只套用到某個人嗎？',
+        a: '可以。新增收入記錄時，可在「分攤給誰」中指定特定成員，系統會自動從該成員的應付金額中扣減。例如只有某人拿到退稅，就只套用到他，不影響其他人。',
+      },
+    ],
+  },
+];
+
 // ─────────────────────────────────────────────────────────────────
 interface Props {
   // `justJoinedViaKey` signals the App to open the member-bind modal after mount,
@@ -246,6 +311,10 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
 
   // Join form
   const [keyInput, setKeyInput]       = useState('');
+
+  // Help center
+  const [showHelp, setShowHelp]             = useState(false);
+  const [openFaq, setOpenFaq]               = useState<string | null>(null);
 
   // Edit mode (project management)
   const [isEditMode, setIsEditMode]         = useState(false);
@@ -901,6 +970,82 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                 <span className="tm-signin-btn-text" style={{ fontSize: 18 }}><FontAwesomeIcon icon={faLock} /></span>
                 <span className="tm-signin-btn-text" style={{ fontSize: 14, fontWeight: 700 }}>{signingIn ? '登入中...' : '使用 Google 帳號登入'}</span>
               </button>
+            </div>
+          )}
+
+          {/* Help center banner */}
+          <button
+            onClick={() => { setShowHelp(true); setOpenFaq(null); }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', borderRadius: 18, background: 'linear-gradient(135deg, #EDF5F4 0%, #EEE8F8 100%)', border: '1.5px solid #D0CBE8', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm, marginBottom: 20 }}>
+            <div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #9B8EC4 0%, #7AB8B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, color: 'white' }}>
+              <FontAwesomeIcon icon={faBookOpen} />
+            </div>
+            <div style={{ flex: 1 }}>
+              <p style={{ fontSize: 14, fontWeight: 700, color: '#4A3E70', margin: 0 }}>快速上手指南</p>
+              <p style={{ fontSize: 11, color: '#7A6EA0', margin: '2px 0 0' }}>解決 90% 的記帳與同步問題</p>
+            </div>
+            <span style={{ fontSize: 18, color: '#9B8EC4' }}>›</span>
+          </button>
+
+          {/* Help modal */}
+          {showHelp && (
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(60,50,80,0.55)', zIndex: 600, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} onClick={() => setShowHelp(false)}>
+              <div onClick={e => e.stopPropagation()} style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: FONT, boxShadow: '0 -4px 32px rgba(0,0,0,0.18)' }}>
+                {/* Header */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 14px', borderBottom: '1px solid var(--tm-cream-dark)', flexShrink: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div style={{ width: 36, height: 36, borderRadius: 10, background: 'linear-gradient(135deg, #9B8EC4 0%, #7AB8B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'white', fontSize: 16 }}>
+                      <FontAwesomeIcon icon={faBookOpen} />
+                    </div>
+                    <div>
+                      <p style={{ fontSize: 15, fontWeight: 800, color: C.bark, margin: 0 }}>快速上手指南</p>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: '1px 0 0' }}>常見問題 FAQ</p>
+                    </div>
+                  </div>
+                  <button onClick={() => setShowHelp(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--tm-section-bg)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight, fontSize: 14 }}>
+                    <FontAwesomeIcon icon={faXmark} />
+                  </button>
+                </div>
+
+                {/* Scrollable body */}
+                <div style={{ overflowY: 'auto', padding: '16px 20px', flex: 1 }}>
+                  {FAQ_CATEGORIES.map(cat => (
+                    <div key={cat.id} style={{ marginBottom: 12 }}>
+                      {/* Category header */}
+                      <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 6px', letterSpacing: 0.8 }}>
+                        {cat.icon} {cat.title.toUpperCase()}
+                      </p>
+                      {/* Items */}
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginBottom: 8 }}>
+                        {cat.items.map((item, i) => {
+                          const key = `${cat.id}-${i}`;
+                          const isOpen = openFaq === key;
+                          return (
+                            <div key={key} style={{ borderRadius: 14, border: `1.5px solid ${isOpen ? '#C4BAE0' : C.creamDark}`, background: isOpen ? '#F7F4FD' : 'var(--tm-card-bg)', overflow: 'hidden', transition: 'border-color 0.15s' }}>
+                              <button onClick={() => setOpenFaq(isOpen ? null : key)} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '12px 14px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT, textAlign: 'left' }}>
+                                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: isOpen ? '#4A3E70' : C.bark, lineHeight: 1.5 }}>{item.q}</span>
+                                <FontAwesomeIcon icon={isOpen ? faChevronUp : faChevronDown} style={{ fontSize: 11, color: C.barkLight, flexShrink: 0 }} />
+                              </button>
+                              {isOpen && (
+                                <div style={{ padding: '0 14px 14px' }}>
+                                  <p style={{ fontSize: 13, color: C.barkLight, margin: 0, lineHeight: 1.7, borderTop: `1px solid #DDD8EE`, paddingTop: 10 }}>{item.a}</p>
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  ))}
+
+                  {/* Notion link */}
+                  <a href="https://www.notion.so/TripMori-App-34816712263f81beb411fd20a5149d65" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--tm-section-bg)', border: `1.5px solid ${C.creamDark}`, textDecoration: 'none', marginTop: 4, marginBottom: 8 }}>
+                    <span style={{ fontSize: 18 }}>📖</span>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>查看完整使用者說明書</span>
+                    <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 11, color: C.barkLight }} />
+                  </a>
+                </div>
+              </div>
             </div>
           )}
 
