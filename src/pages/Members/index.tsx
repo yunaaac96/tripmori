@@ -926,10 +926,10 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
             {/* Overlay badge */}
             <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10 }}>
               <span style={{ background: 'rgba(255,255,255,0.92)', border: `1px solid ${C.creamDark}`, borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6, boxShadow: C.shadowSm }}>
-                <FontAwesomeIcon icon={faLock} style={{ fontSize: 12 }} />成員資訊僅限協作者查看
+                <FontAwesomeIcon icon={faLock} style={{ fontSize: 12 }} />成員資訊僅旅伴可查看
               </span>
               <p style={{ fontSize: 12, color: C.barkLight, margin: 0, lineHeight: 1.6, textAlign: 'center', background: 'rgba(255,255,255,0.85)', borderRadius: 10, padding: '4px 12px' }}>
-                請聯繫行程擁有者取得協作金鑰，<br />即可以編輯者身份加入並查看所有成員資訊
+                請向行程擁有者索取邀請，<br />即可以旅伴身份加入並查看
               </p>
             </div>
           </div>

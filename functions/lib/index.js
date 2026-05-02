@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onProxyGrantChanged = exports.onSettlementPending = exports.backupTripToNotion = exports.claimOwnership = exports.addEditor = exports.pruneOldNotifications = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
+exports.onProxyGrantChanged = exports.onProxyExpenseRecorded = exports.onSettlementPending = exports.backupTripToNotion = exports.claimOwnership = exports.addEditor = exports.pruneOldNotifications = exports.todoDueDateReminder = exports.preFlightReminder = exports.onMemberNoteCreated = exports.onJournalReactionUpdated = exports.onJournalCommentCreated = void 0;
 const admin = __importStar(require("firebase-admin"));
 const firestore_1 = require("firebase-functions/v2/firestore");
 const scheduler_1 = require("firebase-functions/v2/scheduler");
@@ -110,9 +110,13 @@ async function notifyMember(tripId, memberName, title, body, data = {}) {
         tag: data.tag || '',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
+    // webpush.notification: browser auto-displays the notification from this field.
+    // onBackgroundMessage in sw.ts detects payload.notification and returns early,
+    // so no second showNotification call is made — eliminating the duplicate.
+    // data also carries title/body for the foreground onMessage handler (useFcm.ts)
+    // and as a future-proof fallback.
     const messages = tokens.map(token => ({
         token,
-        notification: { title, body },
         webpush: {
             notification: {
                 title,
@@ -124,7 +128,7 @@ async function notifyMember(tripId, memberName, title, body, data = {}) {
             },
             fcmOptions: { link: data.url || '/' },
         },
-        data,
+        data: { title, body, ...data },
     }));
     // Send all tokens; collect stale ones to clean up
     const results = await Promise.allSettled(messages.map(m => messaging.send(m)));
@@ -949,6 +953,58 @@ exports.onSettlementPending = (0, firestore_1.onDocumentCreated)('trips/{tripId}
         return;
     const amountStr = `NT$ ${Math.round(amount).toLocaleString('zh-TW')}`;
     await notifyMember(tripId, creditor, `💸 ${debtor} 已記錄還款`, `${debtor} 已還款 ${amountStr}，請到費用頁點「確認收款」完成結清`, { tag: `settlement-pending-${expenseId}`, url: '/' });
+});
+// ── 10. Proxy expense recorded notification ───────────────────────────────────
+// Triggers when a new expense is created.
+// If it is a private expense recorded by someone other than the principal
+// (loggedByUid ≠ privateOwnerUid), notify the principal so they can review it.
+exports.onProxyExpenseRecorded = (0, firestore_1.onDocumentCreated)('trips/{tripId}/expenses/{expenseId}', async (event) => {
+    const expense = event.data?.data();
+    if (!expense)
+        return;
+    // Only handle private expenses recorded by a proxy
+    if (!expense.isPrivate)
+        return;
+    if (!expense.loggedByUid)
+        return;
+    if (!expense.privateOwnerUid)
+        return;
+    if (expense.loggedByUid === expense.privateOwnerUid)
+        return; // principal recorded their own
+    const { tripId, expenseId } = event.params;
+    // Idempotency guard — same pattern as onSettlementPending
+    const expenseRef = db
+        .collection('trips').doc(tripId)
+        .collection('expenses').doc(expenseId);
+    const claimed = await db.runTransaction(async (tx) => {
+        const snap = await tx.get(expenseRef);
+        if (!snap.exists)
+            return false;
+        if (snap.data()?.proxyNotifSentAt)
+            return false;
+        tx.update(expenseRef, {
+            proxyNotifSentAt: admin.firestore.FieldValue.serverTimestamp(),
+        });
+        return true;
+    });
+    if (!claimed)
+        return;
+    // Resolve names from member documents
+    const membersSnap = await db
+        .collection('trips').doc(tripId)
+        .collection('members').get();
+    const allMembers = membersSnap.docs.map(d => ({
+        ...d.data(),
+    }));
+    const proxyMember = allMembers.find(m => m.googleUid === expense.loggedByUid);
+    const principalMember = allMembers.find(m => m.googleUid === expense.privateOwnerUid);
+    const proxyName = proxyMember?.name ?? '旅伴';
+    const principalName = principalMember?.name ?? '';
+    if (!principalName)
+        return;
+    const amount = expense.amountTWD ?? expense.amount ?? 0;
+    const amountStr = `NT$ ${Math.round(amount).toLocaleString('zh-TW')}`;
+    await notifyMember(tripId, principalName, `💼 ${proxyName} 幫你代錄了一筆私人帳目`, `金額 ${amountStr}，請到記帳頁確認`, { tag: `proxy-expense-${expenseId}`, url: '/' });
 });
 // ── 9. Proxy grant notification ───────────────────────────────────────────────
 // Triggers when proxyGrants/{grantorUid} is created or updated.
