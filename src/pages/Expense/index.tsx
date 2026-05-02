@@ -2642,11 +2642,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
           const awaitCount = visibleExpenses.filter((e: any) => e.awaitCardStatement).length;
           if (awaitCount === 0) return null;
           return (
-            <div style={{ marginBottom: 10, padding: '9px 12px', borderRadius: 12, background: '#FFE8CC', border: '1px solid #E8B96A', display: 'flex', alignItems: 'center', gap: 8 }}>
-              <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 12, color: '#9A6800' }} />
-              <span style={{ fontSize: 11, color: '#9A6800', fontWeight: 600, lineHeight: 1.5 }}>
-                共 {awaitCount} 筆刷卡記帳等卡單中，暫未納入結算。卡單到後請點卡片上
-                <FontAwesomeIcon icon={faReceipt} style={{ fontSize: 10, margin: '0 3px' }} />補實際金額。
+            <div style={{ marginBottom: 10, padding: '9px 12px', borderRadius: 12, background: '#FFE8CC', border: '1px solid #E8B96A', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
+              <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 12, color: '#9A6800', marginTop: 2, flexShrink: 0 }} />
+              <span style={{ fontSize: 11, color: '#9A6800', fontWeight: 600, lineHeight: 1.55 }}>
+                共 {awaitCount} 筆刷卡記帳等卡單中，暫未納入結算。卡單到後請至該筆記帳點「補實際金額」按鈕填入。
               </span>
             </div>
           );
@@ -2958,36 +2957,36 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       {/* ── Badges (own row, wrappable) ── */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 3 }}>
                         {isPrivateExpense && (
-                          <span className="tm-badge-private" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} /> 私人</span>
+                          <span className="tm-badge-private" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人</span>
                         )}
                         {isSettlement ? (
                           e.status === 'pending'
-                            ? <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF3CC', color: '#9A6800' }}>待確認</span>
-                            : <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35' }}>還款</span>
+                            ? <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF3CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', lineHeight: 1.2 }}>待確認</span>
+                            : <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', lineHeight: 1.2 }}>還款</span>
                         ) : isIncome ? (
-                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3 }}><FontAwesomeIcon icon={faCoins} style={{ fontSize: 8 }} />收入</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}><FontAwesomeIcon icon={faCoins} style={{ fontSize: 8 }} />收入</span>
                         ) : !isPrivateExpense && (
-                          <span className={e.paymentMethod === 'card' ? 'tm-badge-sky-sm' : 'tm-badge-sage-sm'} style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: e.paymentMethod === 'card' ? '#D8EDF8' : '#EAF3DE', color: e.paymentMethod === 'card' ? '#2A6A9A' : '#4A7A35' }}>
+                          <span className={e.paymentMethod === 'card' ? 'tm-badge-sky-sm' : 'tm-badge-sage-sm'} style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: e.paymentMethod === 'card' ? '#D8EDF8' : '#EAF3DE', color: e.paymentMethod === 'card' ? '#2A6A9A' : '#4A7A35', display: 'inline-flex', alignItems: 'center', lineHeight: 1.2 }}>
                             {e.paymentMethod === 'card' ? '刷卡' : '現金'}
                           </span>
                         )}
                         {isAdjustment && (
-                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF2CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                          <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF2CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}>
                             <FontAwesomeIcon icon={faPen} style={{ fontSize: 8 }} />補記
                           </span>
                         )}
                         {/* FX status chip: actual / estimated / awaiting */}
                         {!isSettlement && !isPrivateExpense && (e.currency || projCurrency) !== 'TWD' && (
                           isAwaiting ? (
-                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFE8CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFE8CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}>
                               <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 8 }} />等卡單
                             </span>
                           ) : hasActual ? (
-                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}>
                               <FontAwesomeIcon icon={faCheck} style={{ fontSize: 8 }} />實際
                             </span>
                           ) : isForeignCard ? (
-                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: 'var(--tm-section-bg)', color: C.barkLight, display: 'inline-flex', alignItems: 'center', gap: 3, border: `1px dashed ${C.creamDark}` }}>
+                            <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: 'var(--tm-section-bg)', color: C.barkLight, display: 'inline-flex', alignItems: 'center', gap: 3, border: `1px dashed ${C.creamDark}`, lineHeight: 1.2 }}>
                               預估
                             </span>
                           ) : null
