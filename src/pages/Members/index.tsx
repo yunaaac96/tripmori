@@ -5,6 +5,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen, faHandshake, faUserShield } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
+import { useDangerConfirm } from '../../components/DangerConfirmModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { auth } from '../../config/firebase';
 import { GoogleAuthProvider, signInWithPopup, signOut } from 'firebase/auth';
@@ -24,6 +25,10 @@ const NOTE_COLORS = ['var(--tm-note-1)', 'var(--tm-note-2)', 'var(--tm-note-3)',
 
 export default function MembersPage({ members, memberNotes, proxyGrants = [], project, firestore, pwaInstallAvailable, onPwaInstall }: any) {
   const { db, TRIP_ID, Timestamp, addDoc, deleteDoc, updateDoc, collection, doc, isReadOnly, adminMode } = firestore;
+
+  // Promise-based destructive-action confirm. Replaces window.confirm() for
+  // 刪除成員 / 移除編輯者 — both unrecoverable admin actions.
+  const { confirmDanger, modal: dangerModal } = useDangerConfirm();
 
   const [showAdd, setShowAdd]           = useState(false);
   const [editTarget, setEditTarget]     = useState<any | null>(null);
@@ -231,7 +236,13 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
 
   const handleDeleteMember = async (memberId: string, memberName: string) => {
     if (firestore.role !== 'owner') return;
-    if (!window.confirm(`確定要刪除成員「${memberName}」？此操作無法復原。`)) return;
+    const ok = await confirmDanger({
+      title: `刪除成員「${memberName}」?`,
+      body: <>對方的成員卡將從此行程移除，已記錄的費用 / 行程 / 日記**保留**，但分攤對象列表中該名稱會變成「待清理」。<br/><br/>此操作無法復原。</>,
+      confirmLabel: '確認刪除',
+      requireAcknowledge: true,
+    });
+    if (!ok) return;
     try { await deleteDoc(doc(db, 'trips', TRIP_ID, 'members', memberId)); }
     catch (e) { console.error(e); }
   };
@@ -518,7 +529,14 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
   }, [TRIP_ID, firestore.role]);
 
   const handleRevokeEditor = async (uid: string) => {
-    if (!window.confirm('確定要移除此編輯者的權限？對方將立即降級為訪客，並解除成員卡綁定。')) return;
+    const ok = await confirmDanger({
+      title: '降級為訪客?',
+      body: <>移除此編輯者的權限後，對方將：<br/>• 立即降級為訪客（仍可瀏覽，但不能新增 / 編輯任何資料）<br/>• 自動解除成員卡綁定<br/><br/>對方需要再用協作金鑰加入才能重新升級為編輯者。</>,
+      confirmLabel: '確認降級',
+      requireAcknowledge: true,
+      acknowledgeLabel: '我了解對方將立即失去寫入權限',
+    });
+    if (!ok) return;
     try {
       // 1. Remove from allowedEditorUids
       await _updateDoc(_doc(db, 'trips', TRIP_ID), {
@@ -625,6 +643,9 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
 
   return (
     <div style={{ fontFamily: FONT }}>
+
+      {/* Destructive admin-action confirm modal (replaces window.confirm) */}
+      {dangerModal}
 
       {/* Crop modal */}
       {cropFile && (
