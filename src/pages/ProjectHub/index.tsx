@@ -325,6 +325,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
 
   // Help center
   const [showHelp, setShowHelp]               = useState(false);
+  const [helpView, setHelpView]               = useState<'faq' | 'about'>('faq');
   const [openFaq, setOpenFaq]                 = useState<string | null>(null);
   const [helpBannerDismissed, setHelpBannerDismissed] = useState(() => isHelpDismissed());
 
@@ -332,6 +333,8 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
     localStorage.setItem(HELP_DISMISSED_KEY, String(Date.now()));
     setHelpBannerDismissed(true);
   };
+  const openHelpFaq   = () => { setHelpView('faq');   setOpenFaq(null); setShowHelp(true); };
+  const openHelpAbout = () => { setHelpView('about');  setShowHelp(true); };
 
   // Edit mode (project management)
   const [isEditMode, setIsEditMode]         = useState(false);
@@ -993,7 +996,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
           {/* Help center banner — full when active, mini when dismissed */}
           {helpBannerDismissed ? (
             <button
-              onClick={() => { setShowHelp(true); setOpenFaq(null); }}
+              onClick={openHelpAbout}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, padding: '9px 14px', borderRadius: 12, background: 'var(--tm-section-bg)', border: `1px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, textAlign: 'left', marginBottom: 16 }}>
               <FontAwesomeIcon icon={faBookOpen} style={{ fontSize: 12, color: '#9B8EC4', flexShrink: 0 }} />
               <span style={{ flex: 1, fontSize: 12, color: C.barkLight, fontWeight: 600 }}>關於 TripMori</span>
@@ -1002,7 +1005,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
           ) : (
             <div style={{ position: 'relative', marginBottom: 20 }}>
               <button
-                onClick={() => { setShowHelp(true); setOpenFaq(null); }}
+                onClick={openHelpFaq}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 16px', paddingRight: 44, borderRadius: 18, background: 'linear-gradient(135deg, #EDF5F4 0%, #EEE8F8 100%)', border: '1.5px solid #D0CBE8', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', boxShadow: C.shadowSm, boxSizing: 'border-box' }}>
                 <div style={{ width: 44, height: 44, borderRadius: 14, background: 'linear-gradient(135deg, #9B8EC4 0%, #7AB8B0 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, flexShrink: 0, color: 'white' }}>
                   <FontAwesomeIcon icon={faBookOpen} />
@@ -1033,8 +1036,12 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                       <FontAwesomeIcon icon={faBookOpen} />
                     </div>
                     <div>
-                      <p style={{ fontSize: 15, fontWeight: 800, color: C.bark, margin: 0 }}>快速上手指南</p>
-                      <p style={{ fontSize: 11, color: C.barkLight, margin: '1px 0 0' }}>常見問題 FAQ</p>
+                      <p style={{ fontSize: 15, fontWeight: 800, color: C.bark, margin: 0 }}>
+                        {helpView === 'about' ? '關於 TripMori' : '快速上手指南'}
+                      </p>
+                      <p style={{ fontSize: 11, color: C.barkLight, margin: '1px 0 0' }}>
+                        {helpView === 'about' ? '製作理念' : '常見問題 FAQ'}
+                      </p>
                     </div>
                   </div>
                   <button onClick={() => setShowHelp(false)} style={{ width: 32, height: 32, borderRadius: '50%', background: 'var(--tm-section-bg)', border: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', color: C.barkLight, fontSize: 14 }}>
@@ -1045,7 +1052,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                 {/* Scrollable body */}
                 <div style={{ overflowY: 'auto', padding: '16px 20px', flex: 1 }}>
 
-                  {/* 製作理念 */}
+                  {/* 製作理念 — always shown in about view; shown above FAQ in faq view */}
                   <div style={{ marginBottom: 20, padding: '14px 16px', borderRadius: 16, background: 'linear-gradient(135deg, #EDF5F4 0%, #EEE8F8 100%)', border: '1.5px solid #D0CBE8' }}>
                     <p style={{ fontSize: 11, fontWeight: 700, color: '#9B8EC4', margin: '0 0 7px', letterSpacing: 0.8 }}>ABOUT TRIPMORI</p>
                     <p style={{ fontSize: 13, color: '#4A3E70', margin: 0, lineHeight: 1.75 }}>
@@ -1055,9 +1062,16 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                       於是我們做的不是旅行管理系統，而是一本大家可以一起寫的旅行手帳。費用不只是數字，是誰替大家多墊了一碗拉麵的證明。日誌不只是文字，是凌晨三點看到煙火、無法用照片代替的感受。
                     </p>
                     <p style={{ fontSize: 12, color: '#9B8EC4', margin: '10px 0 0', fontWeight: 600 }}>— TripMori，陪你把每段旅程好好記下來。</p>
+                    {/* In about view, offer a link to FAQ */}
+                    {helpView === 'about' && (
+                      <button onClick={openHelpFaq} style={{ marginTop: 12, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12, color: '#7A5AAE', fontWeight: 700, fontFamily: FONT, padding: 0, display: 'flex', alignItems: 'center', gap: 4 }}>
+                        查看快速上手指南 FAQ <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 10 }} />
+                      </button>
+                    )}
                   </div>
 
-                  {FAQ_CATEGORIES.map(cat => (
+                  {/* FAQ accordion — only in faq view */}
+                  {helpView === 'faq' && FAQ_CATEGORIES.map(cat => (
                     <div key={cat.id} style={{ marginBottom: 12 }}>
                       {/* Category header */}
                       <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 6px', letterSpacing: 0.8, display: 'flex', alignItems: 'center', gap: 5 }}>
@@ -1087,7 +1101,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                     </div>
                   ))}
 
-                  {/* Notion link */}
+                  {/* Notion link — always shown */}
                   <a href="https://www.notion.so/TripMori-35416712263f81b9aa02dcb24487d822" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--tm-section-bg)', border: `1.5px solid ${C.creamDark}`, textDecoration: 'none', marginTop: 4, marginBottom: 8 }}>
                     <div style={{ width: 28, height: 28, borderRadius: 8, background: '#EDE0F8', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                       <FontAwesomeIcon icon={faBookOpen} style={{ fontSize: 13, color: '#7A3A9A' }} />
