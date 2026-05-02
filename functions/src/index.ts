@@ -86,14 +86,22 @@ async function notifyMember(
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
-  // Send as data-only (no top-level notification / webpush.notification).
-  // This prevents the browser from auto-displaying the notification before our
-  // onBackgroundMessage handler in sw.ts fires — which was causing duplicates.
-  // Both foreground (onMessage) and background (onBackgroundMessage) handlers
-  // read title/body from payload.data instead of payload.notification.
+  // webpush.notification: browser auto-displays the notification from this field.
+  // onBackgroundMessage in sw.ts detects payload.notification and returns early,
+  // so no second showNotification call is made — eliminating the duplicate.
+  // data also carries title/body for the foreground onMessage handler (useFcm.ts)
+  // and as a future-proof fallback.
   const messages = tokens.map(token => ({
     token,
     webpush: {
+      notification: {
+        title,
+        body,
+        icon:  'https://tripmori.vercel.app/icons/icon-192-light.png',
+        badge: 'https://tripmori.vercel.app/icons/icon-192-light.png',
+        tag:   data.tag || 'tripmori',
+        requireInteraction: false,
+      },
       fcmOptions: { link: data.url || '/' },
     },
     data: { title, body, ...data },

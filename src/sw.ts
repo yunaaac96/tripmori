@@ -50,20 +50,26 @@ if (_fbApiKey) {
   const messaging = getMessaging(firebaseApp);
 
   onBackgroundMessage(messaging, (payload) => {
-    // Messages are sent as data-only (no notification field) to prevent the
-    // browser from auto-displaying a notification before this handler fires,
-    // which would cause a duplicate. Read title/body from payload.data instead.
+    // FCM messages include webpush.notification so the browser auto-displays the
+    // notification before this callback fires. Returning here prevents a second
+    // (duplicate) call to showNotification. The auto-displayed notification already
+    // uses the title/body/icon/tag values from webpush.notification set by the
+    // Cloud Function. This also keeps backward compatibility: old cached SW versions
+    // that read payload.notification?.title will still get the correct content.
+    if (payload.notification) return;
+
+    // Fallback for data-only messages (should not happen in normal operation,
+    // but kept as a safety net).
     const d     = (payload.data ?? {}) as Record<string, string>;
-    const title = d.title ?? payload.notification?.title ?? 'TripMori';
-    const body  = d.body  ?? payload.notification?.body  ?? '';
-    const icon  = '/icons/icon-192-light.png';
+    const title = d.title ?? 'TripMori';
+    const body  = d.body  ?? '';
 
     self.registration.showNotification(title, {
       body,
-      icon,
+      icon:  '/icons/icon-192-light.png',
       badge: '/icons/icon-192-light.png',
       data:  payload.data ?? {},
-      tag:   (payload.data as any)?.tag ?? 'tripmori-notification',
+      tag:   d.tag ?? 'tripmori-notification',
       renotify: true,
     });
   });
