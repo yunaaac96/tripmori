@@ -108,10 +108,7 @@ async function notifyMember(tripId, memberName, title, body, data = {}) {
     });
     const messages = tokens.map(token => ({
         token,
-        // Do NOT include top-level notification field for web push:
-        // with onBackgroundMessage registered in the SW, the browser would
-        // auto-display from the notification field AND our SW handler calls
-        // showNotification again → duplicate. webpush.notification handles display.
+        notification: { title, body },
         webpush: {
             notification: {
                 title,
