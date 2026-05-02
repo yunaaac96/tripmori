@@ -77,15 +77,26 @@ export function makeStoredProject(role: Role) {
 }
 
 // ── Inject localStorage state ─────────────────────────────────────────────────
-export async function injectProjectState(page: Page, role: Role) {
+export async function injectProjectState(page: Page, role: Role, opts: { adminMode?: boolean } = {}) {
   const project = makeStoredProject(role);
+  // Owner-role specs verify the full owner UX (admin-only actions like 編輯旅行設定
+  // / 批次匯入 live behind the 管理 toggle). Default adminMode=true for owner so
+  // those buttons render — individual tests that want to verify the locked state
+  // can pass { adminMode: false }.
+  const adminMode = opts.adminMode ?? (role === 'owner');
   await page.addInitScript((args) => {
-    const { project, tripId } = args;
+    const { project, tripId, adminMode } = args;
     localStorage.setItem('tripmori_projects', JSON.stringify([project]));
     localStorage.setItem('tripmori_active_project', tripId);
     // Suppress splash "already imported" flag
     localStorage.setItem('tripmori_imported', '1');
-  }, { project, tripId: TRIP_ID });
+    // Owner admin toggle (gates 編輯旅行設定 / 批次匯入 buttons + dangerous ops)
+    if (adminMode) {
+      sessionStorage.setItem('tm-admin', '1');
+    } else {
+      sessionStorage.removeItem('tm-admin');
+    }
+  }, { project, tripId: TRIP_ID, adminMode });
 }
 
 // ── Mock all Firebase/Firestore network calls ─────────────────────────────────
