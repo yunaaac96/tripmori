@@ -9,7 +9,7 @@ import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -42,6 +42,7 @@ const EMPTY_FORM = {
   exchangeRate: '',          // per-expense override (blank → use trip rate → fallback table)
   cardFeePercent: '1.5',     // only used when paymentMethod === 'card' and currency !== 'TWD'
   awaitCardStatement: false, // credit-card row where user wants to wait for statement
+  linkedExpenseId: '',       // refund record: points back to the original settled expense
   // Income-specific: who benefits from this income entry
   incomeScope: 'group' as 'group' | 'personal',  // 'group' = all members; 'personal' = one person
   incomeBeneficiary: '',                          // used when incomeScope === 'personal'
@@ -475,6 +476,31 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     }
   };
 
+  /**
+   * Open the add-expense form pre-filled as a refund record for a settled expense.
+   * Sets linkedExpenseId so the new 收入 entry is visually linked back to the original.
+   */
+  const openRefundForm = (e: any) => {
+    const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+    setForm({
+      ...defaultForm,
+      isIncome: true,
+      category: 'income',
+      payer: e.payer || currentUserName || '',
+      splitMode: 'equal',
+      splitWith: sw,
+      incomeScope: sw.length === 1 ? 'personal' : 'group',
+      incomeBeneficiary: sw.length === 1 ? sw[0] : '',
+      notes: `「${e.description}」退款`,
+      date: new Date().toISOString().slice(0, 10),
+      linkedExpenseId: e.id || '',
+    });
+    setEditingId(null);
+    setDescOnlyEdit(false);
+    setProxyTarget(null);
+    setShowForm(true);
+  };
+
   // ── Computed values ──────────────────────────────────────────────────────
   const activeSplitMembers = form.splitMode === 'equal' && form.splitWith.length > 0
     ? form.splitWith
@@ -577,6 +603,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       exchangeRate: formExRate && formExRate > 0 ? formExRate : null,
       cardFeePercent: isForeignCard ? cardFee : null,
       awaitCardStatement: isForeignCard && form.awaitCardStatement ? true : false,
+      // Refund linkage: points back to the original settled expense this refund belongs to.
+      // Only set on new records (editing preserves the original linkedExpenseId untouched).
+      linkedExpenseId: form.linkedExpenseId || null,
       // Proxy recording traceability
       loggedByUid: proxyTarget ? (googleUid || null) : null,
       loggedByName: proxyTarget ? (currentUserName || null) : null,
@@ -609,6 +638,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   const canEditExpense = (e: any) => {
     if (isReadOnly || e.category === 'settlement') return false;
+    // 收入 expenses are managed by owner and editors only — not by regular members.
+    if (e.isIncome) return isOwner || role === 'editor';
     if (e.settledAt || e.receivedAt) return false;
     // awaitCardStatement expenses are always editable by the payer — the actual
     // amount is unknown until the statement arrives, so we must never lock them.
@@ -639,6 +670,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // Note: canDeleteExpense is defined later (needs settlement maps).
   const canEditDescOnly = (e: any): boolean => {
     if (isReadOnly || e.category === 'settlement') return false;
+    if (e.isIncome) return false; // 收入 expenses: editing restricted to owner/editor (handled by canEditExpense)
     if (canEditExpense(e)) return false; // already fully editable, no need for desc-only mode
     // Private: principal or proxy can still update description
     if (e.isPrivate) {
@@ -897,9 +929,18 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // Per-expense settlement set for "結清這筆" flow
   const perExpenseConfirmedSet = getPerExpenseConfirmedSet(expenses as any[]);
 
+  // Set of expense IDs that have at least one refund (收入) record linked to them.
+  // Used to show "已退款" indicator on the original expense and highlight the refund button.
+  const refundedExpenseIds = new Set<string>(
+    (expenses as any[]).filter((e: any) => e.linkedExpenseId).map((e: any) => e.linkedExpenseId as string)
+  );
+
   // ── canDeleteExpense / handleDelete (placed here to access the maps above) ───────────────
   const canDeleteExpense = (e: any) => {
     if (isReadOnly) return false;
+
+    // ── 收入 expenses: owner and editors only ──────────────────────────────
+    if (e.isIncome) return isOwner || role === 'editor';
 
     // ── Settlement records ───────────────────────────────────────────────────
     if (e.category === 'settlement') {
@@ -1068,11 +1109,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const filteredExpenses = baseExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
     .filter((e: any) => {
+      // "收還款記錄已隱藏" toggle: hides category=settlement entries (the repayment records),
+      // NOT settled regular expenses. Regular expenses always show regardless of badge.
       if (!hideSettled) return true;
-      if (e.category === 'settlement') return true;
-      if (!currentUserName) return true;
-      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
-      return badge === 'none';
+      return e.category !== 'settlement';
     })
     .sort((a: any, b: any) => {
       const tieBreak = String(a.id || '').localeCompare(String(b.id || ''));
@@ -2822,15 +2862,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             const badge = currentUserName
                               ? getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet)
                               : 'none';
-                            // awaitCardStatement expenses: never show settled/received badge —
-                            // the actual amount is still unknown, so settlement is provisional.
-                            // Only show 等卡單 tag (rendered separately above).
-                            if (badge === 'settled' && !e.awaitCardStatement) return (
+                            // awaitCardStatement expenses: never show settled/received badge.
+                            // 收入 (income) expenses: no settlement badge — they are managed
+                            // by owners/editors only and don't participate in the standard
+                            // debtor/creditor settlement flow.
+                            if (badge === 'settled' && !e.awaitCardStatement && !isIncome) return (
                               <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
                                 <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已結清
                               </span>
                             );
-                            if (badge === 'received' && !e.awaitCardStatement) return (
+                            if (badge === 'received' && !e.awaitCardStatement && !isIncome) return (
                               <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
                                 <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已收回
                               </span>
@@ -2860,6 +2901,22 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       {isSettlement && e.notes && (
                         <p style={{ fontSize: 11, color: C.sageDark, margin: 0, wordBreak: 'break-word', overflowWrap: 'anywhere' }}><SmartText text={e.notes} /></p>
                       )}
+                      {/* Already-refunded indicator on the original expense */}
+                      {!isSettlement && !isPrivateExpense && refundedExpenseIds.has(e.id) && (
+                        <p style={{ fontSize: 10, color: C.sageDark, margin: 0, fontWeight: 600 }}>
+                          <FontAwesomeIcon icon={faReply} style={{ marginRight: 3, fontSize: 9 }} />已有退款記錄
+                        </p>
+                      )}
+                      {/* Refund linkage: show which original expense this 收入 is refunding */}
+                      {!isSettlement && !isPrivateExpense && e.linkedExpenseId && (() => {
+                        const source = (expenses as any[]).find((x: any) => x.id === e.linkedExpenseId);
+                        return source ? (
+                          <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>
+                            <FontAwesomeIcon icon={faReply} style={{ marginRight: 3, fontSize: 9, transform: 'scaleX(-1)' }} />
+                            退款來源：{source.description}
+                          </p>
+                        ) : null;
+                      })()}
                     </div>
                     {/* Amount + actions */}
                     <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4, flexShrink: 0 }}>
@@ -2924,6 +2981,20 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <FontAwesomeIcon icon={faReceipt} />
                         </button>
                       )}
+                      {/* 建立退款: show on settled/received expenses (badge !== 'none').
+                          Payer side shows for 'received'; debtor side for 'settled'.
+                          Pre-fills a 收入 form linked back to this expense. */}
+                      {!isPrivateExpense && !isSettlement && !isAdjustment && currentUserName && (() => {
+                        const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                        if (badge === 'none') return null;
+                        const alreadyRefunded = refundedExpenseIds.has(e.id);
+                        return (
+                          <button onClick={() => openRefundForm(e)} title={alreadyRefunded ? '再次建立退款記錄' : '建立退款記錄'}
+                            style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${alreadyRefunded ? C.sageDark : C.barkLight}`, background: 'var(--tm-card-bg)', color: alreadyRefunded ? C.sageDark : C.barkLight, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: alreadyRefunded ? 1 : 0.7 }}>
+                            <FontAwesomeIcon icon={faReply} />
+                          </button>
+                        );
+                      })()}
                       {/* 補記差額: parties only */}
                       {!isPrivateExpense && !isAdjustment && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && currentUserName && (() => { const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames; return e.payer === currentUserName || sw.includes(currentUserName); })() && (
                         <button onClick={() => openAdjustForm(e)} title="補記差額"
@@ -2938,6 +3009,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         if (e.payer !== currentUserName && sw2.includes(currentUserName)) {
                           const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
                           if (badge2 !== 'none') return null;
+                          // Whole-trip settled via minimum-transfer routing:
+                          // When no pair debts remain (settlements=[]) AND settlement records exist,
+                          // the viewer's debts are balanced through intermediaries — hide the button.
+                          if (settlements.length === 0 && confirmedAmountsMap.size > 0) return null;
                           const hasPendingPerExpense = (expenses as any[]).some((se: any) =>
                             se.category === 'settlement' && se.status === 'pending' &&
                             se.expenseRef === e.id && se.payer === currentUserName
@@ -2950,6 +3025,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             );
                           }
                           const myShare = getPersonalShare(e, currentUserName, memberNames);
+                          // Don't offer to settle when viewer's actual share is 0
+                          // (e.g. listed in splitWith via memberNames but has 0 custom amount).
+                          if (myShare <= 0) return null;
                           return (
                             <button onClick={() => openPayModal(currentUserName, e.payer, myShare, e.id)} title={`結清這筆 NT$${myShare.toLocaleString()}`}
                               style={{ height: 28, borderRadius: 8, border: `1px solid ${C.sageDark}`, background: 'var(--tm-card-bg)', color: C.sageDark, fontSize: 10, fontWeight: 700, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', justifyContent: 'center', padding: '0 8px', whiteSpace: 'nowrap' }}>
