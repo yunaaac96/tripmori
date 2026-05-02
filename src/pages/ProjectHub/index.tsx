@@ -1039,7 +1039,7 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                   ))}
 
                   {/* Notion link */}
-                  <a href="https://www.notion.so/TripMori-App-34816712263f81beb411fd20a5149d65" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--tm-section-bg)', border: `1.5px solid ${C.creamDark}`, textDecoration: 'none', marginTop: 4, marginBottom: 8 }}>
+                  <a href="https://www.notion.so/TripMori-35416712263f81b9aa02dcb24487d822" target="_blank" rel="noopener noreferrer" style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--tm-section-bg)', border: `1.5px solid ${C.creamDark}`, textDecoration: 'none', marginTop: 4, marginBottom: 8 }}>
                     <span style={{ fontSize: 18 }}>📖</span>
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>查看完整使用者說明書</span>
                     <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 11, color: C.barkLight }} />
