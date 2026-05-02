@@ -892,6 +892,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const pairDebtsMap = new Map(settlements.map(s => [`${s.from}→${s.to}`, s.amount]));
   // Per-expense settlement set for "結清這筆" flow
   const perExpenseConfirmedSet = getPerExpenseConfirmedSet(expenses as any[]);
+  // Whole-trip-settled flag: no outstanding pair debts AND at least one
+  // confirmed settlement record. Passed into getSettlementBadge so that
+  // minimum-transfer-routed pairs (which have no direct confirmedAmt) still
+  // surface as 'settled'/'received' instead of 'none'. Without this the
+  // 「補記差額」 button would erroneously show on closed-trip expenses.
+  const wholeTripSettled = settlements.length === 0 && confirmedAmountsMap.size > 0;
 
   // Set of expense IDs that have at least one refund (收入) record linked to them.
   // Used to show "已退款" indicator on the original expense and highlight the refund button.
@@ -914,7 +920,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     // awaitCardStatement expenses are always editable by the payer — the actual
     // amount is unknown until the statement arrives, so we must never lock them.
     if (!e.awaitCardStatement && currentUserName) {
-      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled);
       if (badge !== 'none') return false;
     }
     if (e.isPrivate) {
@@ -972,14 +978,14 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     // awaitCardStatement bypasses the badge check — the actual amount is unknown,
     // so the expense must remain deletable until the statement is filled in.
     if (!e.awaitCardStatement && currentUserName) {
-      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+      const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled);
       if (badge !== 'none') return false;
     }
     // Method B: when current user is NOT the payer (e.g. Owner viewing others'
     // expense), also check from payer's perspective — payer's 'received' badge
     // means every debtor has settled, so the expense is fully closed.
     if (!e.awaitCardStatement && e.payer && e.payer !== currentUserName) {
-      const payerBadge = getSettlementBadge(e, e.payer, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+      const payerBadge = getSettlementBadge(e, e.payer, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled);
       if (payerBadge !== 'none') return false;
     }
 
@@ -2894,7 +2900,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
             </div>
             {/* 剔除已結清 toggle — only shown if any expense is settled from viewer's perspective */}
             {currentUserName && (expenses as any[]).some((e: any) =>
-              e.category !== 'settlement' && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none'
+              e.category !== 'settlement' && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled) !== 'none'
             ) && (
               <button
                 onClick={() => setHideSettled(v => !v)}
@@ -3015,7 +3021,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           })()}
                           {(() => {
                             const badge = currentUserName
-                              ? getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet)
+                              ? getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled)
                               : 'none';
                             // awaitCardStatement expenses: never show settled/received badge.
                             // 收入 (income) expenses: no settlement badge — they are managed
@@ -3137,7 +3143,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           even after other members have confirmed settlement. */}
                       {isForeignCard && e.payer === currentUserName && (
                         e.awaitCardStatement ||
-                        !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none')
+                        !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled) !== 'none')
                       ) && (
                         <button onClick={() => openActualForm(e)} title={hasActual ? '更新實際金額' : '補實際金額'}
                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${hasActual ? C.sageDark : C.earth}`, background: 'var(--tm-card-bg)', color: hasActual ? C.sageDark : C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
@@ -3149,7 +3155,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           Pre-fills a 收入 form linked back to this expense.
                           Hidden for income rows — you don't refund a refund. */}
                       {!isPrivateExpense && !isSettlement && !isAdjustment && !isIncome && currentUserName && (() => {
-                        const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                        const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled);
                         if (badge === 'none') return null;
                         const alreadyRefunded = refundedExpenseIds.has(e.id);
                         return (
@@ -3160,7 +3166,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         );
                       })()}
                       {/* 補記差額: parties only; not meaningful for income rows */}
-                      {!isPrivateExpense && !isAdjustment && !isIncome && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet) !== 'none') && currentUserName && (() => { const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames; return e.payer === currentUserName || sw.includes(currentUserName); })() && (
+                      {!isPrivateExpense && !isAdjustment && !isIncome && !(currentUserName && getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled) !== 'none') && currentUserName && (() => { const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames; return e.payer === currentUserName || sw.includes(currentUserName); })() && (
                         <button onClick={() => openAdjustForm(e)} title="補記差額"
                           style={{ width: 28, height: 28, borderRadius: 8, border: `1px solid ${C.earth}`, background: 'var(--tm-card-bg)', color: C.earth, fontSize: 11, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <FontAwesomeIcon icon={faArrowRightArrowLeft} />
@@ -3169,13 +3175,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       {/* 結清這筆: income rows don't represent a debt to settle */}
                       {!isSettlement && !isPrivateExpense && !isAdjustment && !isIncome && currentUserName && (() => {
                         const sw2 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-                        const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
+                        const badge2 = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet, wholeTripSettled);
+                        // Badge now handles whole-trip-settled internally — both creditor and
+                        // debtor views naturally hide the button when the trip is fully closed.
                         if (badge2 !== 'none') return null;
-                        // Whole-trip settled via minimum-transfer routing applies to BOTH sides:
-                        // when no pair debts remain (settlements=[]) AND settlement records exist,
-                        // every member's debts are balanced through intermediaries — hide the button
-                        // so creditor and debtor views stay symmetric.
-                        if (settlements.length === 0 && confirmedAmountsMap.size > 0) return null;
 
                         // ── Debtor view ──
                         if (e.payer !== currentUserName && sw2.includes(currentUserName)) {

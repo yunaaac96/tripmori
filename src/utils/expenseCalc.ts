@@ -601,6 +601,14 @@ export const getSettlementBadge = (
   confirmedAmountsMap: Map<string, number>,
   pairDebtsMap: Map<string, number>,
   perExpenseConfirmedSet?: Set<string>,
+  /**
+   * Whole-trip-settled signal: true when the trip's overall settlement plan is
+   * empty (no remaining debts) AND at least one confirmed settlement exists.
+   * In that case minimum-transfer routing may have left individual pairs with
+   * no direct confirmed amount — but the trip as a whole is closed, so all
+   * shared expenses should be treated as settled from each party's POV.
+   */
+  wholeTripSettled?: boolean,
 ): 'settled' | 'received' | 'none' => {
   const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
 
@@ -609,8 +617,12 @@ export const getSettlementBadge = (
     const pairKey = `${debtorName}→${creditorName}`;
     const confirmedAmt = confirmedAmountsMap.get(pairKey) ?? 0;
     const remainingDebt = pairDebtsMap.get(pairKey) ?? 0;
-    // At least one confirmed payment AND no remaining debt left.
-    return confirmedAmt > 0 && remainingDebt === 0;
+    // Direct: at least one confirmed payment AND no remaining debt left.
+    if (confirmedAmt > 0 && remainingDebt === 0) return true;
+    // Indirect: the whole-trip plan is empty so this pair was routed through
+    // intermediaries; treat the pair as settled.
+    if (wholeTripSettled) return true;
+    return false;
   };
 
   /** True when this specific expense has a per-expense settlement for this debtor. */
