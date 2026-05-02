@@ -590,7 +590,7 @@ export default function PlanningPage({ lists, members, firestore, project }: any
       )}
 
       <PageHeader title="旅行準備" subtitle="待辦清單・行李清單" emoji={<FontAwesomeIcon icon={faClipboardList} />} color={C.earth} className="tm-hero-page-earth">
-        {allTotal > 0 && (
+        {!isReadOnly && allTotal > 0 && (
           <div style={{ marginTop: 12 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6 }}>
               <span style={{ fontSize: 12, color: 'rgba(255,255,255,0.85)', fontWeight: 600 }}>{allDone} / {allTotal} 完成</span>
