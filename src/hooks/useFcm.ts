@@ -90,8 +90,9 @@ export function useFcm(tripId: string | null, memberId: string | null) {
       }
 
       unsubForeground = onMessage(messaging, (payload) => {
-        // Messages are data-only — read title/body from payload.data.
-        // payload.notification will be undefined by design (see notifyMember in Cloud Functions).
+        // All FCM messages are data-only — title/body come from payload.data.
+        // This is the single place that shows notifications when the app is in
+        // the foreground. The SW's onBackgroundMessage handles the background case.
         const d     = (payload.data ?? {}) as Record<string, string>;
         const title = d.title ?? payload.notification?.title ?? 'TripMori';
         const body  = d.body  ?? payload.notification?.body  ?? '';

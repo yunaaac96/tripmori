@@ -2623,7 +2623,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
             {/* Overlay badge */}
             <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <span style={{ background: 'rgba(255,255,255,0.92)', border: `1px solid ${C.creamDark}`, borderRadius: 20, padding: '6px 14px', fontSize: 12, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6, boxShadow: C.shadowSm }}>
-                <FontAwesomeIcon icon={faLock} style={{ fontSize: 12 }} />費用記錄僅行程成員可查看，取得行程邀請後即可閱讀
+                <FontAwesomeIcon icon={faLock} style={{ fontSize: 12 }} />費用記錄僅旅伴可查看
               </span>
             </div>
           </div>

@@ -50,16 +50,13 @@ if (_fbApiKey) {
   const messaging = getMessaging(firebaseApp);
 
   onBackgroundMessage(messaging, (payload) => {
-    // FCM messages include webpush.notification so the browser auto-displays the
-    // notification before this callback fires. Returning here prevents a second
-    // (duplicate) call to showNotification. The auto-displayed notification already
-    // uses the title/body/icon/tag values from webpush.notification set by the
-    // Cloud Function. This also keeps backward compatibility: old cached SW versions
-    // that read payload.notification?.title will still get the correct content.
+    // All FCM messages are data-only (no webpush.notification field).
+    // The browser will NOT auto-display a notification, so we must call
+    // showNotification() here. This is the single place that shows the
+    // notification when the app is in the background — no duplicates.
+    // If somehow a legacy notification field arrives, skip to avoid duplicates.
     if (payload.notification) return;
 
-    // Fallback for data-only messages (should not happen in normal operation,
-    // but kept as a safety net).
     const d     = (payload.data ?? {}) as Record<string, string>;
     const title = d.title ?? 'TripMori';
     const body  = d.body  ?? '';
