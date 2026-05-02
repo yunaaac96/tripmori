@@ -12,6 +12,14 @@ const VAPID_KEY = import.meta.env.VITE_FIREBASE_VAPID_KEY as string | undefined;
  * permission only if it is still 'default', stores the token on the member
  * document, and resolves to the final permission state.
  */
+/** Returns true when running as an installed PWA (added to home screen). */
+function isStandaloneMode(): boolean {
+  return (
+    window.matchMedia('(display-mode: standalone)').matches ||
+    (window.navigator as any).standalone === true
+  );
+}
+
 export async function enableFcmForMember(tripId: string, memberId: string): Promise<NotificationPermission> {
   if (!VAPID_KEY) return Notification.permission;
   if (!('Notification' in window)) return 'denied';
@@ -29,10 +37,13 @@ export async function enableFcmForMember(tripId: string, memberId: string): Prom
     const swReg = await navigator.serviceWorker.ready;
     const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
     if (token) {
-      await updateDoc(
-        doc(db, 'trips', tripId, 'members', memberId),
-        { fcmTokens: arrayUnion(token) }
-      );
+      const update: Record<string, any> = { fcmTokens: arrayUnion(token) };
+      // Also track standalone tokens separately so Cloud Functions can
+      // prefer PWA-installed devices over browser tabs for notifications.
+      if (isStandaloneMode()) {
+        update.fcmTokensStandalone = arrayUnion(token);
+      }
+      await updateDoc(doc(db, 'trips', tripId, 'members', memberId), update);
     }
   } catch (err: any) {
     // Silently skip "not-found" — the member doc was deleted between bind
@@ -68,10 +79,11 @@ export function useFcm(tripId: string | null, memberId: string | null) {
         const swReg = await navigator.serviceWorker.ready;
         const token = await getToken(messaging, { vapidKey: VAPID_KEY, serviceWorkerRegistration: swReg });
         if (token) {
-          await updateDoc(
-            doc(db, 'trips', tripId, 'members', memberId),
-            { fcmTokens: arrayUnion(token) }
-          );
+          const update: Record<string, any> = { fcmTokens: arrayUnion(token) };
+          if (isStandaloneMode()) {
+            update.fcmTokensStandalone = arrayUnion(token);
+          }
+          await updateDoc(doc(db, 'trips', tripId, 'members', memberId), update);
         }
       } catch (err) {
         console.warn('[FCM] getToken failed:', err);
