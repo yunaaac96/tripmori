@@ -610,7 +610,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const canEditExpense = (e: any) => {
     if (isReadOnly || e.category === 'settlement') return false;
     if (e.settledAt || e.receivedAt) return false;
-    if (currentUserName) {
+    // awaitCardStatement expenses are always editable by the payer — the actual
+    // amount is unknown until the statement arrives, so we must never lock them.
+    if (!e.awaitCardStatement && currentUserName) {
       const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
       if (badge !== 'none') return false;
     }
@@ -909,15 +911,17 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     // Legacy method: settledAt / receivedAt fields
     if (e.settledAt || e.receivedAt) return false;
 
-    // Method B: check from current user's perspective (party's own badge)
-    if (currentUserName) {
+    // Method B: check from current user's perspective (party's own badge).
+    // awaitCardStatement bypasses the badge check — the actual amount is unknown,
+    // so the expense must remain deletable until the statement is filled in.
+    if (!e.awaitCardStatement && currentUserName) {
       const badge = getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
       if (badge !== 'none') return false;
     }
     // Method B: when current user is NOT the payer (e.g. Owner viewing others'
     // expense), also check from payer's perspective — payer's 'received' badge
     // means every debtor has settled, so the expense is fully closed.
-    if (e.payer && e.payer !== currentUserName) {
+    if (!e.awaitCardStatement && e.payer && e.payer !== currentUserName) {
       const payerBadge = getSettlementBadge(e, e.payer, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet);
       if (payerBadge !== 'none') return false;
     }
@@ -2818,12 +2822,15 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             const badge = currentUserName
                               ? getSettlementBadge(e, currentUserName, memberNames, confirmedAmountsMap, pairDebtsMap, perExpenseConfirmedSet)
                               : 'none';
-                            if (badge === 'settled') return (
+                            // awaitCardStatement expenses: never show settled/received badge —
+                            // the actual amount is still unknown, so settlement is provisional.
+                            // Only show 等卡單 tag (rendered separately above).
+                            if (badge === 'settled' && !e.awaitCardStatement) return (
                               <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
                                 <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已結清
                               </span>
                             );
-                            if (badge === 'received') return (
+                            if (badge === 'received' && !e.awaitCardStatement) return (
                               <span style={{ marginLeft: 4, color: C.sageDark, fontSize: 10, fontWeight: 700 }}>
                                 <FontAwesomeIcon icon={faLock} style={{ marginRight: 2 }} />已收回
                               </span>
