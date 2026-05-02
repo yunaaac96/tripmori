@@ -280,6 +280,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [regularDeleteTarget, setRegularDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
   const [settlementExpanded, setSettlementExpanded] = useState(false);
+  // Sub-fold for "settlement suggestions that don't involve me" — keeps the list tight
+  // when the trip has many cross-pair settlements between other members.
+  const [othersExpanded, setOthersExpanded] = useState(false);
   const [memberDetailName, setMemberDetailName] = useState<string | null>(null);
   // Self-detail privacy tabs (only ever rendered for own card)
   const [detailTab, setDetailTab] = useState<'all' | 'shared' | 'private'>('all');
@@ -2657,144 +2660,188 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
           );
         })()}
 
-        {!isVisitor && settlements.length > 0 && (
-          <div style={{ marginBottom: 12 }}>
-            <button onClick={() => setSettlementExpanded(v => !v)}
-              className="tm-settlement-toggle"
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EAF3DE', borderRadius: 14, padding: '10px 14px', border: '1px solid #B5CFA7', cursor: 'pointer', fontFamily: FONT, marginBottom: settlementExpanded ? 8 : 0 }}>
-              <span className="tm-settlement-toggle-text" style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 6 }}>
-                <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} />
-                建議結算方式（{settlements.length} 筆）
-              </span>
-              <span className="tm-settlement-toggle-text" style={{ fontSize: 11, color: '#4A7A35', fontWeight: 600 }}>{settlementExpanded ? '收起 ▲' : '展開 ▼'}</span>
-            </button>
-            {settlementExpanded && creditorOrder.map(creditor => {
-              const debts = settlementByCreditor[creditor];
-              const isMyGroup = creditor === currentUserName;
-              return (
-                <div key={creditor} className={isMyGroup ? 'tm-settlement-card-mine' : 'tm-settlement-card-other'} style={{ ...cardStyle, marginBottom: 8, background: isMyGroup ? '#E0F4FF' : '#EAF3DE', border: `1px solid ${isMyGroup ? '#9AC8E8' : '#B5CFA7'}`, padding: '12px 14px' }}>
-                  {/* Creditor header */}
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                    <div style={{ width: 30, height: 30, borderRadius: '50%', background: getMemberColor(creditor), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
-                      {getMemberAvatar(creditor)
-                        ? <img src={getMemberAvatar(creditor)!} alt={creditor} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                        : creditor[0]?.toUpperCase()}
-                    </div>
-                    <p className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'}
-                      onClick={() => setSettlementDetailName(creditor)}
-                      style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
-                      {creditor}{isMyGroup ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
-                    </p>
-                    <span className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
+        {!isVisitor && settlements.length > 0 && (() => {
+          // Split creditor groups into "involves me" vs "between other members".
+          // A group is "mine" when I'm the creditor (receiving) OR I'm a debtor in
+          // any of its rows — keeping cross-pair settlements I appear in visible.
+          const myCreditors = creditorOrder.filter(c =>
+            c === currentUserName ||
+            (settlementByCreditor[c] || []).some(d => d.from === currentUserName)
+          );
+          const otherCreditors = creditorOrder.filter(c => !myCreditors.includes(c));
+          const myDebtCount = myCreditors.reduce((n, c) => n + settlementByCreditor[c].length, 0);
+          const otherDebtCount = otherCreditors.reduce((n, c) => n + settlementByCreditor[c].length, 0);
+
+          const renderCreditorCard = (creditor: string) => {
+            const debts = settlementByCreditor[creditor];
+            const isMyGroup = creditor === currentUserName;
+            return (
+              <div key={creditor} className={isMyGroup ? 'tm-settlement-card-mine' : 'tm-settlement-card-other'} style={{ ...cardStyle, marginBottom: 8, background: isMyGroup ? '#E0F4FF' : '#EAF3DE', border: `1px solid ${isMyGroup ? '#9AC8E8' : '#B5CFA7'}`, padding: '12px 14px' }}>
+                {/* Creditor header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: getMemberColor(creditor), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                    {getMemberAvatar(creditor)
+                      ? <img src={getMemberAvatar(creditor)!} alt={creditor} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : creditor[0]?.toUpperCase()}
                   </div>
-                  {/* Batch confirm button: shown when this creditor has ≥2 pending debts to confirm */}
-                  {!isReadOnly && (creditor === currentUserName || adminMode) && (() => {
-                    const pendingDebts = debts.filter(d => (expenses as any[]).find((ex: any) =>
-                      ex.category === 'settlement' && ex.status === 'pending' &&
-                      ex.payer === d.from && ex.splitWith?.[0] === d.to
-                    ));
-                    if (pendingDebts.length < 2) return null;
-                    return (
-                      <button
-                        onClick={async () => {
-                          // Serial loop keeps settlingId UI feedback consistent;
-                          // try/catch prevents one failure from aborting the rest.
-                          let failed = 0;
-                          for (const d of pendingDebts) {
-                            const pEntry = (expenses as any[]).find((ex: any) =>
-                              ex.category === 'settlement' && ex.status === 'pending' &&
-                              ex.payer === d.from && ex.splitWith?.[0] === d.to
-                            );
-                            try {
-                              await handleCreditorConfirm(pEntry?.id ?? null, d.from, d.to, d.amount);
-                            } catch (err) {
-                              console.error('[batch confirm] failed:', err);
-                              failed++;
-                            }
-                          }
-                          if (failed > 0) {
-                            alert(`共 ${pendingDebts.length} 筆，${failed} 筆確認失敗，請重試`);
-                          }
-                        }}
-                        style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
-                        <FontAwesomeIcon icon={faCheck} style={{ fontSize: 10 }} />一鍵確認全部收款（{pendingDebts.length} 筆）
-                      </button>
-                    );
-                  })()}
-                  {/* Debtors */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                    {debts.map((debt, i) => {
-                      const sKey = `${debt.from}-${debt.to}`;
-                      const pairKey = `${debt.from}→${debt.to}`;
-                      const isMe = debt.from === currentUserName;
-                      const isCreditorViewer = debt.to === currentUserName;
-                      const isOwnerAction = adminMode && !isMe && !isCreditorViewer;
-                      const isProcessing = settlingId === sKey;
-                      // Find pending settlement for this pair
-                      const pendingEntry = (expenses as any[]).find((e: any) =>
-                        e.category === 'settlement' && e.status === 'pending' &&
-                        e.payer === debt.from && e.splitWith?.[0] === debt.to
-                      );
-                      const isConfirmedPair = confirmedPairMap.has(pairKey);
-                      return (
-                        <div key={i} className="tm-settlement-debt-row" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', borderRadius: 10, padding: '8px 10px' }}>
-                          <div style={{ width: 26, height: 26, borderRadius: '50%', background: getMemberColor(debt.from), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
-                            {getMemberAvatar(debt.from)
-                              ? <img src={getMemberAvatar(debt.from)!} alt={debt.from} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : debt.from[0]?.toUpperCase()}
-                          </div>
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p onClick={() => setSettlementDetailName(debt.from)}
-                              style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3, display: 'inline-block' }}>
-                              {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
-                            </p>
-                            <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
-                          </div>
-                          {/* Role-based buttons — show even if pair was previously confirmed (new balance may exist) */}
-                          {!isReadOnly && (() => {
-                            if (isProcessing) {
-                              return <span style={{ flexShrink: 0, fontSize: 11, color: C.barkLight, fontWeight: 600, padding: '5px 8px' }}>處理中...</span>;
-                            }
-                            // Debtor: I owe this creditor
-                            if (isMe) {
-                              if (pendingEntry) {
-                                return (
-                                  <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>
-                                    等待收款確認
-                                  </span>
-                                );
-                              }
-                              return (
-                                <button
-                                  onClick={() => openPayModal(debt.from, debt.to, debt.amount)}
-                                  className="tm-settle-confirm-btn"
-                                  style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                  記錄還款
-                                </button>
-                              );
-                            }
-                            // Creditor or owner: can confirm receipt
-                            if (isCreditorViewer || isOwnerAction) {
-                              return (
-                                <button
-                                  onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, debt.from, debt.to, debt.amount)}
-                                  className="tm-settle-confirm-btn"
-                                  style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: pendingEntry ? '#4A7A35' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                  {pendingEntry ? '✓ 確認收款' : '確認收款'}
-                                </button>
-                              );
-                            }
-                            return null;
-                          })()}
-                        </div>
-                      );
-                    })}
-                  </div>
+                  <p className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'}
+                    onClick={() => setSettlementDetailName(creditor)}
+                    style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
+                    {creditor}{isMyGroup ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
+                  </p>
+                  <span className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
                 </div>
-              );
-            })}
-          </div>
-        )}
+                {/* Batch confirm button: shown when this creditor has ≥2 pending debts to confirm */}
+                {!isReadOnly && (creditor === currentUserName || adminMode) && (() => {
+                  const pendingDebts = debts.filter(d => (expenses as any[]).find((ex: any) =>
+                    ex.category === 'settlement' && ex.status === 'pending' &&
+                    ex.payer === d.from && ex.splitWith?.[0] === d.to
+                  ));
+                  if (pendingDebts.length < 2) return null;
+                  return (
+                    <button
+                      onClick={async () => {
+                        // Serial loop keeps settlingId UI feedback consistent;
+                        // try/catch prevents one failure from aborting the rest.
+                        let failed = 0;
+                        for (const d of pendingDebts) {
+                          const pEntry = (expenses as any[]).find((ex: any) =>
+                            ex.category === 'settlement' && ex.status === 'pending' &&
+                            ex.payer === d.from && ex.splitWith?.[0] === d.to
+                          );
+                          try {
+                            await handleCreditorConfirm(pEntry?.id ?? null, d.from, d.to, d.amount);
+                          } catch (err) {
+                            console.error('[batch confirm] failed:', err);
+                            failed++;
+                          }
+                        }
+                        if (failed > 0) {
+                          alert(`共 ${pendingDebts.length} 筆，${failed} 筆確認失敗，請重試`);
+                        }
+                      }}
+                      style={{ width: '100%', padding: '7px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, marginBottom: 8, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6 }}>
+                      <FontAwesomeIcon icon={faCheck} style={{ fontSize: 10 }} />一鍵確認全部收款（{pendingDebts.length} 筆）
+                    </button>
+                  );
+                })()}
+                {/* Debtors */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  {debts.map((debt, i) => {
+                    const sKey = `${debt.from}-${debt.to}`;
+                    const isMe = debt.from === currentUserName;
+                    const isCreditorViewer = debt.to === currentUserName;
+                    const isOwnerAction = adminMode && !isMe && !isCreditorViewer;
+                    const isProcessing = settlingId === sKey;
+                    // Find pending settlement for this pair
+                    const pendingEntry = (expenses as any[]).find((e: any) =>
+                      e.category === 'settlement' && e.status === 'pending' &&
+                      e.payer === debt.from && e.splitWith?.[0] === debt.to
+                    );
+                    return (
+                      <div key={i} className="tm-settlement-debt-row" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', borderRadius: 10, padding: '8px 10px' }}>
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: getMemberColor(debt.from), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                          {getMemberAvatar(debt.from)
+                            ? <img src={getMemberAvatar(debt.from)!} alt={debt.from} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                            : debt.from[0]?.toUpperCase()}
+                        </div>
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <p onClick={() => setSettlementDetailName(debt.from)}
+                            style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3, display: 'inline-block' }}>
+                            {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
+                          </p>
+                          <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
+                        </div>
+                        {/* Role-based buttons — show even if pair was previously confirmed (new balance may exist) */}
+                        {!isReadOnly && (() => {
+                          if (isProcessing) {
+                            return <span style={{ flexShrink: 0, fontSize: 11, color: C.barkLight, fontWeight: 600, padding: '5px 8px' }}>處理中...</span>;
+                          }
+                          // Debtor: I owe this creditor
+                          if (isMe) {
+                            if (pendingEntry) {
+                              return (
+                                <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>
+                                  等待收款確認
+                                </span>
+                              );
+                            }
+                            return (
+                              <button
+                                onClick={() => openPayModal(debt.from, debt.to, debt.amount)}
+                                className="tm-settle-confirm-btn"
+                                style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#5A8ACF', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                記錄還款
+                              </button>
+                            );
+                          }
+                          // Creditor or owner: can confirm receipt
+                          if (isCreditorViewer || isOwnerAction) {
+                            return (
+                              <button
+                                onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, debt.from, debt.to, debt.amount)}
+                                className="tm-settle-confirm-btn"
+                                style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                {pendingEntry ? '✓ 確認收款' : '確認收款'}
+                              </button>
+                            );
+                          }
+                          return null;
+                        })()}
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          };
+
+          // Subtitle on the toggle so users see the relevance distribution at a glance.
+          // Only shown when both groups have content (otherwise "建議結算方式（N 筆）" is enough).
+          const showSplitCount = currentUserName && myDebtCount > 0 && otherDebtCount > 0;
+
+          return (
+            <div style={{ marginBottom: 12 }}>
+              <button onClick={() => setSettlementExpanded(v => !v)}
+                className="tm-settlement-toggle"
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EAF3DE', borderRadius: 14, padding: '10px 14px', border: '1px solid #B5CFA7', cursor: 'pointer', fontFamily: FONT, marginBottom: settlementExpanded ? 8 : 0 }}>
+                <span className="tm-settlement-toggle-text" style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                  <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} />
+                  建議結算方式（{settlements.length} 筆）
+                  {showSplitCount && (
+                    <span style={{ fontSize: 10, fontWeight: 600, color: '#4A7A35', opacity: 0.75 }}>
+                      · 與我相關 {myDebtCount} / 其他 {otherDebtCount}
+                    </span>
+                  )}
+                </span>
+                <span className="tm-settlement-toggle-text" style={{ fontSize: 11, color: '#4A7A35', fontWeight: 600, flexShrink: 0 }}>{settlementExpanded ? '收起 ▲' : '展開 ▼'}</span>
+              </button>
+              {settlementExpanded && (
+                <>
+                  {/* Always-visible: groups that involve me */}
+                  {myCreditors.map(renderCreditorCard)}
+                  {/* No "mine" rows but trip still has cross-pair suggestions: render others
+                      directly (otherwise the entire panel would be empty when expanded). */}
+                  {myCreditors.length === 0 && otherCreditors.map(renderCreditorCard)}
+                  {/* Sub-collapse: groups that don't involve me, only when there's also "mine" content */}
+                  {myCreditors.length > 0 && otherCreditors.length > 0 && (
+                    <>
+                      <button onClick={() => setOthersExpanded(v => !v)}
+                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--tm-card-bg)', borderRadius: 12, padding: '8px 12px', border: `1px dashed ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, marginBottom: othersExpanded ? 8 : 0, marginTop: 4 }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <FontAwesomeIcon icon={faUsers} style={{ fontSize: 10 }} />
+                          其他成員之間的建議（{otherDebtCount} 筆）
+                        </span>
+                        <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>{othersExpanded ? '收起 ▲' : '展開 ▼'}</span>
+                      </button>
+                      {othersExpanded && otherCreditors.map(renderCreditorCard)}
+                    </>
+                  )}
+                </>
+              )}
+            </div>
+          );
+        })()}
 
         {/* ── Category breakdown pie ── */}
         {categoryBreakdown.length > 0 && (
