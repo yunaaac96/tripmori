@@ -545,7 +545,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                         </p>
                         <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                           <span style={{ background: 'rgba(255,255,255,0.85)', border: `1px solid var(--tm-cream-dark)`, borderRadius: 20, padding: '5px 12px', fontSize: 11, fontWeight: 700, color: 'var(--tm-bark-light)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                            <FontAwesomeIcon icon={faLock} />登入後即可閱讀
+                            <FontAwesomeIcon icon={faLock} />取得行程邀請後即可閱讀
                           </span>
                         </div>
                       </div>
