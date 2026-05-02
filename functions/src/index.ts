@@ -86,21 +86,17 @@ async function notifyMember(
       createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
 
+  // Send as data-only (no top-level notification / webpush.notification).
+  // This prevents the browser from auto-displaying the notification before our
+  // onBackgroundMessage handler in sw.ts fires — which was causing duplicates.
+  // Both foreground (onMessage) and background (onBackgroundMessage) handlers
+  // read title/body from payload.data instead of payload.notification.
   const messages = tokens.map(token => ({
     token,
-    notification: { title, body },
     webpush: {
-      notification: {
-        title,
-        body,
-        icon: 'https://tripmori.vercel.app/icons/icon-192-light.png',
-        badge: 'https://tripmori.vercel.app/icons/icon-192-light.png',
-        tag: data.tag || 'tripmori',
-        requireInteraction: false,
-      },
       fcmOptions: { link: data.url || '/' },
     },
-    data,
+    data: { title, body, ...data },
   }));
 
   // Send all tokens; collect stale ones to clean up
@@ -1016,6 +1012,70 @@ export const onSettlementPending = onDocumentCreated(
       `💸 ${debtor} 已記錄還款`,
       `${debtor} 已還款 ${amountStr}，請到費用頁點「確認收款」完成結清`,
       { tag: `settlement-pending-${expenseId}`, url: '/' },
+    );
+  }
+);
+
+// ── 10. Proxy expense recorded notification ───────────────────────────────────
+// Triggers when a new expense is created.
+// If it is a private expense recorded by someone other than the principal
+// (loggedByUid ≠ privateOwnerUid), notify the principal so they can review it.
+export const onProxyExpenseRecorded = onDocumentCreated(
+  'trips/{tripId}/expenses/{expenseId}',
+  async (event) => {
+    const expense = event.data?.data();
+    if (!expense) return;
+
+    // Only handle private expenses recorded by a proxy
+    if (!expense.isPrivate) return;
+    if (!expense.loggedByUid) return;
+    if (!expense.privateOwnerUid) return;
+    if (expense.loggedByUid === expense.privateOwnerUid) return; // principal recorded their own
+
+    const { tripId, expenseId } = event.params;
+
+    // Idempotency guard — same pattern as onSettlementPending
+    const expenseRef = db
+      .collection('trips').doc(tripId)
+      .collection('expenses').doc(expenseId);
+
+    const claimed = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(expenseRef);
+      if (!snap.exists) return false;
+      if (snap.data()?.proxyNotifSentAt) return false;
+      tx.update(expenseRef, {
+        proxyNotifSentAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+      return true;
+    });
+
+    if (!claimed) return;
+
+    // Resolve names from member documents
+    const membersSnap = await db
+      .collection('trips').doc(tripId)
+      .collection('members').get();
+
+    const allMembers = membersSnap.docs.map(d => ({
+      ...(d.data() as Record<string, any>),
+    }));
+
+    const proxyMember    = allMembers.find(m => m.googleUid === expense.loggedByUid);
+    const principalMember = allMembers.find(m => m.googleUid === expense.privateOwnerUid);
+
+    const proxyName:     string = proxyMember?.name     ?? '旅伴';
+    const principalName: string = principalMember?.name ?? '';
+    if (!principalName) return;
+
+    const amount    = expense.amountTWD ?? expense.amount ?? 0;
+    const amountStr = `NT$ ${Math.round(amount).toLocaleString('zh-TW')}`;
+
+    await notifyMember(
+      tripId,
+      principalName,
+      `💼 ${proxyName} 幫你代錄了一筆私人帳目`,
+      `金額 ${amountStr}，請到記帳頁確認`,
+      { tag: `proxy-expense-${expenseId}`, url: '/' },
     );
   }
 );
