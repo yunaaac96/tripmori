@@ -280,6 +280,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [regularDeleteTarget, setRegularDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
   const [settlementExpanded, setSettlementExpanded] = useState(false);
+  // Once the user explicitly toggles the panel, stop auto-deciding for them
+  // (their preference wins). Tracked via ref so the auto-expand effect below
+  // can short-circuit without re-render churn.
+  const settlementUserToggledRef = useRef(false);
   // Sub-fold for "settlement suggestions that don't involve me" — keeps the list tight
   // when the trip has many cross-pair settlements between other members.
   const [othersExpanded, setOthersExpanded] = useState(false);
@@ -1110,6 +1114,26 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     if (b === currentUserName) return 1;
     return 0;
   });
+
+  // Settlement-relevance summary for the panel's collapsed state + auto-expand:
+  //   iOweRows  = transfers FROM me (I'm the debtor)
+  //   oweMeRows = transfers TO me (I'm the creditor)
+  // The panel auto-expands when ≤3 rows involve me (manageable) and stays
+  // collapsed otherwise (8-person trips can have 5-7 cross-pair rows).
+  const iOweRows  = currentUserName ? settlements.filter(s => s.from === currentUserName) : [];
+  const oweMeRows = currentUserName ? settlements.filter(s => s.to   === currentUserName) : [];
+  const iOweTotal  = iOweRows.reduce((sum, s) => sum + s.amount, 0);
+  const oweMeTotal = oweMeRows.reduce((sum, s) => sum + s.amount, 0);
+  const mySettlementCount = iOweRows.length + oweMeRows.length;
+
+  // Auto-expand the suggestion panel when there are few relevant rows; collapse
+  // when busy. Skips after the user has manually toggled — their pref wins.
+  useEffect(() => {
+    if (settlementUserToggledRef.current) return;
+    if (settlements.length === 0) { setSettlementExpanded(false); return; }
+    setSettlementExpanded(mySettlementCount > 0 && mySettlementCount <= 3);
+  }, [mySettlementCount, settlements.length]);
+
   const getMemberColor = (name: string) => members.find((m: any) => m.name === name)?.color || C.sageLight;
   const getMemberAvatar = (name: string) => members.find((m: any) => m.name === name)?.avatarUrl || null;
 
@@ -2800,11 +2824,33 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
           // Only shown when both groups have content (otherwise "建議結算方式（N 筆）" is enough).
           const showSplitCount = currentUserName && myDebtCount > 0 && otherDebtCount > 0;
 
+          // Summary line shown when the panel is collapsed and the user has at
+          // least one row touching them. Lets the user judge "is there
+          // anything urgent for me?" without expanding.
+          const collapsedSummary = !settlementExpanded && currentUserName && (iOweRows.length > 0 || oweMeRows.length > 0)
+            ? (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11, color: '#4A7A35', padding: '6px 14px 8px', borderTop: '1px dashed #B5CFA7', background: '#F1F8E5', borderRadius: '0 0 14px 14px' }}>
+                {iOweRows.length > 0 && (
+                  <span style={{ fontWeight: 600 }}>
+                    你欠 {iOweRows.length} 人共 <strong>NT$ {iOweTotal.toLocaleString()}</strong>
+                  </span>
+                )}
+                {iOweRows.length > 0 && oweMeRows.length > 0 && <span style={{ opacity: 0.5 }}>·</span>}
+                {oweMeRows.length > 0 && (
+                  <span style={{ fontWeight: 600 }}>
+                    {oweMeRows.length} 人欠你 <strong>NT$ {oweMeTotal.toLocaleString()}</strong>
+                  </span>
+                )}
+              </div>
+            )
+            : null;
+
           return (
             <div style={{ marginBottom: 12 }}>
-              <button onClick={() => setSettlementExpanded(v => !v)}
+              <button
+                onClick={() => { settlementUserToggledRef.current = true; setSettlementExpanded(v => !v); }}
                 className="tm-settlement-toggle"
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EAF3DE', borderRadius: 14, padding: '10px 14px', border: '1px solid #B5CFA7', cursor: 'pointer', fontFamily: FONT, marginBottom: settlementExpanded ? 8 : 0 }}>
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EAF3DE', borderRadius: collapsedSummary ? '14px 14px 0 0' : 14, padding: '10px 14px', border: '1px solid #B5CFA7', borderBottom: collapsedSummary ? 'none' : '1px solid #B5CFA7', cursor: 'pointer', fontFamily: FONT, marginBottom: settlementExpanded ? 8 : 0 }}>
                 <span className="tm-settlement-toggle-text" style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} />
                   建議結算方式（{settlements.length} 筆）
@@ -2816,6 +2862,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 </span>
                 <span className="tm-settlement-toggle-text" style={{ fontSize: 11, color: '#4A7A35', fontWeight: 600, flexShrink: 0 }}>{settlementExpanded ? '收起 ▲' : '展開 ▼'}</span>
               </button>
+              {collapsedSummary}
               {settlementExpanded && (
                 <>
                   {/* Always-visible: groups that involve me */}
