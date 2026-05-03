@@ -43,6 +43,11 @@
   --tm-status-ok-text: #3A5A3A;
   --tm-status-warn-bg: #FFF2CC;
   --tm-status-warn-text: #7A5A00;
+  /* Private expense purple — dark mode swaps to a lighter shade for
+   * readability against the dark sheet background. Use these vars instead
+   * of the hard-coded #6A2A9A in inline styles. */
+  --tm-private:    #6A2A9A;
+  --tm-private-bg: #F0E8FF;
 
   --text: #6b6375;
   --text-h: #08060d;
@@ -116,6 +121,10 @@
     --tm-status-ok-text: #8FD48F;
     --tm-status-warn-bg: #2E2806;
     --tm-status-warn-text: #D4B830;
+    /* Private purple — light/desaturated in dark mode so titles and amounts
+     * stay legible against the violet-tinted row background (--tm-note-5). */
+    --tm-private:    #C090F0;
+    --tm-private-bg: #2A1030;
 
     --text: #B4AAAA;
     --text-h: #F0EAE2;
