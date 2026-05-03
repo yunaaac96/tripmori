@@ -36,6 +36,26 @@ export default defineConfig({
     }),
   ],
   resolve: { alias: { '@': '/src' } },
+  build: {
+    rollupOptions: {
+      output: {
+        // Split heavy 3rd-party deps into their own long-cached chunks so the
+        // browser can pull the app shell, vendor JS, Firebase JS and icons in
+        // parallel — and reuse them across PRs that don't change those deps.
+        // Firebase alone is ~600 KB; without this it bloats the main bundle
+        // and re-downloads on every app deploy even if Firebase didn't change.
+        manualChunks(id: string) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.includes('firebase') || id.includes('@firebase')) return 'vendor-firebase';
+          if (id.includes('@fortawesome')) return 'vendor-icons';
+          // React + scheduler + jsx-runtime live close together; keep them as one chunk
+          if (id.includes('/react/') || id.includes('/react-dom/') || id.includes('/scheduler/') || id.includes('react/jsx-runtime')) return 'vendor-react';
+          return 'vendor';
+        },
+      },
+    },
+    chunkSizeWarningLimit: 700,
+  },
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],
