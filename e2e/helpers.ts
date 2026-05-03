@@ -72,6 +72,11 @@ export function makeStoredProject(role: Role) {
     startDate: MOCK_TRIP.startDate,
     endDate: MOCK_TRIP.endDate,
     description: MOCK_TRIP.description,
+    // currency is read off the StoredProject in localStorage (the Firestore
+    // trip-doc subscription is best-effort in tests). Without this field the
+    // ExpensePage falls back to TWD and the JPY currency pill is never
+    // rendered, which broke the "幣別預設顯示行程幣別" assertion.
+    currency: MOCK_TRIP.currency,
     role,
   };
 }
@@ -159,10 +164,49 @@ export async function mockFirebase(page: Page, role: Role = 'visitor') {
     })
   );
 
-  // Mock Firestore: events, bookings, expenses, lists, journals, notifications (all empty)
+  // Mock Firestore: events, bookings, expenses, lists, journals, notifications.
+  // GET → empty list; POST → Firestore-shaped Document for direct create.
   for (const col of ['events', 'bookings', 'expenses', 'lists', 'journals', 'journalComments', 'notifications']) {
-    await page.route(`${FS_BASE}/trips/${TRIP_ID}/${col}?**`, (route) =>
-      route.fulfill({ status: 200, contentType: 'application/json', body: '{}' })
+    await page.route(`${FS_BASE}/trips/${TRIP_ID}/${col}**`, async (route) => {
+      const method = route.request().method();
+      if (method === 'POST' || method === 'PATCH') {
+        const id = `mock-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+        const now = new Date().toISOString();
+        return route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            name: `projects/${PROJECT_ID}/databases/(default)/documents/trips/${TRIP_ID}/${col}/${id}`,
+            fields: {},
+            createTime: now,
+            updateTime: now,
+          }),
+        });
+      }
+      return route.fulfill({ status: 200, contentType: 'application/json', body: '{}' });
+    });
+  }
+
+  // Firestore JS SDK funnels most writes (addDoc / updateDoc / deleteDoc) through
+  // a single REST `documents:commit` endpoint instead of per-collection POSTs.
+  // Without this mock, addDoc() rejects in tests and any "form closed after
+  // submit" assertion times out. We return a minimally valid commit response.
+  await page.route(`${FS_BASE}:commit`, async (route) =>
+    route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        writeResults: [{ updateTime: new Date().toISOString() }],
+        commitTime: new Date().toISOString(),
+      }),
+    })
+  );
+
+  // batchGet / runQuery / runAggregationQuery — return empty result arrays so
+  // any read-shaped fallback the SDK attempts doesn't 404 against the catch-all.
+  for (const verb of [':batchGet', ':runQuery', ':runAggregationQuery']) {
+    await page.route(`${FS_BASE}${verb}`, (route) =>
+      route.fulfill({ status: 200, contentType: 'application/json', body: '[]' })
     );
   }
 
