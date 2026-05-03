@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, lazy, Suspense } from 'react';
 import { db, auth } from './config/firebase';
 import { collection, doc, onSnapshot, addDoc, updateDoc, deleteDoc, Timestamp, getDoc, query, where, getDocs, arrayUnion, deleteField, orderBy, limit } from 'firebase/firestore';
 import { LS_ONBOARDING_PENDING, hasCompletedOnboarding, markOnboardingDone } from './utils/onboarding';
@@ -10,12 +10,17 @@ import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus, faCircleCheck, faPlus, faGear } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
 import SplashScreen from './components/SplashScreen';
-import SchedulePage from './pages/Schedule/index';
-import BookingsPage from './pages/Bookings/index';
-import ExpensePage from './pages/Expense/index';
-import JournalPage from './pages/Journal/index';
-import PlanningPage from './pages/Planning/index';
-import MembersPage from './pages/Members/index';
+// Page components are code-split: each becomes its own chunk and downloads on
+// demand (with the others preloaded in the background after splash dismisses,
+// see the useEffect below). This keeps the main bundle small for first paint
+// and lets the partner's PWA update incrementally per page rather than all-or-
+// nothing per deploy.
+const SchedulePage  = lazy(() => import('./pages/Schedule/index'));
+const BookingsPage  = lazy(() => import('./pages/Bookings/index'));
+const ExpensePage   = lazy(() => import('./pages/Expense/index'));
+const JournalPage   = lazy(() => import('./pages/Journal/index'));
+const PlanningPage  = lazy(() => import('./pages/Planning/index'));
+const MembersPage   = lazy(() => import('./pages/Members/index'));
 import { useFcm, enableFcmForMember } from './hooks/useFcm';
 import { avatarTextColor } from './utils/helpers';
 import ProjectHub, {
@@ -694,6 +699,22 @@ function App() {
       .catch(() => setSplashDone(true));
   }, []);
 
+  // Background-preload all lazy page chunks once the splash dismisses. Tab
+  // switches are then instant (chunk already in browser cache) without
+  // bloating first-paint. Errors are swallowed — a failed preload just means
+  // the chunk loads on demand later.
+  useEffect(() => {
+    if (!splashDone) return;
+    Promise.allSettled([
+      import('./pages/Schedule/index'),
+      import('./pages/Bookings/index'),
+      import('./pages/Expense/index'),
+      import('./pages/Journal/index'),
+      import('./pages/Planning/index'),
+      import('./pages/Members/index'),
+    ]).catch(() => { /* fail-soft */ });
+  }, [splashDone]);
+
   const activeTripId = activeProject?.id || TRIP_ID;
 
   const checkNotification = (items: any[], key: string, tab: string) => {
@@ -1355,12 +1376,18 @@ function App() {
           </div>
         )}
 
-        {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
-        {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} proxyGrants={proxyGrants} firestore={firestore} project={activeProject} />}
-        {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={activeProject} currentUserName={localStorage.getItem('tripmori_current_user') || ''} hasMoreJournals={hasMoreJournals} onShowMoreJournals={showMoreJournals} />}
-        {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
-        {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} proxyGrants={proxyGrants} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
+        {/* Suspense fallback shows the splash screen so the lazy-load handoff
+            is visually consistent — same logo, same colours, no jarring blank
+            page when a tab chunk is still arriving. After the first chunk for
+            each page is fetched once, subsequent tab switches are instant. */}
+        <Suspense fallback={<SplashScreen />}>
+          {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
+          {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
+          {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} proxyGrants={proxyGrants} firestore={firestore} project={activeProject} />}
+          {activeTab === '日誌' && <JournalPage journals={journals} members={members} journalComments={journalComments} firestore={firestore} project={activeProject} currentUserName={localStorage.getItem('tripmori_current_user') || ''} hasMoreJournals={hasMoreJournals} onShowMoreJournals={showMoreJournals} />}
+          {activeTab === '準備' && <PlanningPage lists={lists} members={members} firestore={firestore} project={activeProject} />}
+          {activeTab === '成員' && <MembersPage members={members} memberNotes={memberNotes} proxyGrants={proxyGrants} project={activeProject} firestore={firestore} pwaInstallAvailable={pwaInstallAvailable} onPwaInstall={triggerPwaInstall} />}
+        </Suspense>
         <BottomNav activeTab={activeTab} onTabChange={handleTabChange} notifications={notifications} />
 
         {/* ── Onboarding modal (creator / invitee track) ── */}
