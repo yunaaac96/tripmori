@@ -1098,7 +1098,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const myPrivateTotal = (currentUserName && googleUid)
     ? (expenses as any[])
         .filter((e: any) => e.isPrivate && e.privateOwnerUid === googleUid && !e.awaitCardStatement)
-        .reduce((s: number, e: any) => s + effectiveTWD(e), 0)
+        .reduce((s: number, e: any) => s + (e.isIncome ? -1 : 1) * effectiveTWD(e), 0)
     : 0;
   // Base: further filter by "與我有關" if selected
   const baseExpenses = expenseView === 'mine'
@@ -1113,31 +1113,37 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     .filter((e: any) => !e.isPrivate && e.category !== 'settlement' && !e.awaitCardStatement)
     .reduce((s: number, e: any) => e.isIncome ? s - effectiveTWD(e) : s + effectiveTWD(e), 0);
 
-  // 個人負擔總額 (與我有關 mode): my share of shared expenses + my own private expenses
+  // 個人負擔總額 (與我有關 mode): my share of shared expenses + my own private expenses.
+  // Income records (refunds, cashback) subtract — they reduce what I need to pay.
   const myBurdenTWD = currentUserName
     ? visibleExpenses
         .filter((e: any) => e.category !== 'settlement' && !e.awaitCardStatement && isMyExpense(e))
         .reduce((s: number, e: any) => {
-          if (e.isPrivate) return s + effectiveTWD(e);
-          return s + getPersonalShare(e, currentUserName, memberNames);
+          const sign = e.isIncome ? -1 : 1;
+          if (e.isPrivate) return s + sign * effectiveTWD(e);
+          return s + sign * getPersonalShare(e, currentUserName, memberNames);
         }, 0)
     : 0;
 
   // Header amount: team total in all mode, personal burden in mine mode
   const headerTWD = expenseView === 'mine' && currentUserName ? myBurdenTWD : teamTotalTWD;
 
+  // Income records (refunds, cashback) subtract from their category total —
+  // a Klook 退款 in the "shopping" category should reduce shopping spending,
+  // not inflate it.
   const categoryBreakdown = Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => {
     const cats = nonSettlementExpenses.filter((e: any) => e.category === key && !e.awaitCardStatement);
     const total = cats.reduce((s: number, e: any) => {
       const rawAmt = effectiveTWD(e);
+      const sign = e.isIncome ? -1 : 1;
       if (expenseView === 'mine' && currentUserName) {
         // personal burden: full amount for my private, my share for shared
-        if (e.isPrivate) return s + rawAmt;
-        return s + getPersonalShare(e, currentUserName, memberNames);
+        if (e.isPrivate) return s + sign * rawAmt;
+        return s + sign * getPersonalShare(e, currentUserName, memberNames);
       }
       // 全團 mode: exclude private expenses from pie
       if (e.isPrivate) return s;
-      return s + rawAmt;
+      return s + sign * rawAmt;
     }, 0);
     return { key, label: info.label, emoji: info.emoji, value: total };
   }).filter(d => d.value > 0);
@@ -1781,7 +1787,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         const sharedBurdenTWD = sharedExpenses
           .reduce((s: number, e: any) => s + (e.isIncome ? -1 : 1) * getPersonalShare(e, detailName, memberNames), 0);
         const privateTotalTWD = privateExpenses
-          .reduce((s: number, e: any) => s + (effectiveTWD(e)), 0);
+          .reduce((s: number, e: any) => s + (e.isIncome ? -1 : 1) * effectiveTWD(e), 0);
 
         // Category breakdown for the currently selected tab
         const tabBreakdown = Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => {
