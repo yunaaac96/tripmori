@@ -906,6 +906,35 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // 「補記差額」 button would erroneously show on closed-trip expenses.
   const wholeTripSettled = settlements.length === 0 && confirmedAmountsMap.size > 0;
 
+  // Pair-balanced hint: the math between current viewer and the other party
+  // (or all parties for a creditor view) is currently zero, but the trip is
+  // still open. Used purely as an informational chip on the expense card —
+  // the actual lock no longer triggers on pair-level state, only on whole-
+  // trip-settled / per-expense-settled / legacy stamps. Reminds the user
+  // "this pair is technically balanced, double-check before editing".
+  const isPairBalanced = (e: any): boolean => {
+    if (!currentUserName || e.isPrivate || e.category === 'settlement' || e.isIncome) return false;
+    if (wholeTripSettled) return false; // already covered by the proper "已結清" badge
+    const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+    const pairZero = (debtor: string, creditor: string): boolean => {
+      const pairKey    = `${debtor}→${creditor}`;
+      const reverseKey = `${creditor}→${debtor}`;
+      const confirmedAmt   = confirmedAmountsMap.get(pairKey)    ?? 0;
+      const remainingDebt  = pairDebtsMap.get(pairKey)           ?? 0;
+      const reverseDebt    = pairDebtsMap.get(reverseKey)        ?? 0;
+      return confirmedAmt > 0 && remainingDebt === 0 && reverseDebt === 0;
+    };
+    if (e.payer !== currentUserName && sw.includes(currentUserName)) {
+      return pairZero(currentUserName, e.payer);
+    }
+    if (e.payer === currentUserName) {
+      const debtors = sw.filter((n: string) => n !== currentUserName);
+      if (debtors.length === 0) return false;
+      return debtors.every((d: string) => pairZero(d, currentUserName));
+    }
+    return false;
+  };
+
   // Set of expense IDs that have at least one refund (收入) record linked to them.
   // Used to show "已退款" indicator on the original expense and highlight the refund button.
   const refundedExpenseIds = new Set<string>(
@@ -1651,21 +1680,19 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
               {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
               {(() => {
-                // Show only: paid by someone else + not covered by a confirmed settlement.
-                // Method A: respects the legacy per-expense `settledAt` stamp.
-                // Method B (amount-based): hide all shares for a pair only when the entire
-                //   net debt has been fully confirmed (confirmedAmt > 0 AND remainingDebt = 0).
-                //   Partial payments do NOT hide any shares.
+                // Show only: paid by someone else + not covered.
+                // Locking semantics aligned with getSettlementBadge: a share is
+                // "covered" only when (a) legacy settledAt stamp, (b) the entire
+                // trip is settled (wholeTripSettled), or (c) THIS specific share
+                // was per-expense-settled. Pair-level math being balanced does
+                // NOT hide a share — members keep visibility / control until
+                // the trip closes or they explicitly settle the line.
                 const unpaidShares = stmt.myShares.filter(item => {
                   if (item.payer === name) return false;
-                  if (item.settledAt) return false; // legacy Method A stamp
-                  const pairKey = `${name}→${item.payer}`;
-                  const confirmedAmt = confirmedAmountsMap.get(pairKey) ?? 0;
-                  const remainingDebt = pairDebtsMap.get(pairKey) ?? 0;
-                  // Hidden when pair is fully settled OR per-expense settlement exists
-                  const pairSettled = confirmedAmt > 0 && remainingDebt === 0;
+                  if (item.settledAt) return false;        // legacy Method A stamp
+                  if (wholeTripSettled) return false;       // trip closed → all shares covered
                   const perExpenseSettled = perExpenseConfirmedSet.has(`${item.id}|${name}`);
-                  return !(pairSettled || perExpenseSettled);
+                  return !perExpenseSettled;
                 });
                 const unpaidTotal = unpaidShares.reduce((sum, item) => sum + (item.myShare || 0), 0);
                 if (unpaidShares.length === 0) return null;
@@ -3094,6 +3121,17 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                               預估
                             </span>
                           ) : null
+                        )}
+                        {/* Pair-balanced hint chip — informational, not a lock.
+                            Shows when this expense's debt math between the viewer
+                            and the payer (or all debtors for the creditor view)
+                            is currently zero, but the trip isn't fully closed.
+                            Helps the user double-check before editing a line that
+                            looks "settled in net" without auto-locking it. */}
+                        {isPairBalanced(e) && (
+                          <span title="你和付款人之間目前的淨額為 0，編輯前請確認" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0E5', color: '#3A7A50', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2, cursor: 'help' }}>
+                            <FontAwesomeIcon icon={faCheck} style={{ fontSize: 8 }} />已互抵
+                          </span>
                         )}
                       </div>
                       <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>

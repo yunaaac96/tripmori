@@ -23,7 +23,7 @@ const creatorSteps = (tripTitle: string): Step[] => [
     icon: faCalendarPlus,
     iconColor: C.earth,
     title: '第一站：填第一筆行程',
-    body: '切到「行程」頁，點右下角的 ＋ 就能加入景點、餐廳、活動。每新增一筆，所有旅伴都能同步看到。試試看，從早午餐開始規劃吧！',
+    body: '切到「行程」頁，點當天日期下方的「＋ 新增第一筆行程」就能加入景點、餐廳、活動。每新增一筆，所有旅伴都能同步看到。試試看，從早午餐開始規劃吧！',
   },
   {
     icon: faKey,

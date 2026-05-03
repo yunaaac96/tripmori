@@ -796,18 +796,42 @@ function App() {
           }
           const data = tripSnap.data();
 
-          // Sync title, emoji, memberOrder back into activeProject for all roles
+          // Sync trip metadata back into activeProject for all roles. Previously
+          // only title / emoji / memberOrder were synced, which meant editing
+          // currency / exchangeRate / description / dates on Device A never
+          // propagated to Device B (B's localStorage kept stale values forever).
+          // Symptoms: Device B's expense form still used old FX rate.
           setActiveProjectState(prev => {
             if (!prev) return prev;
             const newTitle       = data.title || prev.title;
             const newEmoji       = data.emoji || prev.emoji;
             const newMemberOrder = data.memberOrder as string[] | undefined;
+            // Trip-doc fields that may legitimately be null (cleared by user) —
+            // use ?? to treat undefined as "field absent on this doc revision".
+            const newCurrency     = data.currency     ?? prev.currency;
+            const newExchangeRate = data.exchangeRate ?? (prev as any).exchangeRate ?? null;
+            const newDescription  = data.description  ?? prev.description;
+            const newStartDate    = data.startDate    ?? prev.startDate;
+            const newEndDate      = data.endDate      ?? prev.endDate;
             const unchanged =
               newTitle === prev.title &&
               newEmoji === prev.emoji &&
-              JSON.stringify(newMemberOrder) === JSON.stringify(prev.memberOrder);
+              JSON.stringify(newMemberOrder) === JSON.stringify(prev.memberOrder) &&
+              newCurrency      === prev.currency &&
+              newExchangeRate  === (prev as any).exchangeRate &&
+              newDescription   === prev.description &&
+              newStartDate     === prev.startDate &&
+              newEndDate       === prev.endDate;
             if (unchanged) return prev;
-            const updated = { ...prev, title: newTitle, emoji: newEmoji, memberOrder: newMemberOrder };
+            const updated = {
+              ...prev,
+              title: newTitle, emoji: newEmoji, memberOrder: newMemberOrder,
+              currency: newCurrency,
+              exchangeRate: newExchangeRate,
+              description: newDescription,
+              startDate: newStartDate,
+              endDate: newEndDate,
+            } as any;
             saveProject(updated);
             return updated;
           });
@@ -1224,15 +1248,15 @@ function App() {
 
         {/* ── Project header strip (non-visitor) ── */}
         {!isReadOnly && (
-          <div style={{ background: C.cream, padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', borderBottom: `1px solid ${C.creamDark}` }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ fontSize: 16 }}>{activeProject.emoji}</span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: C.bark }}>{activeProject.title}</span>
-              <span className={activeProject.role === 'owner' ? 'tm-badge-owner' : 'tm-role-badge-editor'} style={{ fontSize: 10, fontWeight: 700, color: activeProject.role === 'owner' ? '#4A7A35' : '#9A6800', background: activeProject.role === 'owner' ? '#E0F0D8' : '#FFF2CC', borderRadius: 6, padding: '1px 6px' }}>
+          <div style={{ background: C.cream, padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottom: `1px solid ${C.creamDark}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
+              <span style={{ fontSize: 16, flexShrink: 0 }}>{activeProject.emoji}</span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{activeProject.title}</span>
+              <span className={activeProject.role === 'owner' ? 'tm-badge-owner' : 'tm-role-badge-editor'} style={{ fontSize: 10, fontWeight: 700, color: activeProject.role === 'owner' ? '#4A7A35' : '#9A6800', background: activeProject.role === 'owner' ? '#E0F0D8' : '#FFF2CC', borderRadius: 6, padding: '1px 6px', flexShrink: 0 }}>
                 {activeProject.role === 'owner' ? '擁有者' : '編輯者'}
               </span>
             </div>
-            <div style={{ display: 'flex', gap: 6 }}>
+            <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
               {activeProject.role === 'owner' && (
                 <button onClick={toggleAdminMode}
                   title={adminMode ? '離開管理模式（10 分鐘無操作或切換 app 會自動退出）' : '進入管理模式：解鎖編輯旅行、批次匯入、成員管理等操作'}
