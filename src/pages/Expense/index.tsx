@@ -1474,16 +1474,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 {showPayer ? (
                   // Section 2: show my share prominently
                   <>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: item.isIncome ? '#4A8A4A' : C.earth, margin: '0 0 1px' }}>
-                      {item.isIncome ? '−' : ''}NT$ {item.myShare.toLocaleString()}
+                    <p style={{ fontSize: 14, fontWeight: 700, color: item.isIncome ? '#4A7A35' : '#9A3A3A', margin: '0 0 1px' }}>
+                      NT$ {item.myShare.toLocaleString()}
                     </p>
                     <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {item.effectiveTWD.toLocaleString()}</p>
                   </>
                 ) : (
                   // Section 1: show total paid, then my share below
                   <>
-                    <p style={{ fontSize: 14, fontWeight: 700, color: item.isIncome ? '#4A8A4A' : C.earth, margin: '0 0 1px' }}>
-                      {item.isIncome ? '＋' : ''}NT$ {item.effectiveTWD.toLocaleString()}
+                    <p style={{ fontSize: 14, fontWeight: 700, color: item.isIncome ? '#4A7A35' : '#9A3A3A', margin: '0 0 1px' }}>
+                      NT$ {item.effectiveTWD.toLocaleString()}
                     </p>
                     <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>我分 NT$ {item.myShare.toLocaleString()}</p>
                   </>
@@ -1839,7 +1839,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px', display: 'flex', alignItems: 'center', gap: 4 }}>
                         <FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人花費
                       </p>
-                      <p className="tm-expense-private-title" style={{ fontSize: 15, fontWeight: 700, color: '#6A2A9A', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
+                      <p className="tm-expense-private-title" style={{ fontSize: 15, fontWeight: 700, color: 'var(--tm-private)', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
                     </div>
                   </div>
                 </>
@@ -1871,7 +1871,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               <div style={{ display: 'flex', gap: 6, marginBottom: 12 }}>
                 {tabBtn('all',     '全部', sharedExpenses.length + privateExpenses.length, C.earth)}
                 {tabBtn('shared',  '團體', sharedExpenses.length,                          C.sage)}
-                {tabBtn('private', <><FontAwesomeIcon icon={faLock} style={{ fontSize: 10 }} />私人</>, privateExpenses.length, '#6A2A9A')}
+                {tabBtn('private', <><FontAwesomeIcon icon={faLock} style={{ fontSize: 10 }} />私人</>, privateExpenses.length, 'var(--tm-private)')}
               </div>
 
               {/* Pie + category breakdown for selected tab */}
@@ -1911,18 +1911,22 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         <FontAwesomeIcon icon={CATEGORY_ICONS[e.category] || CATEGORY_ICONS.other} style={{ fontSize: 14, color: avatarTextColor(cat?.bg), opacity: 0.85 }} />
                       </div>
                       <div style={{ flex: 1, minWidth: 0 }}>
-                        <p style={{ fontSize: 13, fontWeight: 700, color: isPrivateRow ? '#6A2A9A' : C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <p style={{ fontSize: 13, fontWeight: 700, color: isPrivateRow ? 'var(--tm-private)' : C.bark, margin: '0 0 2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'flex', alignItems: 'center', gap: 5 }}>
                           {isPrivateRow && <FontAwesomeIcon icon={faLock} style={{ fontSize: 10 }} />}
                           {e.description}
                         </p>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
                           <p style={{ fontSize: 11, color: C.barkLight, margin: 0 }}>{e.date || ''}</p>
                           {!isPrivateRow && isPayer && <span className="tm-payer-badge" style={{ fontSize: 9, fontWeight: 700, background: '#E0F0D8', color: '#4A7A35', borderRadius: 5, padding: '1px 5px' }}>付款者</span>}
-                          {isPrivateRow && <span className="tm-badge-private" style={{ fontSize: 9, fontWeight: 700, background: '#F0E8FF', color: '#6A2A9A', borderRadius: 5, padding: '1px 5px' }}>私人</span>}
+                          {isPrivateRow && <span className="tm-badge-private" style={{ fontSize: 9, fontWeight: 700, background: 'var(--tm-private-bg)', color: 'var(--tm-private)', borderRadius: 5, padding: '1px 5px' }}>私人</span>}
                         </div>
                       </div>
                       <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                        <p style={{ fontSize: 14, fontWeight: 700, color: isPrivateRow ? '#6A2A9A' : C.earth, margin: '0 0 1px' }}>NT$ {share.toLocaleString()}</p>
+                        {/* Color rule: 收入/結算 → 綠、私人 → 紫、其他支出 → 紅。
+                            No prefix — colour alone communicates direction. */}
+                        <p style={{ fontSize: 14, fontWeight: 700, color: e.isIncome ? '#4A7A35' : (isPrivateRow ? 'var(--tm-private)' : '#9A3A3A'), margin: '0 0 1px' }}>
+                          NT$ {Math.abs(share).toLocaleString()}
+                        </p>
                         {!isPrivateRow && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}</p>}
                       </div>
                     </div>
@@ -2534,7 +2538,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     <button
                       type="button"
                       onClick={() => set('isPrivate', !form.isPrivate)}
-                      style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${form.isPrivate ? '#9A5AC8' : C.creamDark}`, background: form.isPrivate ? '#F0E8FF' : 'var(--tm-card-bg)', color: form.isPrivate ? '#6A2A9A' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                      style={{ width: '100%', padding: '11px 14px', borderRadius: 12, border: `1.5px solid ${form.isPrivate ? '#9A5AC8' : C.creamDark}`, background: form.isPrivate ? 'var(--tm-private-bg)' : 'var(--tm-card-bg)', color: form.isPrivate ? 'var(--tm-private)' : C.barkLight, fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         <FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} />
                         {form.payer && form.payer !== currentUserName
@@ -2546,7 +2550,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       </span>
                     </button>
                     {form.isPrivate && (
-                      <p style={{ fontSize: 11, color: '#6A2A9A', margin: '4px 0 0', paddingLeft: 2 }}>
+                      <p style={{ fontSize: 11, color: 'var(--tm-private)', margin: '4px 0 0', paddingLeft: 2 }}>
                         {form.payer && form.payer !== currentUserName
                           ? `此筆支出不計入分帳結算，僅 ${form.payer} 本人可見`
                           : '此筆支出不計入分帳結算，僅記錄個人花費'}
@@ -2713,7 +2717,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
                           目前總花費{myPrivateTotal > 0 ? <span style={{ fontSize: 9, opacity: 0.7 }}>（含私人）</span> : ''}
                         </p>
-                        <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {(ms.paid + myPrivateTotal).toLocaleString()}</p>
+                        {/* Self total = trip share + own private. Aligns with the
+                            "總支出（分攤＋私人）" line in 我的記帳明細 detail modal. */}
+                        <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {((ms.share || 0) + myPrivateTotal).toLocaleString()}</p>
                       </>
                     ) : (
                       // Others' card: show "這趟分擔" (their share of visible
@@ -3119,7 +3125,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     <div style={{ flex: 1, minWidth: 0 }}>
                       {/* ── Title row: title + receipt paperclip ── */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginBottom: 3 }}>
-                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? '#6A2A9A' : C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
+                        <p className={isPrivateExpense ? 'tm-expense-private-title' : ''} style={{ fontSize: 14, fontWeight: 700, color: isPrivateExpense ? 'var(--tm-private)' : C.bark, margin: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', flex: 1, minWidth: 0 }}>
                           {e._pending && <span title="同步中..." style={{ fontSize: 12, color: C.barkLight, animation: 'spin 1.2s linear infinite', display: 'inline-block', marginRight: 3 }}>↻</span>}
                           {e.description}
                         </p>
@@ -3135,7 +3141,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       {/* ── Badges (own row, wrappable) ── */}
                       <div style={{ display: 'flex', alignItems: 'center', gap: 4, flexWrap: 'wrap', marginBottom: 3 }}>
                         {isPrivateExpense && (
-                          <span className="tm-badge-private" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#F0E8FF', color: '#6A2A9A', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人</span>
+                          <span className="tm-badge-private" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: 'var(--tm-private-bg)', color: 'var(--tm-private)', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}><FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人</span>
                         )}
                         {isSettlement ? (
                           e.status === 'pending'
@@ -3276,7 +3282,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         const isPayer = e.payer === currentUserName;
                         return (
                           <>
-                            <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {myShare.toLocaleString()}</p>
+                            <p style={{ fontSize: 15, fontWeight: 700, color: e.isIncome ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
+                              NT$ {myShare.toLocaleString()}
+                            </p>
                             <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}{e.currency !== 'TWD' ? ` · ${e.currency} ${e.amount?.toLocaleString()}` : ''}</p>
                             {(() => { const r = getDisplayRate(e); return r != null ? <p title="記帳當時換算的匯率，不會跟著市場最新匯率更新" style={{ fontSize: 9, color: C.barkLight, margin: 0, cursor: 'help' }}>1 {e.currency} ≈ {fmtRate(r)} TWD <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 8, marginLeft: 1, opacity: 0.55 }} /></p> : null; })()}
                             <span className={isPayer ? 'tm-badge-sage-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 9, fontWeight: 700, borderRadius: 5, padding: '2px 6px', background: isPayer ? '#E0F0D8' : '#FFF2CC', color: isPayer ? '#4A7A35' : '#9A6800' }}>
@@ -3286,8 +3294,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         );
                       })() : (
                         <>
-                          <p style={{ fontSize: 15, fontWeight: 700, color: isIncome ? '#4A8A4A' : isSettlement ? C.sageDark : C.earth, margin: 0 }}>{isIncome ? '＋' : ''}NT$ {amtTWD.toLocaleString()}</p>
-                          {e.currency !== 'TWD' && !isSettlement && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{isIncome ? '＋' : ''}{e.currency} {e.amount?.toLocaleString()}</p>}
+                          <p style={{ fontSize: 15, fontWeight: 700, color: isIncome || isSettlement ? '#4A7A35' : isPrivateExpense ? 'var(--tm-private)' : '#9A3A3A', margin: 0 }}>NT$ {amtTWD.toLocaleString()}</p>
+                          {e.currency !== 'TWD' && !isSettlement && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{e.currency} {e.amount?.toLocaleString()}</p>}
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                         </>
                       )}
