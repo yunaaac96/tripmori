@@ -1522,7 +1522,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               {/* ── Header ── */}
               <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
-                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: memberColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: '50%', background: memberColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', boxShadow: '0 0 0 2px var(--tm-card-bg)' }}>
                     {getMemberAvatar(name)
                       ? <img src={getMemberAvatar(name)!} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : <span style={{ fontSize: 13, fontWeight: 700, color: avatarTextColor(memberColor) }}>{name[0]?.toUpperCase()}</span>}
@@ -1556,21 +1556,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       const isPrimaryDebtor   = isPayer  && name === currentUserName;
                       const isPrimaryCreditor = !isPayer && name === currentUserName;
                       return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: isPayer ? '#FAE0E0' : '#EAF3DE', borderRadius: 12, padding: '10px 14px', border: `1.5px solid ${isPayer ? '#F0C0C0' : '#B5CFA7'}` }}>
+                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: isPayer ? '#FAE0E0' : '#EAF3DE', borderRadius: 12, padding: '8px 12px', border: `1.5px solid ${isPayer ? '#F0C0C0' : '#B5CFA7'}` }}>
                           {/* Avatar */}
-                          <div style={{ width: 32, height: 32, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden' }}>
+                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', boxShadow: '0 0 0 2px var(--tm-card-bg)' }}>
                             {getMemberAvatar(other)
                               ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <span style={{ fontSize: 12, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
+                              : <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
                           </div>
-                          {/* Labels + amount */}
-                          <div style={{ flex: 1, minWidth: 0 }}>
-                            <p style={{ fontSize: 13, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: 0 }}>
+                          {/* Labels + amount — single-line layout, wraps gracefully on long names */}
+                          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', rowGap: 0 }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35' }}>
                               {isPayer ? `付給 ${other}` : `收自 ${other}`}
-                            </p>
-                            <p style={{ fontSize: 11, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', margin: '2px 0 0' }}>
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.9 }}>
                               NT$ {s.amount.toLocaleString()}
-                            </p>
+                            </span>
                           </div>
                           {/* Action buttons */}
                           {isProcessing
@@ -2711,7 +2711,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       // settlement block below sits at the same vertical level.
                       <>
                         <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>這趟分擔</p>
-                        <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {(ms.owed || 0).toLocaleString()}</p>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {(ms.share || 0).toLocaleString()}</p>
                       </>
                     )}
                     <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'}
@@ -2770,7 +2770,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               <div key={creditor} className={isMyGroup ? 'tm-settlement-card-mine' : 'tm-settlement-card-other'} style={{ ...cardStyle, marginBottom: 8, background: isMyGroup ? '#E0F4FF' : '#EAF3DE', border: `1px solid ${isMyGroup ? '#9AC8E8' : '#B5CFA7'}`, padding: '12px 14px' }}>
                 {/* Creditor header */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: getMemberColor(creditor), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                  <div style={{ width: 30, height: 30, borderRadius: '50%', background: getMemberColor(creditor), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0, boxShadow: '0 0 0 2px var(--tm-card-bg)' }}>
                     {getMemberAvatar(creditor)
                       ? <img src={getMemberAvatar(creditor)!} alt={creditor} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                       : creditor[0]?.toUpperCase()}
@@ -2831,7 +2831,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     );
                     return (
                       <div key={i} className="tm-settlement-debt-row" style={{ display: 'flex', alignItems: 'center', gap: 8, background: 'rgba(255,255,255,0.65)', borderRadius: 10, padding: '8px 10px' }}>
-                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: getMemberColor(debt.from), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: getMemberColor(debt.from), display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0, boxShadow: '0 0 0 2px var(--tm-card-bg)' }}>
                           {getMemberAvatar(debt.from)
                             ? <img src={getMemberAvatar(debt.from)!} alt={debt.from} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                             : debt.from[0]?.toUpperCase()}

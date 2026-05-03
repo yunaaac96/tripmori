@@ -172,7 +172,15 @@ export interface MemberStat {
   name: string;
   paid: number;
   rawPaid: number;
+  /** Total share including settlement records (used for net/balance math). */
   owed: number;
+  /**
+   * Clean share: total share of NON-private, NON-settlement, non-await expenses.
+   * Use this for display-only "trip share" on member cards. `owed` inflates as
+   * settlement records pile up (each confirmed settlement counts as a share for
+   * the receiver), which makes "這趟分擔" misleading after a few settlements.
+   */
+  share: number;
   net: number;
 }
 
@@ -296,9 +304,21 @@ export const computeMemberStats = (
       return s + sign * (perPerson + (myIdx < remainder ? 1 : 0));
     }, 0);
 
+    // Clean trip share — excludes settlement records (which inflate owed once
+    // money has been paid back to the creditor) and private expenses. This is
+    // what we want to show on member cards as "這趟分擔". Mirrors the logic
+    // in buildPersonalStatement.mySharesTotal so the two numbers agree.
+    const share = active.reduce((s, e) => {
+      if (e.isPrivate) return s;
+      if (e.category === 'settlement') return s;
+      const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+      if (!sw.includes(name)) return s;
+      return s + getPersonalShare(e, name, memberNames);
+    }, 0);
+
     const net = paid - owed;
     const netPaid = paid - (settlementsReceivedByName[name] || 0);
-    return { name, paid: netPaid, rawPaid: paid, owed, net };
+    return { name, paid: netPaid, rawPaid: paid, owed, share, net };
   });
 };
 

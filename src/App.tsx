@@ -48,19 +48,12 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
   const lineCount = (notes.match(/\n/g) || []).length + 1;
   const isLong = lineCount > 5 || notes.length > 200;
   return (
-    <div style={{
-      margin: margin ?? '6px 0 0',
-      padding: '6px 10px',
-      background: 'var(--tm-cream)',
-      borderLeft: '3px solid var(--tm-honey)',
-      borderRadius: 6,
-    }}>
-      <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
-        <span style={{ flexShrink: 0, fontSize: 10, color: color, opacity: 0.75 }}><FontAwesomeIcon icon={faLightbulb} /></span>
+    <div style={{ margin: margin ?? '4px 0 0' }}>
+      <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
+        <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7, marginTop: 2 }}><FontAwesomeIcon icon={faLightbulb} /></span>
         <span style={{
-          fontSize: 11, color, lineHeight: 1.6,
+          fontSize: 11, color, fontStyle: 'italic', lineHeight: 1.5,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere',
-          flex: 1, minWidth: 0,
           ...(isLong && !expanded ? {
             display: '-webkit-box', WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
@@ -69,7 +62,7 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
       </div>
       {isLong && (
         <button onClick={() => setExpanded(v => !v)} style={{
-          background: 'none', border: 'none', padding: '4px 0 0 18px',
+          background: 'none', border: 'none', padding: '3px 0 0 16px',
           fontSize: 10, color, opacity: 0.7, cursor: 'pointer',
           fontFamily: FONT, display: 'block',
         }}>
