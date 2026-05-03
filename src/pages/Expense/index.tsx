@@ -2704,28 +2704,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         </p>
                         <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {(ms.paid + myPrivateTotal).toLocaleString()}</p>
                       </>
-                    ) : (() => {
-                      // Others' card: skip the spend metric entirely (private
-                      // expenses are permission-gated; surfacing only the shared
-                      // portion would be misleading). Show an avatar + name
-                      // visual instead — actionable info (do I owe them / they
-                      // owe me) is still rendered below in the settlement block.
-                      const otherMember = (members as any[]).find((m: any) => m.name === ms.name);
-                      return (
-                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '4px 0 10px' }}>
-                          <div style={{
-                            width: 44, height: 44, borderRadius: '50%', overflow: 'hidden',
-                            background: otherMember?.color || C.cream,
-                            display: 'flex', alignItems: 'center', justifyContent: 'center',
-                            border: '2px solid var(--tm-card-bg)', boxShadow: C.shadowSm, flexShrink: 0,
-                          }}>
-                            {otherMember?.avatarUrl
-                              ? <img src={otherMember.avatarUrl} alt={ms.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <span style={{ fontSize: 18, fontWeight: 700, color: avatarTextColor(otherMember?.color) }}>{(ms.name || '?')[0]}</span>}
-                          </div>
-                        </div>
-                      );
-                    })()}
+                    ) : (
+                      // Others' card: show "這趟分擔" (their share of visible
+                      // expenses). Same metric structure as self's "目前總花費"
+                      // line so card heights stay aligned and the red/green
+                      // settlement block below sits at the same vertical level.
+                      <>
+                        <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>這趟分擔</p>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {(ms.owed || 0).toLocaleString()}</p>
+                      </>
+                    )}
                     <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'}
                       onClick={e => { e.stopPropagation(); if (displayAmt > 0) setSettlementDetailName(ms.name); }}
                       style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px', cursor: displayAmt > 0 ? 'pointer' : 'default' }}>
