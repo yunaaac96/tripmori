@@ -186,6 +186,14 @@ const FAQ_CATEGORIES: { id: string; icon: typeof faCoins; color: string; title: 
         q: '已結清的費用後來收到退款，要怎麼處理？',
         a: '不用動原費用！在已結清的費用上點「↩ 退款」按鈕，會自動帶你到「新增收入」表單並綁定原費用。退款記錄完成後，系統會自動重新計算結算建議；如果產生新的待結算款項，原費用旁會出現「可能需重新結算」提示。',
       },
+      {
+        q: '為什麼有些費用顯示「✓ 已互抵」而不是「已結清」？',
+        a: '「已結清」是真的有人轉了帳、有人收了款；「已互抵」是兩個成員之間的多筆費用計算後互相抵銷，沒有實際的金錢移動。例如 A 替 B 墊 500、B 也剛好替 A 墊 500，兩筆都會顯示已互抵。',
+      },
+      {
+        q: '私人費用會被「已結清」鎖住嗎？',
+        a: '不會。私人費用一律可由本人（或被授權的代錄人）隨時編輯/刪除，因為它根本不參與結算計算。即使整趟旅行結清了，你的私人費用還是可以照常修改。',
+      },
     ],
   },
   {
@@ -209,6 +217,10 @@ const FAQ_CATEGORIES: { id: string; icon: typeof faCoins; color: string; title: 
       {
         q: '如何讓旅伴收到推播通知？',
         a: '旅伴需完成兩步驟：① 在成員頁將自己的 Google 帳號綁定到成員卡；② 點擊通知鈴鐺允許推播權限。不論 Android 或 iOS，都需要先將 TripMori 加入手機主畫面，推播通知才能穩定收到。Android 用 Chrome 點右上角 ⋮ → 新增到主畫面；iOS 用 Safari 點分享 ⬆ → 加入主畫面。',
+      },
+      {
+        q: '為什麼別人成員卡上看不到他花了多少錢？',
+        a: '別人卡片中央會顯示頭像而不是金額，這是隱私設計：每個人的私人費用只有本人看得到，如果只顯示「對外可見的金額」會造成誤導。真正能行動的資訊（你欠他/他欠你）會在卡片下方的綠/紅色區塊顯示。',
       },
     ],
   },
@@ -1035,8 +1047,8 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
 
           {/* Help modal */}
           {showHelp && (
-            <div style={{ position: 'fixed', inset: 0, background: 'rgba(60,50,80,0.55)', zIndex: 600, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end' }} onClick={() => setShowHelp(false)}>
-              <div onClick={e => e.stopPropagation()} style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', maxHeight: '90vh', display: 'flex', flexDirection: 'column', fontFamily: FONT, boxShadow: '0 -4px 32px rgba(0,0,0,0.18)' }}>
+            <div style={{ position: 'fixed', inset: 0, background: 'rgba(60,50,80,0.55)', zIndex: 600, display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'center' }} onClick={() => setShowHelp(false)}>
+              <div onClick={e => e.stopPropagation()} style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', maxHeight: '90vh', maxWidth: 540, width: '100%', display: 'flex', flexDirection: 'column', fontFamily: FONT, boxShadow: '0 -4px 32px rgba(0,0,0,0.18)' }}>
                 {/* Header */}
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '20px 20px 14px', borderBottom: '1px solid var(--tm-cream-dark)', flexShrink: 0 }}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
