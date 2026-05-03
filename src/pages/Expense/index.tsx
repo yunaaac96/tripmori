@@ -294,7 +294,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [settlementDetailName, setSettlementDetailName] = useState<string | null>(null);
   // Collapsible sections inside the Personal Statement modal
   const [stmtPaymentsOpen, setStmtPaymentsOpen] = useState(false);
-  const [stmtSharesOpen, setStmtSharesOpen] = useState(false);
+  const [stmtSharesOpen, setStmtSharesOpen] = useState(true);
   // Reset section state whenever a different person's statement is opened
   useEffect(() => {
     if (settlementDetailName) { setStmtPaymentsOpen(false); setStmtSharesOpen(false); }
@@ -1821,7 +1821,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   {/* 分攤花費 + 私人花費 */}
                   <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
                     <div className="tm-stat-paid-box" style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
-                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>分攤花費</p>
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>我的分攤份額</p>
                       <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {sharedBurdenTWD.toLocaleString()}</p>
                     </div>
                     <div style={{ flex: 1, background: 'var(--tm-note-5)', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
@@ -1836,12 +1836,22 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               {ms && (() => {
                 const detailSettlements = settlements.filter(s => s.from === detailName || s.to === detailName);
                 const detailDisplayAmt = detailSettlements.reduce((sum, s) => sum + s.amount, 0);
+                const accent = ms.net >= 0 ? '#4A7A35' : '#9A3A3A';
                 return (
-                  <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ marginBottom: 14, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}` }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>{ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: ms.net >= 0 ? '#4A7A35' : '#9A3A3A', margin: 0 }}>
-                      {detailDisplayAmt > 0 ? `NT$ ${detailDisplayAmt.toLocaleString()}` : '已結清 ✓'}
-                    </p>
+                  <div className={ms.net >= 0 ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'} style={{ marginBottom: 14, background: ms.net >= 0 ? '#EAF3DE' : '#FAE0E0', borderRadius: 12, padding: '10px 12px', border: `1px solid ${ms.net >= 0 ? '#B5CFA7' : '#F0C0C0'}`, display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                    <div style={{ minWidth: 0, flex: 1 }}>
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>{ms.net >= 0 ? '代墊金額' : '需還款金額'}</p>
+                      <p style={{ fontSize: 15, fontWeight: 700, color: accent, margin: 0 }}>
+                        {detailDisplayAmt > 0 ? `NT$ ${detailDisplayAmt.toLocaleString()}` : '已結清 ✓'}
+                      </p>
+                    </div>
+                    {detailDisplayAmt > 0 && (
+                      <button
+                        onClick={() => { setMemberDetailName(null); setSettlementDetailName(detailName); }}
+                        style={{ flexShrink: 0, padding: '6px 12px', borderRadius: 8, border: 'none', background: accent, color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                        去結算 ›
+                      </button>
+                    )}
                   </div>
                 );
               })()}
