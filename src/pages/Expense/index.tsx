@@ -9,7 +9,7 @@ import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply, faCircleInfo } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -2266,6 +2266,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         placeholder={`預設 ${resolvedRate.rate}（${resolvedRate.source}）`}
                         value={form.exchangeRate}
                         onChange={ev => set('exchangeRate', ev.target.value)} />
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 4, lineHeight: 1.4 }}>
+                        <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 9, opacity: 0.6 }} />
+                        此匯率會在儲存當下鎖定，日後不會自動更新（避免改動歷史記錄）
+                      </p>
                     </div>
                     {form.paymentMethod === 'card' && (
                       <div>
@@ -3189,7 +3193,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <>
                             <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: 0 }}>NT$ {myShare.toLocaleString()}</p>
                             <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>共 NT$ {amtTWD.toLocaleString()}{e.currency !== 'TWD' ? ` · ${e.currency} ${e.amount?.toLocaleString()}` : ''}</p>
-                            {(() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
+                            {(() => { const r = getDisplayRate(e); return r != null ? <p title="記帳當時換算的匯率，不會跟著市場最新匯率更新" style={{ fontSize: 9, color: C.barkLight, margin: 0, cursor: 'help' }}>1 {e.currency} ≈ {fmtRate(r)} TWD <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 8, marginLeft: 1, opacity: 0.55 }} /></p> : null; })()}
                             <span className={isPayer ? 'tm-badge-sage-sm' : 'tm-badge-amber-sm'} style={{ fontSize: 9, fontWeight: 700, borderRadius: 5, padding: '2px 6px', background: isPayer ? '#E0F0D8' : '#FFF2CC', color: isPayer ? '#4A7A35' : '#9A6800' }}>
                               {isPayer ? '我付款' : '需分攤'}
                             </span>
