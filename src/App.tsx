@@ -47,10 +47,14 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
   const [expanded, setExpanded] = useState(false);
   const lineCount = (notes.match(/\n/g) || []).length + 1;
   const isLong = lineCount > 5 || notes.length > 200;
+  // Single-line notes look unbalanced with flex-start (icon hovering above
+  // the visual centre of the text); use center alignment for that case.
+  // Multi-line stays flex-start so the icon anchors to the first line.
+  const isSingleLine = lineCount === 1 && !isLong;
   return (
     <div style={{ margin: margin ?? '4px 0 0' }}>
-      <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-        <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7, marginTop: 2 }}><FontAwesomeIcon icon={faLightbulb} /></span>
+      <div style={{ display: 'flex', gap: 4, alignItems: isSingleLine ? 'center' : 'flex-start' }}>
+        <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7, marginTop: isSingleLine ? 0 : 2 }}><FontAwesomeIcon icon={faLightbulb} /></span>
         <span style={{
           fontSize: 11, color, fontStyle: 'italic', lineHeight: 1.5,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere',
