@@ -1089,6 +1089,17 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
     (e.privateOwnerUid && e.privateOwnerUid === googleUid) ||  // I'm the principal
     (e.loggedByUid && e.loggedByUid === googleUid)             // I'm the proxy who recorded it
   );
+
+  // Total private spend by the current user. Surfaces on the self stat card
+  // so the "目前總花費" reflects out-of-pocket including private — others'
+  // cards intentionally hide this row entirely (we can't compute private for
+  // them due to permissions, and showing only the shared portion was
+  // misleading before).
+  const myPrivateTotal = (currentUserName && googleUid)
+    ? (expenses as any[])
+        .filter((e: any) => e.isPrivate && e.privateOwnerUid === googleUid && !e.awaitCardStatement)
+        .reduce((s: number, e: any) => s + effectiveTWD(e), 0)
+    : 0;
   // Base: further filter by "與我有關" if selected
   const baseExpenses = expenseView === 'mine'
     ? visibleExpenses.filter(isMyExpense)
@@ -2676,8 +2687,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, textDecoration: isMe ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}>{ms.name}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
                     </div>
                     <p style={{ fontSize: 9, color: C.barkLight, margin: '0 0 6px' }}>{isMe ? '點擊查看明細 ›' : '僅本人可查看明細'}</p>
-                    <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>目前花費</p>
-                    <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {ms.paid.toLocaleString()}</p>
+                    {isMe ? (
+                      <>
+                        <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 2px' }}>
+                          目前總花費{myPrivateTotal > 0 ? <span style={{ fontSize: 9, opacity: 0.7 }}>（含私人）</span> : ''}
+                        </p>
+                        <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {(ms.paid + myPrivateTotal).toLocaleString()}</p>
+                      </>
+                    ) : (
+                      // Others' card intentionally hides the spend amount: we can
+                      // only see their shared portion (private is permission-gated),
+                      // and surfacing only a partial number was misleading. The
+                      // settlement state below still tells the user "do I owe them
+                      // / do they owe me" which is the actionable bit.
+                      <div style={{ height: 14 }} />
+                    )}
                     <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'}
                       onClick={e => { e.stopPropagation(); if (displayAmt > 0) setSettlementDetailName(ms.name); }}
                       style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px', cursor: displayAmt > 0 ? 'pointer' : 'default' }}>
