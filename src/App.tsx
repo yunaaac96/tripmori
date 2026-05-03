@@ -5,7 +5,7 @@ import { LS_ONBOARDING_PENDING, hasCompletedOnboarding, markOnboardingDone } fro
 import type { OnboardingTrack } from './utils/onboarding';
 import OnboardingModal from './components/OnboardingModal';
 import { getFunctions, httpsCallable } from 'firebase/functions';
-import { signInAnonymously, signOut, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
+import { signInAnonymously, onAuthStateChanged, GoogleAuthProvider, signInWithPopup } from 'firebase/auth';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faLightbulb, faEye, faMobileScreen, faBell, faXmark, faArrowUpFromBracket, faSquarePlus, faCircleCheck, faPlus, faGear } from '@fortawesome/free-solid-svg-icons';
 import BottomNav from './components/layout/BottomNav';
@@ -48,12 +48,19 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
   const lineCount = (notes.match(/\n/g) || []).length + 1;
   const isLong = lineCount > 5 || notes.length > 200;
   return (
-    <div style={{ margin: margin ?? '4px 0 0' }}>
-      <div style={{ display: 'flex', gap: 4, alignItems: 'flex-start' }}>
-        <span style={{ flexShrink: 0, fontSize: 11, color: color, opacity: 0.7, marginTop: 2 }}><FontAwesomeIcon icon={faLightbulb} /></span>
+    <div style={{
+      margin: margin ?? '6px 0 0',
+      padding: '6px 10px',
+      background: 'var(--tm-cream)',
+      borderLeft: '3px solid var(--tm-honey)',
+      borderRadius: 6,
+    }}>
+      <div style={{ display: 'flex', gap: 6, alignItems: 'baseline' }}>
+        <span style={{ flexShrink: 0, fontSize: 10, color: color, opacity: 0.75 }}><FontAwesomeIcon icon={faLightbulb} /></span>
         <span style={{
-          fontSize: 11, color, fontStyle: 'italic', lineHeight: 1.5,
+          fontSize: 11, color, lineHeight: 1.6,
           whiteSpace: 'pre-wrap', wordBreak: 'break-word', overflowWrap: 'anywhere',
+          flex: 1, minWidth: 0,
           ...(isLong && !expanded ? {
             display: '-webkit-box', WebkitLineClamp: 2,
             WebkitBoxOrient: 'vertical' as const, overflow: 'hidden',
@@ -62,7 +69,7 @@ export function ExpandableNotes({ notes, color, margin }: { notes: string; color
       </div>
       {isLong && (
         <button onClick={() => setExpanded(v => !v)} style={{
-          background: 'none', border: 'none', padding: '3px 0 0 16px',
+          background: 'none', border: 'none', padding: '4px 0 0 18px',
           fontSize: 10, color, opacity: 0.7, cursor: 'pointer',
           fontFamily: FONT, display: 'block',
         }}>
@@ -1300,11 +1307,6 @@ function App() {
                   {adminMode ? '管理中' : '管理模式'}
                 </button>
               )}
-              <button
-                onClick={() => signOut(auth).catch(console.error)}
-                style={{ fontSize: 11, color: '#9A3A3A', background: 'none', border: `1px solid #E8C4C4`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
-                登出
-              </button>
               <button onClick={handleExitToHub}
                 style={{ fontSize: 11, color: C.barkLight, background: 'none', border: `1px solid ${C.creamDark}`, borderRadius: 8, padding: '3px 10px', cursor: 'pointer', fontFamily: FONT }}>
                 切換

@@ -2684,7 +2684,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     onClick={() => { if (isMe) { setDetailTab('all'); setMemberDetailName(ms.name); } }}
                     style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, flexShrink: 0, width: 160, scrollSnapAlign: 'start', border: isMe ? `2px solid ${C.sageDark}` : undefined, cursor: isMe ? 'pointer' : 'default', userSelect: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 1 }}>
-                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, textDecoration: isMe ? 'underline dotted' : 'none', textUnderlineOffset: 3 }}>{ms.name}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{ms.name}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
                     </div>
                     <p style={{ fontSize: 9, color: C.barkLight, margin: '0 0 6px' }}>{isMe ? '點擊查看明細 ›' : '僅本人可查看明細'}</p>
                     {isMe ? (
@@ -2694,14 +2694,28 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         </p>
                         <p style={{ fontSize: 15, fontWeight: 700, color: C.earth, margin: '0 0 8px' }}>NT$ {(ms.paid + myPrivateTotal).toLocaleString()}</p>
                       </>
-                    ) : (
-                      // Others' card intentionally hides the spend amount: we can
-                      // only see their shared portion (private is permission-gated),
-                      // and surfacing only a partial number was misleading. The
-                      // settlement state below still tells the user "do I owe them
-                      // / do they owe me" which is the actionable bit.
-                      <div style={{ height: 14 }} />
-                    )}
+                    ) : (() => {
+                      // Others' card: skip the spend metric entirely (private
+                      // expenses are permission-gated; surfacing only the shared
+                      // portion would be misleading). Show an avatar + name
+                      // visual instead — actionable info (do I owe them / they
+                      // owe me) is still rendered below in the settlement block.
+                      const otherMember = (members as any[]).find((m: any) => m.name === ms.name);
+                      return (
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, margin: '4px 0 10px' }}>
+                          <div style={{
+                            width: 44, height: 44, borderRadius: '50%', overflow: 'hidden',
+                            background: otherMember?.color || C.cream,
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            border: '2px solid var(--tm-card-bg)', boxShadow: C.shadowSm, flexShrink: 0,
+                          }}>
+                            {otherMember?.avatarUrl
+                              ? <img src={otherMember.avatarUrl} alt={ms.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                              : <span style={{ fontSize: 18, fontWeight: 700, color: avatarTextColor(otherMember?.color) }}>{(ms.name || '?')[0]}</span>}
+                          </div>
+                        </div>
+                      );
+                    })()}
                     <div className={isCreditor ? 'tm-member-stat-creditor' : 'tm-member-stat-debtor'}
                       onClick={e => { e.stopPropagation(); if (displayAmt > 0) setSettlementDetailName(ms.name); }}
                       style={{ background: isCreditor ? '#EAF3DE' : '#FAE0E0', borderRadius: 8, padding: '5px 8px', cursor: displayAmt > 0 ? 'pointer' : 'default' }}>
@@ -2766,7 +2780,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   <p className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'}
                     onClick={() => setSettlementDetailName(creditor)}
                     style={{ fontSize: 13, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', margin: 0, flex: 1, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3 }}>
-                    {creditor}{isMyGroup ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
+                    {creditor}{isMyGroup ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}<span style={{ marginLeft: 4, fontSize: 11, opacity: 0.6 }}>›</span>
                   </p>
                   <span className={isMyGroup ? 'tm-settlement-creditor-mine' : 'tm-settlement-creditor-other'} style={{ fontSize: 10, fontWeight: 700, color: isMyGroup ? '#1A6A9A' : '#4A7A35', background: isMyGroup ? 'rgba(26,106,154,0.12)' : 'rgba(74,122,53,0.12)', borderRadius: 6, padding: '2px 7px' }}>收款方</span>
                 </div>
@@ -2827,7 +2841,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <p onClick={() => setSettlementDetailName(debt.from)}
                             style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3, display: 'inline-block' }}>
-                            {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}
+                            {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}<span style={{ marginLeft: 4, fontSize: 11, opacity: 0.6 }}>›</span>
                           </p>
                           <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
                         </div>
