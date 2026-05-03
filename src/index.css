@@ -48,6 +48,12 @@
    * of the hard-coded #6A2A9A in inline styles. */
   --tm-private:    #6A2A9A;
   --tm-private-bg: #F0E8FF;
+  /* Settlement (還款) orange — distinct from income green (#4A7A35) so
+   * users can tell at a glance whether a row is a refund (income) or a
+   * money-transfer-back-to-creditor (settlement). Sits between red and
+   * yellow in the warm palette. */
+  --tm-settlement:    #B86A2A;
+  --tm-settlement-bg: #FBE7D2;
 
   --text: #6b6375;
   --text-h: #08060d;
@@ -125,6 +131,8 @@
      * stay legible against the violet-tinted row background (--tm-note-5). */
     --tm-private:    #C090F0;
     --tm-private-bg: #2A1030;
+    --tm-settlement:    #E89858;
+    --tm-settlement-bg: #3A1F0A;
 
     --text: #B4AAAA;
     --text-h: #F0EAE2;
@@ -287,7 +295,7 @@
   .tm-notion-success a { color: #5AACDF !important; }
 
   /* Expense — settlement / private expense badges */
-  .tm-badge-settle   { background: #0E2810 !important; color: #80C870 !important; }
+  .tm-badge-settle   { background: var(--tm-settlement-bg) !important; color: var(--tm-settlement) !important; }
   .tm-badge-private  { background: #2A1030 !important; color: #C090F0 !important; }
   .tm-expense-private-title { color: #C090F0 !important; }
 
