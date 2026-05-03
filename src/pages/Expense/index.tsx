@@ -3133,11 +3133,11 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               const hasActual  = e.actualTWD != null;
               const isForeignCard = e.paymentMethod === 'card' && (e.currency || projCurrency) !== 'TWD';
               return (
-                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid ${C.sageDark}` : isIncome ? `3px solid #4A8A4A` : undefined, opacity: isAwaiting ? 0.8 : 1 }}>
+                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid var(--tm-settlement)` : isIncome ? `3px solid #4A8A4A` : undefined, opacity: isAwaiting ? 0.55 : 1 }}>
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
                     {(() => {
-                      const tileBg = isSettlement ? '#EAF3DE' : cat?.bg;
+                      const tileBg = isSettlement ? 'var(--tm-settlement-bg)' : cat?.bg;
                       return (
                         <div style={{ width: 40, height: 40, borderRadius: 12, background: tileBg, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                           <FontAwesomeIcon icon={CATEGORY_ICONS[isSettlement ? 'settlement' : (e.category || 'other')] || CATEGORY_ICONS.other} style={{ fontSize: 16, color: avatarTextColor(tileBg), opacity: 0.85 }} />
@@ -3169,7 +3169,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         {isSettlement ? (
                           e.status === 'pending'
                             ? <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#FFF3CC', color: '#9A6800', display: 'inline-flex', alignItems: 'center', lineHeight: 1.2 }}>待確認</span>
-                            : <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#EAF3DE', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', lineHeight: 1.2 }}>還款</span>
+                            : <span className="tm-badge-settle" style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: 'var(--tm-settlement-bg)', color: 'var(--tm-settlement)', display: 'inline-flex', alignItems: 'center', lineHeight: 1.2 }}>還款</span>
                         ) : isIncome ? (
                           <span style={{ fontSize: 10, fontWeight: 700, borderRadius: 6, padding: '2px 6px', background: '#E0F0D8', color: '#4A7A35', display: 'inline-flex', alignItems: 'center', gap: 3, lineHeight: 1.2 }}><FontAwesomeIcon icon={faCoins} style={{ fontSize: 8 }} />收入</span>
                         ) : !isPrivateExpense && (
@@ -3317,7 +3317,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         );
                       })() : (
                         <>
-                          <p style={{ fontSize: 15, fontWeight: 700, color: isIncome || isSettlement ? '#4A7A35' : isPrivateExpense ? 'var(--tm-private)' : '#9A3A3A', margin: 0 }}>NT$ {amtTWD.toLocaleString()}</p>
+                          <p style={{ fontSize: 15, fontWeight: 700, color: isAwaiting ? C.barkLight : (isIncome ? '#4A7A35' : isSettlement ? 'var(--tm-settlement)' : isPrivateExpense ? 'var(--tm-private)' : '#9A3A3A'), margin: 0 }}>NT$ {amtTWD.toLocaleString()}</p>
                           {e.currency !== 'TWD' && !isSettlement && <p style={{ fontSize: 10, color: C.barkLight, margin: 0 }}>{e.currency} {e.amount?.toLocaleString()}</p>}
                           {!isSettlement && (() => { const r = getDisplayRate(e); return r != null ? <p style={{ fontSize: 9, color: C.barkLight, margin: 0 }}>1 {e.currency} ≈ {fmtRate(r)} TWD</p> : null; })()}
                         </>
