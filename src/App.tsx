@@ -1376,11 +1376,18 @@ function App() {
           </div>
         )}
 
-        {/* Suspense fallback shows the splash screen so the lazy-load handoff
-            is visually consistent — same logo, same colours, no jarring blank
-            page when a tab chunk is still arriving. After the first chunk for
-            each page is fetched once, subsequent tab switches are instant. */}
-        <Suspense fallback={<SplashScreen />}>
+        {/* Suspense fallback is wrapped in a position:fixed overlay so it
+            doesn't push BottomNav out of the document flow during chunk
+            loads — SplashScreen itself uses minHeight: 100dvh which would
+            otherwise occupy block-level space and (on iOS Safari) "stick"
+            BottomNav mid-page after a scroll-triggered reflow. The fixed
+            overlay covers the viewport during the brief lazy-load window
+            and unmounts cleanly without layout shift once the chunk lands. */}
+        <Suspense fallback={
+          <div style={{ position: 'fixed', inset: 0, zIndex: 999, background: 'var(--tm-page-bg)' }}>
+            <SplashScreen />
+          </div>
+        }>
           {activeTab === '行程' && <SchedulePage events={events} members={members} project={activeProject} firestore={firestore} onProjectUpdate={(p) => { saveProject(p); setActiveProjectState(p); }} />}
           {activeTab === '預訂' && <BookingsPage bookings={bookings} members={members} firestore={firestore} project={activeProject} />}
           {activeTab === '記帳' && <ExpensePage expenses={expenses} members={members} proxyGrants={proxyGrants} firestore={firestore} project={activeProject} />}
