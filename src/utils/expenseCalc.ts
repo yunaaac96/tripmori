@@ -610,41 +610,45 @@ export const getSettlementBadge = (
    */
   wholeTripSettled?: boolean,
 ): 'settled' | 'received' | 'none' => {
-  const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+  // Private expenses never participate in settlements — the principal is the
+  // sole party. Bail early.
+  if (e.isPrivate) return 'none';
 
-  /** True when the debtor→creditor pair has been fully settled. */
-  const isFullySettled = (debtorName: string, creditorName: string): boolean => {
-    const pairKey = `${debtorName}→${creditorName}`;
-    const confirmedAmt = confirmedAmountsMap.get(pairKey) ?? 0;
-    const remainingDebt = pairDebtsMap.get(pairKey) ?? 0;
-    // Direct: at least one confirmed payment AND no remaining debt left.
-    if (confirmedAmt > 0 && remainingDebt === 0) return true;
-    // Indirect: the whole-trip plan is empty so this pair was routed through
-    // intermediaries; treat the pair as settled.
-    if (wholeTripSettled) return true;
-    return false;
-  };
+  const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
 
   /** True when this specific expense has a per-expense settlement for this debtor. */
   const isPerExpenseSettled = (debtorName: string): boolean =>
     !!e.id && !!perExpenseConfirmedSet?.has(`${e.id}|${debtorName}`);
 
+  // Locking semantics (deliberately conservative — see Bali refund saga):
+  // an expense only counts as "settled" / "received" when ONE of:
+  //   1. legacy settledAt / receivedAt stamp (Method A backward compat)
+  //   2. the entire trip is settled (wholeTripSettled — every member's net is
+  //      zero AND at least one settlement was confirmed)
+  //   3. THIS specific expense was per-expense-settled (perExpenseConfirmedSet)
+  // Pair-level "math is balanced" alone does NOT lock individual expenses,
+  // because new activity (e.g. a refund) can open new debts that the
+  // pair-level check misses. Members keep the freedom to per-expense-settle
+  // any single line until the whole trip closes.
+  // The confirmedAmountsMap / pairDebtsMap parameters are still part of the
+  // signature for backward compat, but no longer drive lock state.
+  void confirmedAmountsMap; void pairDebtsMap;
+
   // Viewer is a debtor for this expense (in splitWith, not the payer)
   if (e.payer !== viewerName && sw.includes(viewerName)) {
-    if (e.settledAt) return 'settled';  // legacy stamp
-    if (isFullySettled(viewerName, e.payer)) return 'settled';
-    if (isPerExpenseSettled(viewerName)) return 'settled';
+    if (e.settledAt) return 'settled';                       // legacy stamp
+    if (wholeTripSettled) return 'settled';                  // entire trip closed
+    if (isPerExpenseSettled(viewerName)) return 'settled';   // this line specifically settled
   }
 
-  // Viewer is the payer (creditor): show 'received' when all debtors fully settled
+  // Viewer is the payer (creditor): show 'received' when whole trip closed,
+  // or when every debtor on this expense was per-expense-settled.
   if (e.payer === viewerName) {
-    if (e.receivedAt) return 'received';  // legacy stamp
+    if (e.receivedAt) return 'received';                     // legacy stamp
     const debtors = sw.filter(n => n !== viewerName);
-    if (debtors.length > 0 && debtors.every(d =>
-      isFullySettled(d, viewerName) || isPerExpenseSettled(d)
-    )) {
-      return 'received';
-    }
+    if (debtors.length === 0) return 'none';
+    if (wholeTripSettled) return 'received';
+    if (debtors.every(isPerExpenseSettled)) return 'received';
   }
 
   return 'none';
