@@ -308,12 +308,14 @@ export const computeMemberStats = (
     // money has been paid back to the creditor) and private expenses. This is
     // what we want to show on member cards as "這趟分擔". Mirrors the logic
     // in buildPersonalStatement.mySharesTotal so the two numbers agree.
+    // Income records (refunds etc.) are subtracted, since they reduce the share.
     const share = active.reduce((s, e) => {
       if (e.isPrivate) return s;
       if (e.category === 'settlement') return s;
       const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
       if (!sw.includes(name)) return s;
-      return s + getPersonalShare(e, name, memberNames);
+      const sign = e.isIncome ? -1 : 1;
+      return s + sign * getPersonalShare(e, name, memberNames);
     }, 0);
 
     const net = paid - owed;

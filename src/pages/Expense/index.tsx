@@ -1705,7 +1705,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   const perExpenseSettled = perExpenseConfirmedSet.has(`${item.id}|${name}`);
                   return !perExpenseSettled;
                 });
-                const unpaidTotal = unpaidShares.reduce((sum, item) => sum + (item.myShare || 0), 0);
+                const unpaidTotal = unpaidShares.reduce((sum, item) => {
+                  const sign = item.isIncome ? -1 : 1;
+                  return sum + sign * (item.myShare || 0);
+                }, 0);
                 if (unpaidShares.length === 0) return null;
                 return (
                   <div style={{ marginBottom: 4, marginTop: 14 }}>
@@ -1761,10 +1764,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
           tab === 'private' ? privateExpenses :
           [...sharedExpenses, ...privateExpenses];
 
-        // Personal share for tab rows
+        // Personal share for tab rows. Income records subtract — refunds reduce
+        // your share so the pie chart and totals must mirror that.
         const shareFor = (e: any): number => {
           if (e.isPrivate) return effectiveTWD(e);
-          return getPersonalShare(e, detailName, memberNames);
+          const sign = e.isIncome ? -1 : 1;
+          return sign * getPersonalShare(e, detailName, memberNames);
         };
 
         // Header stat totals.
@@ -1774,7 +1779,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         //     still consumed their share, so share is what they expect to
         //     see here.
         const sharedBurdenTWD = sharedExpenses
-          .reduce((s: number, e: any) => s + getPersonalShare(e, detailName, memberNames), 0);
+          .reduce((s: number, e: any) => s + (e.isIncome ? -1 : 1) * getPersonalShare(e, detailName, memberNames), 0);
         const privateTotalTWD = privateExpenses
           .reduce((s: number, e: any) => s + (effectiveTWD(e)), 0);
 
