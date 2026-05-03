@@ -295,6 +295,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // Collapsible sections inside the Personal Statement modal
   const [stmtPaymentsOpen, setStmtPaymentsOpen] = useState(false);
   const [stmtSharesOpen, setStmtSharesOpen] = useState(true);
+  const [stmtShowSettled, setStmtShowSettled] = useState(false);
   // Reset section state whenever a different person's statement is opened
   useEffect(() => {
     if (settlementDetailName) { setStmtPaymentsOpen(false); setStmtSharesOpen(false); }
@@ -1445,12 +1446,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         const memberColor = getMemberColor(name);
 
         // ── Shared helper: one expense row (used in both sections) ──────
-        const StmtRow = ({ item, showPayer }: { item: StatementLineItem; showPayer?: boolean }) => {
+        const StmtRow = ({ item, showPayer, isSettled }: { item: StatementLineItem; showPayer?: boolean; isSettled?: boolean }) => {
           const cat = EXPENSE_CATEGORY_MAP[item.category] || EXPENSE_CATEGORY_MAP.other;
           const isAwaiting = item.awaitCardStatement;
           const sw = item.splitWith;
           return (
-            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: `1px solid var(--tm-cream-dark, #EDE8DF)`, opacity: isAwaiting ? 0.55 : 1 }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10, padding: '10px 0', borderBottom: `1px solid var(--tm-cream-dark, #EDE8DF)`, opacity: isAwaiting ? 0.55 : (isSettled ? 0.5 : 1) }}>
               {/* Category icon */}
               <div style={{ width: 34, height: 34, borderRadius: 10, background: cat?.bg || '#EEE', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                 <FontAwesomeIcon icon={CATEGORY_ICONS[item.category] || CATEGORY_ICONS.other} style={{ fontSize: 13, color: avatarTextColor(cat?.bg || '#EEE'), opacity: 0.85 }} />
@@ -1460,6 +1461,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 <p style={{ fontSize: 13, fontWeight: 600, color: item.isIncome ? '#4A8A4A' : C.bark, margin: '0 0 3px', wordBreak: 'break-word', lineHeight: 1.35 }}>
                   {isAwaiting && <span style={{ fontSize: 9, fontWeight: 700, background: '#FFE8CC', color: '#9A6800', borderRadius: 4, padding: '1px 4px', marginRight: 4, verticalAlign: 'middle' }}>⏳</span>}
                   {item.isIncome && <span style={{ fontSize: 9, fontWeight: 700, background: '#E0F4D8', color: '#4A7A35', borderRadius: 4, padding: '1px 4px', marginRight: 4, verticalAlign: 'middle' }}>收入</span>}
+                  {isSettled && <span style={{ fontSize: 9, fontWeight: 700, background: '#EAF3DE', color: '#4A7A35', borderRadius: 4, padding: '1px 4px', marginRight: 4, verticalAlign: 'middle' }}>已結清</span>}
                   {item.description || '（無說明）'}
                 </p>
                 <p style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.4 }}>
@@ -1697,25 +1699,27 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
               {/* ── ④ 應分攤費用明細（別人付的、我有份額的）── */}
               {(() => {
-                // Show only: paid by someone else + not covered.
-                // Locking semantics aligned with getSettlementBadge: a share is
-                // "covered" only when (a) legacy settledAt stamp, (b) the entire
-                // trip is settled (wholeTripSettled), or (c) THIS specific share
-                // was per-expense-settled. Pair-level math being balanced does
-                // NOT hide a share — members keep visibility / control until
-                // the trip closes or they explicitly settle the line.
-                const unpaidShares = stmt.myShares.filter(item => {
-                  if (item.payer === name) return false;
-                  if (item.settledAt) return false;        // legacy Method A stamp
-                  if (wholeTripSettled) return false;       // trip closed → all shares covered
-                  const perExpenseSettled = perExpenseConfirmedSet.has(`${item.id}|${name}`);
-                  return !perExpenseSettled;
-                });
+                // A share is "settled / covered" when any of: (a) legacy
+                // settledAt stamp, (b) the entire trip is wholeTripSettled,
+                // or (c) THIS specific share is per-expense-settled.
+                const isShareSettled = (item: StatementLineItem): boolean => {
+                  if (item.settledAt) return true;
+                  if (wholeTripSettled) return true;
+                  return perExpenseConfirmedSet.has(`${item.id}|${name}`);
+                };
+                // Always exclude own-paid items (those are "我付了" not "我應分攤").
+                // The only difference between unpaid-only and show-all is whether
+                // we keep the settled rows visible (greyed out) for review.
+                const allMyShares = stmt.myShares.filter(item => item.payer !== name);
+                const unpaidShares = allMyShares.filter(item => !isShareSettled(item));
+                const settledCount = allMyShares.length - unpaidShares.length;
+                const displayShares = stmtShowSettled ? allMyShares : unpaidShares;
                 const unpaidTotal = unpaidShares.reduce((sum, item) => {
                   const sign = item.isIncome ? -1 : 1;
                   return sum + sign * (item.myShare || 0);
                 }, 0);
-                if (unpaidShares.length === 0) return null;
+                if (allMyShares.length === 0) return null;
+                if (unpaidShares.length === 0 && !stmtShowSettled) return null;
                 return (
                   <div style={{ marginBottom: 4, marginTop: 14 }}>
                     <button
@@ -1732,9 +1736,27 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       </div>
                     </button>
                     {stmtSharesOpen && (
-                      <div style={{ paddingLeft: 2, paddingRight: 2, marginTop: 2 }}>
-                        {unpaidShares.map(item => <StmtRow key={item.id} item={item} showPayer={true} />)}
-                      </div>
+                      <>
+                        {/* 也顯示已結清 toggle — only render if there are settled
+                            items to reveal, otherwise the toggle has no effect. */}
+                        {settledCount > 0 && (
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
+                            <span style={{ fontSize: 11, color: C.barkLight }}>也顯示已結清（{settledCount}）</span>
+                            <button
+                              onClick={() => setStmtShowSettled(v => !v)}
+                              role="switch"
+                              aria-checked={stmtShowSettled}
+                              style={{ width: 32, height: 18, borderRadius: 9, border: 'none', background: stmtShowSettled ? C.sageDark : C.creamDark, position: 'relative', cursor: 'pointer', padding: 0, transition: 'background 0.2s' }}>
+                              <span style={{ position: 'absolute', top: 2, left: stmtShowSettled ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
+                            </button>
+                          </div>
+                        )}
+                        <div style={{ paddingLeft: 2, paddingRight: 2, marginTop: 2 }}>
+                          {displayShares.map(item => (
+                            <StmtRow key={item.id} item={item} showPayer={true} isSettled={isShareSettled(item)} />
+                          ))}
+                        </div>
+                      </>
                     )}
                   </div>
                 );
@@ -1821,28 +1843,29 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 <FontAwesomeIcon icon={faLock} style={{ fontSize: 9 }} /> 私人花費僅你本人可見
               </p>
 
-              {/* Header stats */}
+              {/* Header stats — consolidated: total + inline breakdown
+                  in one block instead of three (was: total / 分攤 / 私人 boxes
+                  stacked vertically). Reduces visual clutter and keeps the
+                  primary number (total) prominent while keeping the
+                  breakdown one tap away. */}
               {ms && (
-                <>
-                  {/* 總支出 */}
-                  <div style={{ background: 'var(--tm-section-bg)', borderRadius: 14, padding: '12px 14px', border: `1px solid ${C.creamDark}`, marginBottom: 8 }}>
-                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>總支出（分攤 ＋ 私人）</p>
-                    <p style={{ fontSize: 20, fontWeight: 800, color: C.bark, margin: 0 }}>NT$ {(sharedBurdenTWD + privateTotalTWD).toLocaleString()}</p>
-                  </div>
-                  {/* 分攤花費 + 私人花費 */}
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                    <div className="tm-stat-paid-box" style={{ flex: 1, background: '#FFF8E8', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
-                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>我的分攤份額</p>
-                      <p style={{ fontSize: 15, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {sharedBurdenTWD.toLocaleString()}</p>
+                <div style={{ background: 'var(--tm-section-bg)', borderRadius: 14, padding: '12px 14px', border: `1px solid ${C.creamDark}`, marginBottom: 10 }}>
+                  <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px' }}>總支出</p>
+                  <p style={{ fontSize: 20, fontWeight: 800, color: C.bark, margin: 0 }}>NT$ {(sharedBurdenTWD + privateTotalTWD).toLocaleString()}</p>
+                  <div style={{ display: 'flex', gap: 12, marginTop: 8, paddingTop: 8, borderTop: `1px dashed ${C.creamDark}` }}>
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 1px' }}>分攤份額</p>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>NT$ {sharedBurdenTWD.toLocaleString()}</p>
                     </div>
-                    <div style={{ flex: 1, background: 'var(--tm-note-5)', borderRadius: 12, padding: '10px 12px', border: `1px solid ${C.creamDark}` }}>
-                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 2px', display: 'flex', alignItems: 'center', gap: 4 }}>
-                        <FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人花費
+                    <div style={{ width: 1, background: C.creamDark, alignSelf: 'stretch' }} />
+                    <div style={{ flex: 1 }}>
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 1px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                        <FontAwesomeIcon icon={faLock} style={{ fontSize: 8 }} />私人
                       </p>
-                      <p className="tm-expense-private-title" style={{ fontSize: 15, fontWeight: 700, color: 'var(--tm-private)', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
+                      <p className="tm-expense-private-title" style={{ fontSize: 13, fontWeight: 700, color: 'var(--tm-private)', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
                     </div>
                   </div>
-                </>
+                </div>
               )}
               {ms && (() => {
                 const detailSettlements = settlements.filter(s => s.from === detailName || s.to === detailName);
