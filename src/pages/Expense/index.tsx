@@ -284,11 +284,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // Regular (non-settlement) expense deletion confirm modal
   const [regularDeleteTarget, setRegularDeleteTarget] = useState<any | null>(null);
   const [settlementDeleteInput, setSettlementDeleteInput] = useState('');
-  const [settlementExpanded, setSettlementExpanded] = useState(false);
+  // Outer settlement panel no longer collapses — 「與我相關」rows always show
+  // (users almost always want to see their own settlements first). Inner
+  // 「其他成員之間」still uses othersExpanded to keep the page short on big trips.
   // Once the user explicitly toggles the panel, stop auto-deciding for them
   // (their preference wins). Tracked via ref so the auto-expand effect below
   // can short-circuit without re-render churn.
-  const settlementUserToggledRef = useRef(false);
   // Sub-fold for "settlement suggestions that don't involve me" — keeps the list tight
   // when the trip has many cross-pair settlements between other members.
   const [othersExpanded, setOthersExpanded] = useState(false);
@@ -1184,13 +1185,6 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const oweMeTotal = oweMeRows.reduce((sum, s) => sum + s.amount, 0);
   const mySettlementCount = iOweRows.length + oweMeRows.length;
 
-  // Auto-expand the suggestion panel when there are few relevant rows; collapse
-  // when busy. Skips after the user has manually toggled — their pref wins.
-  useEffect(() => {
-    if (settlementUserToggledRef.current) return;
-    if (settlements.length === 0) { setSettlementExpanded(false); return; }
-    setSettlementExpanded(mySettlementCount > 0 && mySettlementCount <= 3);
-  }, [mySettlementCount, settlements.length]);
 
   const getMemberColor = (name: string) => members.find((m: any) => m.name === name)?.color || C.sageLight;
   const getMemberAvatar = (name: string) => members.find((m: any) => m.name === name)?.avatarUrl || null;
@@ -3030,37 +3024,17 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
             );
           };
 
-          // Subtitle on the toggle so users see the relevance distribution at a glance.
+          // Subtitle on the header so users see the relevance distribution at a glance.
           // Only shown when both groups have content (otherwise "建議結算方式（N 筆）" is enough).
           const showSplitCount = currentUserName && myDebtCount > 0 && otherDebtCount > 0;
 
-          // Summary line shown when the panel is collapsed and the user has at
-          // least one row touching them. Lets the user judge "is there
-          // anything urgent for me?" without expanding.
-          const collapsedSummary = !settlementExpanded && currentUserName && (iOweRows.length > 0 || oweMeRows.length > 0)
-            ? (
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, fontSize: 11, color: '#4A7A35', padding: '6px 14px 8px', borderTop: '1px dashed #B5CFA7', background: '#F1F8E5', borderRadius: '0 0 14px 14px' }}>
-                {iOweRows.length > 0 && (
-                  <span style={{ fontWeight: 600 }}>
-                    你欠 {iOweRows.length} 人共 <strong>NT$ {iOweTotal.toLocaleString()}</strong>
-                  </span>
-                )}
-                {iOweRows.length > 0 && oweMeRows.length > 0 && <span style={{ opacity: 0.5 }}>·</span>}
-                {oweMeRows.length > 0 && (
-                  <span style={{ fontWeight: 600 }}>
-                    {oweMeRows.length} 人欠你 <strong>NT$ {oweMeTotal.toLocaleString()}</strong>
-                  </span>
-                )}
-              </div>
-            )
-            : null;
-
           return (
             <div style={{ marginBottom: 12 }}>
-              <button
-                onClick={() => { settlementUserToggledRef.current = true; setSettlementExpanded(v => !v); }}
-                className="tm-settlement-toggle"
-                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EAF3DE', borderRadius: collapsedSummary ? '14px 14px 0 0' : 14, padding: '10px 14px', border: '1px solid #B5CFA7', borderBottom: collapsedSummary ? 'none' : '1px solid #B5CFA7', cursor: 'pointer', fontFamily: FONT, marginBottom: settlementExpanded ? 8 : 0 }}>
+              {/* Plain header — no outer collapse. 與我相關 cards always render
+                  below; only 「其他成員之間」 stays collapsible (inner control)
+                  to keep the page short on big trips. */}
+              <div className="tm-settlement-toggle"
+                style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#EAF3DE', borderRadius: 14, padding: '10px 14px', border: '1px solid #B5CFA7', fontFamily: FONT, marginBottom: 8 }}>
                 <span className="tm-settlement-toggle-text" style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                   <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} />
                   建議結算方式（{settlements.length} 筆）
@@ -3070,30 +3044,24 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     </span>
                   )}
                 </span>
-                <span className="tm-settlement-toggle-text" style={{ fontSize: 11, color: '#4A7A35', fontWeight: 600, flexShrink: 0 }}>{settlementExpanded ? '收起 ▲' : '展開 ▼'}</span>
-              </button>
-              {collapsedSummary}
-              {settlementExpanded && (
+              </div>
+              {/* Always-visible: groups that involve me */}
+              {myCreditors.map(renderCreditorCard)}
+              {/* No "mine" rows but trip still has cross-pair suggestions: render others
+                  directly (otherwise the entire panel would be empty). */}
+              {myCreditors.length === 0 && otherCreditors.map(renderCreditorCard)}
+              {/* Sub-collapse: groups that don't involve me, only when there's also "mine" content */}
+              {myCreditors.length > 0 && otherCreditors.length > 0 && (
                 <>
-                  {/* Always-visible: groups that involve me */}
-                  {myCreditors.map(renderCreditorCard)}
-                  {/* No "mine" rows but trip still has cross-pair suggestions: render others
-                      directly (otherwise the entire panel would be empty when expanded). */}
-                  {myCreditors.length === 0 && otherCreditors.map(renderCreditorCard)}
-                  {/* Sub-collapse: groups that don't involve me, only when there's also "mine" content */}
-                  {myCreditors.length > 0 && otherCreditors.length > 0 && (
-                    <>
-                      <button onClick={() => setOthersExpanded(v => !v)}
-                        style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--tm-card-bg)', borderRadius: 12, padding: '8px 12px', border: `1px dashed ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, marginBottom: othersExpanded ? 8 : 0, marginTop: 4 }}>
-                        <span style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6 }}>
-                          <FontAwesomeIcon icon={faUsers} style={{ fontSize: 10 }} />
-                          其他成員之間的建議（{otherDebtCount} 筆）
-                        </span>
-                        <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>{othersExpanded ? '收起 ▲' : '展開 ▼'}</span>
-                      </button>
-                      {othersExpanded && otherCreditors.map(renderCreditorCard)}
-                    </>
-                  )}
+                  <button onClick={() => setOthersExpanded(v => !v)}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--tm-card-bg)', borderRadius: 12, padding: '8px 12px', border: `1px dashed ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, marginBottom: othersExpanded ? 8 : 0, marginTop: 4 }}>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <FontAwesomeIcon icon={faUsers} style={{ fontSize: 10 }} />
+                      其他成員之間的建議（{otherDebtCount} 筆）
+                    </span>
+                    <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>{othersExpanded ? '收起 ▲' : '展開 ▼'}</span>
+                  </button>
+                  {othersExpanded && otherCreditors.map(renderCreditorCard)}
                 </>
               )}
             </div>
