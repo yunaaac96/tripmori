@@ -174,7 +174,12 @@ function App() {
             // every time they reopen the app, kicking the trip back to
             // MY TRIPS instead of staying in 已結束.
             archived:       prev?.archived,
-          };
+            // Preserve exchangeRate — same bug pattern as `archived`. Without
+            // this every Google auth state change wiped the trip's FX rate
+            // back to undefined, causing Expense form to fall back to the
+            // hardcoded CURRENCY_TO_TWD table instead of the user's chosen rate.
+            exchangeRate:   data.exchangeRate ?? (prev as any)?.exchangeRate,
+          } as any;
           map.set(d.id, p);
         });
       };
