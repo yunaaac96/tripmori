@@ -44,6 +44,8 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
   const [authError, setAuthError]       = useState<string | null>(null);
   const [bindingSummaryOpen, setBindingSummaryOpen] = useState(false);
   const [editorListOpen, setEditorListOpen]         = useState(false);
+  // Share section is collapsible (default expanded — high-frequency action)
+  const [shareSectionOpen, setShareSectionOpen]     = useState(true);
   const [proxyGrantOpen, setProxyGrantOpen]         = useState(false);
   const [savingProxy, setSavingProxy]               = useState(false);
 
@@ -818,7 +820,7 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
 
       {/* Google sign-in / status — shown first, right below header */}
       {!googleUid && !firestore.isReadOnly && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
+        <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
           <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
             <FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 登入 Google 後可綁定成員卡，以自己的身份留言
           </p>
@@ -832,74 +834,88 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
           )}
         </div>
       )}
+      {/* Google + 推播 — 合併為一張卡（兩者都是「裝置 / 帳號」相關，
+          以前分兩塊垂直排會佔太多空間）*/}
       {googleUid && (
-        <div style={{ margin: '12px 16px 0', background: '#E0F0D8', borderRadius: 16, padding: '10px 14px', border: '1.5px solid #C2E0B4', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 14, color: '#4A7A35' }}><FontAwesomeIcon icon={faSquareCheck} /></span>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
-            <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0' }}>{googleEmail}</p>
-          </div>
-          <button onClick={() => signOut(auth).catch(console.error)}
-            style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
-            登出
-          </button>
-        </div>
-      )}
-
-      {/* ── Notification permission status ── */}
-      {'Notification' in window && googleUid && ownMember && (
-        <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '10px 14px', boxShadow: C.shadowSm, border: `1.5px solid ${notifPermission === 'granted' ? '#C2E0B4' : '#EDE8D5'}`, display: 'flex', alignItems: 'center', gap: 10 }}>
-          <span style={{ fontSize: 16, color: notifPermission === 'granted' ? '#4A7A35' : notifPermission === 'denied' ? '#9A6030' : C.barkLight }}>
-            <FontAwesomeIcon icon={notifPermission === 'granted' ? faBell : faBellSlash} />
-          </span>
-          <div style={{ flex: 1 }}>
-            <p style={{ fontSize: 12, fontWeight: 700, color: notifPermission === 'granted' ? '#4A7A35' : C.bark, margin: 0 }}>
-              推播通知：{notifPermission === 'granted' ? '已開啟' : notifPermission === 'denied' ? '已拒絕' : '尚未設定'}
-            </p>
-            {notifPermission === 'granted' && (
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>
-                {fcmSynced ? '✓ 裝置已完成同步' : '點擊「同步裝置」以確保此裝置可收到通知'}
-              </p>
-            )}
-            {notifPermission === 'denied' && (
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>請點擊瀏覽器網址列左側的圖示，在「通知」設定中改為允許</p>
-            )}
-            {notifPermission === 'default' && (
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>開啟後可收到留言、反應、航班提醒等通知</p>
-            )}
-          </div>
-          {notifPermission === 'default' && (
-            <button onClick={handleRequestNotif}
-              style={{ fontSize: 11, fontWeight: 700, color: 'white', background: C.earth, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
-              啟用通知
+        <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, boxShadow: C.shadowSm, border: `1.5px solid ${notifPermission === 'granted' ? '#C2E0B4' : '#EDE8D5'}`, overflow: 'hidden' }}>
+          {/* Row 1: Google sign-in status + 登出 */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#E0F0D8' }}>
+            <span style={{ fontSize: 14, color: '#4A7A35' }}><FontAwesomeIcon icon={faSquareCheck} /></span>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ fontSize: 12, fontWeight: 700, color: '#4A7A35', margin: 0 }}>已登入 Google</p>
+              <p style={{ fontSize: 11, color: '#6A8F5C', margin: '1px 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{googleEmail}</p>
+            </div>
+            <button onClick={() => signOut(auth).catch(console.error)}
+              style={{ fontSize: 11, color: '#9A3A3A', background: '#FAE0E0', border: 'none', borderRadius: 8, padding: '4px 10px', cursor: 'pointer', fontFamily: FONT, fontWeight: 600, flexShrink: 0 }}>
+              登出
             </button>
-          )}
-          {notifPermission === 'granted' && (
-            <button onClick={handleRequestNotif} disabled={fcmSyncing}
-              style={{ fontSize: 11, fontWeight: 700, color: fcmSynced ? '#4A7A35' : 'white', background: fcmSynced ? '#E0F0D8' : C.earth, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: fcmSyncing ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0, opacity: fcmSyncing ? 0.6 : 1, transition: 'all 0.2s' }}>
-              {fcmSyncing ? '同步中…' : fcmSynced ? '✓ 已同步' : '同步裝置'}
-            </button>
+          </div>
+          {/* Row 2: 推播通知狀態 + 動作按鈕 */}
+          {'Notification' in window && ownMember && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderTop: `1px solid ${C.creamDark}` }}>
+              <span style={{ fontSize: 16, color: notifPermission === 'granted' ? '#4A7A35' : notifPermission === 'denied' ? '#9A6030' : C.barkLight }}>
+                <FontAwesomeIcon icon={notifPermission === 'granted' ? faBell : faBellSlash} />
+              </span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ fontSize: 12, fontWeight: 700, color: notifPermission === 'granted' ? '#4A7A35' : C.bark, margin: 0 }}>
+                  推播通知：{notifPermission === 'granted' ? '已開啟' : notifPermission === 'denied' ? '已拒絕' : '尚未設定'}
+                </p>
+                {notifPermission === 'granted' && (
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>
+                    {fcmSynced ? '✓ 裝置已完成同步' : '點擊「同步裝置」以確保此裝置可收到通知'}
+                  </p>
+                )}
+                {notifPermission === 'denied' && (
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>請至瀏覽器網址列圖示 →「通知」設定改為允許</p>
+                )}
+                {notifPermission === 'default' && (
+                  <p style={{ fontSize: 11, color: C.barkLight, margin: '2px 0 0' }}>開啟後可收到留言、反應、航班提醒等通知</p>
+                )}
+              </div>
+              {notifPermission === 'default' && (
+                <button onClick={handleRequestNotif}
+                  style={{ fontSize: 11, fontWeight: 700, color: 'white', background: C.earth, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+                  啟用通知
+                </button>
+              )}
+              {notifPermission === 'granted' && (
+                <button onClick={handleRequestNotif} disabled={fcmSyncing}
+                  style={{ fontSize: 11, fontWeight: 700, color: fcmSynced ? '#4A7A35' : 'white', background: fcmSynced ? '#E0F0D8' : C.earth, border: 'none', borderRadius: 8, padding: '6px 12px', cursor: fcmSyncing ? 'default' : 'pointer', fontFamily: FONT, flexShrink: 0, opacity: fcmSyncing ? 0.6 : 1, transition: 'all 0.2s' }}>
+                  {fcmSyncing ? '同步中…' : fcmSynced ? '✓ 已同步' : '同步裝置'}
+                </button>
+              )}
+            </div>
           )}
         </div>
       )}
 
       {/* Share project keys (Owner only) */}
-      {project?.role === 'owner' && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faKey} style={{ fontSize: 11 }} /> 分享此旅行</p>
+      {/* 分享此旅行 — Owner sees full UI (含協作金鑰邀請編輯)；Editor 只看
+          得到訪客分享（避免 Editor 無限擴張 editor list，但讓他們可以
+          把訪客連結傳給家人觀看）。*/}
+      {(project?.role === 'owner' || project?.role === 'editor') && (
+        <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
+          <button onClick={() => setShareSectionOpen(v => !v)}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'none', border: 'none', padding: 0, marginBottom: shareSectionOpen ? 10 : 0, cursor: 'pointer', fontFamily: FONT }}>
+            <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faKey} style={{ fontSize: 11 }} /> 分享此旅行</p>
+            <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600 }}>{shareSectionOpen ? '收起 ▲' : '展開 ▼'}</span>
+          </button>
+          {shareSectionOpen && (<>
           {/* One-click share buttons — native share sheet on mobile, clipboard
               fallback on desktop. Templates auto-fill the trip name, the
               collab key, and the visitor link so the owner can send straight
               away without manually composing a message. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-            <button onClick={() => shareOrCopy(buildInviteMessage(), 'invite-msg', `加入【${project?.title || '我們的旅行'}】`)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'invite-msg' ? '#E0F0D8' : C.sage, color: copied === 'invite-msg' ? '#4A7A35' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FontAwesomeIcon icon={copied === 'invite-msg' ? faSquareCheck : faArrowUpFromBracket} style={{ fontSize: 14 }} />
-                <span>{copied === 'invite-msg' ? '已複製，可貼到聊天' : '邀請朋友共同編輯'}</span>
-              </span>
-              <span style={{ fontSize: 10, opacity: 0.85, fontWeight: 600 }}>含安裝步驟＋金鑰</span>
-            </button>
+            {project?.role === 'owner' && (
+              <button onClick={() => shareOrCopy(buildInviteMessage(), 'invite-msg', `加入【${project?.title || '我們的旅行'}】`)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'invite-msg' ? '#E0F0D8' : C.sage, color: copied === 'invite-msg' ? '#4A7A35' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FontAwesomeIcon icon={copied === 'invite-msg' ? faSquareCheck : faArrowUpFromBracket} style={{ fontSize: 14 }} />
+                  <span>{copied === 'invite-msg' ? '已複製，可貼到聊天' : '邀請朋友共同編輯'}</span>
+                </span>
+                <span style={{ fontSize: 10, opacity: 0.85, fontWeight: 600 }}>含安裝步驟＋金鑰</span>
+              </button>
+            )}
             <button onClick={() => shareOrCopy(buildVisitorMessage(), 'visit-msg', `分享【${project?.title || '我們的旅行'}】行程`)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'visit-msg' ? '#D8EDF8' : C.sky, color: copied === 'visit-msg' ? '#1A6A9A' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -910,21 +926,23 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
             </button>
           </div>
           <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 8px' }}>
-            或單獨複製金鑰／連結：
+            {project?.role === 'owner' ? '或單獨複製金鑰／連結：' : '或直接複製連結：'}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* 協作金鑰 — tap to copy */}
-            <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
-              className={copied === 'collab' ? 'tm-copied-success' : 'tm-collab-key-bg'}
-              style={{ background: copied === 'collab' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                <p className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : undefined, margin: 0 }}>協作金鑰（編輯者）</p>
-                <span className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'collab' ? <><FontAwesomeIcon icon={faSquareCheck} style={{ marginRight: 3 }} />已複製</> : <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>點擊複製 <FontAwesomeIcon icon={faClipboardList} /></span>}</span>
+            {/* 協作金鑰 — Owner only (Editor 不能擴張 editor list) */}
+            {project?.role === 'owner' && (
+              <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
+                className={copied === 'collab' ? 'tm-copied-success' : 'tm-collab-key-bg'}
+                style={{ background: copied === 'collab' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                  <p className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : undefined, margin: 0 }}>協作金鑰（編輯者）</p>
+                  <span className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'collab' ? <><FontAwesomeIcon icon={faSquareCheck} style={{ marginRight: 3 }} />已複製</> : <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>點擊複製 <FontAwesomeIcon icon={faClipboardList} /></span>}</span>
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{firestoreCollaboratorKey || project?.collaboratorKey || '—'}</p>
+                <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
               </div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{firestoreCollaboratorKey || project?.collaboratorKey || '—'}</p>
-              <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
-            </div>
-            {/* 訪客連結 — tap to copy */}
+            )}
+            {/* 訪客連結 — Owner + Editor 都可以分享 */}
             <div onClick={() => handleCopy(`${window.location.origin}/?visit=${project.id}`, 'visit')}
               className={copied === 'visit' ? 'tm-copied-success' : 'tm-visitor-link-bg'}
               style={{ background: copied === 'visit' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
@@ -936,27 +954,25 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
               <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>對方點擊連結即可直接瀏覽行程（無需登入或輸入代碼）</p>
             </div>
           </div>
+          </>)}
         </div>
       )}
 
-      {/* ── PWA install（顯示條件：瀏覽器支援且尚未安裝）── */}
+      {/* PWA 安裝 — 改成單行 compact，去掉副標說明，只留 icon + 文字 + 按鈕 */}
       {pwaInstallAvailable && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
-          <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 6px', display: 'flex', alignItems: 'center', gap: 6 }}>
-            <FontAwesomeIcon icon={faMobileScreen} style={{ fontSize: 13 }} /> 安裝 App
-          </p>
-          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px' }}>將 TripMori 加入主畫面，享受原生 App 體驗。</p>
+        <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '10px 14px', boxShadow: C.shadowSm, display: 'flex', alignItems: 'center', gap: 10 }}>
+          <FontAwesomeIcon icon={faMobileScreen} style={{ fontSize: 16, color: C.sageDark, flexShrink: 0 }} />
+          <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: C.bark }}>加入主畫面，原生 App 體驗</span>
           <button onClick={onPwaInstall} className="tm-btn-solid-sage"
-            style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-            <FontAwesomeIcon icon={faDownload} style={{ fontSize: 13 }} />
-            加入主畫面
+            style={{ padding: '6px 14px', borderRadius: 8, border: 'none', background: C.sage, color: 'white', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <FontAwesomeIcon icon={faDownload} style={{ fontSize: 11 }} />安裝
           </button>
         </div>
       )}
 
       {/* Editor list management (Owner only, admin mode) */}
       {adminMode && allowedEditorUids.length > 0 && (
-        <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, boxShadow: C.shadowSm, overflow: 'hidden' }}>
+        <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, boxShadow: C.shadowSm, overflow: 'hidden' }}>
           <button onClick={() => setEditorListOpen(v => !v)}
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
             <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, display: 'flex', alignItems: 'center', gap: 5 }}><FontAwesomeIcon icon={faPen} style={{ fontSize: 11 }} /> 編輯者名單</span>
