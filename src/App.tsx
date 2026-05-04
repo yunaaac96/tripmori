@@ -169,6 +169,11 @@ function App() {
             // Preserve member sort order — read from Firestore first,
             // fall back to what was previously saved in localStorage.
             memberOrder:    (data.memberOrder as string[] | undefined) ?? prev?.memberOrder,
+            // Preserve local-only flags (not stored in Firestore). Without
+            // this the sync would overwrite the user's local archive choice
+            // every time they reopen the app, kicking the trip back to
+            // MY TRIPS instead of staying in 已結束.
+            archived:       prev?.archived,
           };
           map.set(d.id, p);
         });
