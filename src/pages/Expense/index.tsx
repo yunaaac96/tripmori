@@ -1810,16 +1810,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
           e.isPrivate && e.privateOwnerUid && e.privateOwnerUid === googleUid
         );
 
-        // Tab selection → which list to show + pie input
+        // Tab selection → which list to show + pie input.
+        // Lists keep awaitCard items so the user can see them (with ⏳ badge),
+        // but sums + pie use an "active" subset that excludes them — same
+        // convention as buildPersonalStatement / computeMemberStats. The
+        // banner below explains the discrepancy.
         const tab = detailTab;
         const tabExpenses =
           tab === 'shared' ? sharedExpenses :
           tab === 'private' ? privateExpenses :
           [...sharedExpenses, ...privateExpenses];
+        const tabExpensesActive = tabExpenses.filter((e: any) => !e.awaitCardStatement);
 
         // Display list = tabExpenses + optional category filter + date sort.
-        // Pie chart still uses unfiltered tabExpenses as the overview (per UX
-        // decision — pie shows the whole picture, list narrows down).
+        // Pie chart still uses unfiltered tabExpensesActive as the overview
+        // (per UX decision — pie shows the whole picture, list narrows down).
         const displayedExpenses = (detailCategoryFilter
           ? tabExpenses.filter((e: any) => e.category === detailCategoryFilter)
           : tabExpenses
@@ -1846,14 +1851,29 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         //     behind "目前花費 NT$ 0" when brian paid everything: the user
         //     still consumed their share, so share is what they expect to
         //     see here.
+        // awaitCard items excluded from sums + pie so this matches
+        // buildPersonalStatement.mySharesTotal exactly. The 等卡單 inline
+        // note in the stats block surfaces what's still pending.
         const sharedBurdenTWD = sharedExpenses
+          .filter((e: any) => !e.awaitCardStatement)
           .reduce((s: number, e: any) => s + (e.isIncome ? -1 : 1) * getPersonalShare(e, detailName, memberNames), 0);
         const privateTotalTWD = privateExpenses
+          .filter((e: any) => !e.awaitCardStatement)
           .reduce((s: number, e: any) => s + (e.isIncome ? -1 : 1) * effectiveTWD(e), 0);
+        // Awaiting items — surface to the user instead of silently dropping.
+        const awaitingItems = [...sharedExpenses, ...privateExpenses]
+          .filter((e: any) => e.awaitCardStatement);
+        const awaitingCount = awaitingItems.length;
+        const awaitingShareTWD = awaitingItems.reduce((s: number, e: any) => {
+          const sign = e.isIncome ? -1 : 1;
+          if (e.isPrivate) return s + sign * effectiveTWD(e);
+          return s + sign * getPersonalShare(e, detailName, memberNames);
+        }, 0);
 
-        // Category breakdown for the currently selected tab
+        // Category breakdown for the currently selected tab — uses Active
+        // (no awaitCard) so the pie matches the headline sums.
         const tabBreakdown = Object.entries(EXPENSE_CATEGORY_MAP).map(([key, info]) => {
-          const total = tabExpenses
+          const total = tabExpensesActive
             .filter((e: any) => e.category === key)
             .reduce((s: number, e: any) => s + shareFor(e), 0);
           return { key, label: info.label, emoji: info.emoji, value: total };
@@ -1905,6 +1925,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       <p className="tm-expense-private-title" style={{ fontSize: 13, fontWeight: 700, color: 'var(--tm-private)', margin: 0 }}>NT$ {privateTotalTWD.toLocaleString()}</p>
                     </div>
                   </div>
+                  {/* AwaitCard hint — sums above EXCLUDE 等卡單 (matches the
+                      settlement engine's convention). Surface the pending
+                      amount here so users notice and remember to fill in
+                      the actual TWD when the statement arrives. */}
+                  {awaitingCount > 0 && (
+                    <p style={{ fontSize: 10, color: '#9A6800', opacity: 0.85, margin: '8px 0 0', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <FontAwesomeIcon icon={faHourglass} style={{ fontSize: 9 }} />
+                      等卡單 {awaitingCount} 筆 NT$ {Math.abs(awaitingShareTWD).toLocaleString()} 尚未計入（卡單到後請至該筆補實際金額）
+                    </p>
+                  )}
                 </div>
               )}
               {ms && (() => {
