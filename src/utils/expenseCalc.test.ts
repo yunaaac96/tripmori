@@ -188,15 +188,27 @@ describe('getPersonalShare', () => {
       expect(getPersonalShare(e, 'Carol', members)).toBe(34);
     });
 
-    it('小數百分比進位', () => {
-      // 1001 * 30% = 300.3 → ceil = 301
+    it('小數百分比 — largest-remainder（保證 sum === total）', () => {
+      // Largest-remainder method: floor 各人份額後，把餘額分給小數最大者，
+      // 確保 sum(shares) === total。此處 1001 * [30%,30%,40%]:
+      //   floors: Alice=300, Bob=300, Carol=400 → 加總 1000 → 餘 1
+      //   小數最大為 Carol 0.4 → +1 → Carol=401
+      //   Alice / Bob 維持 floor 值 300（不像 Math.ceil 會多算到 301，
+      //   那會造成 sum 超過 total）
       const e = {
         payer: 'Alice', amountTWD: 1001,
         splitMode: 'weighted' as const,
         percentages: { Alice: 30, Bob: 30, Carol: 40 },
       };
-      expect(getPersonalShare(e, 'Alice', members)).toBe(Math.ceil(1001 * 0.30));
-      expect(getPersonalShare(e, 'Carol', members)).toBe(Math.ceil(1001 * 0.40));
+      expect(getPersonalShare(e, 'Alice', members)).toBe(300);
+      expect(getPersonalShare(e, 'Bob', members)).toBe(300);
+      expect(getPersonalShare(e, 'Carol', members)).toBe(401);
+      // Sanity: 三人加總應等於原金額
+      expect(
+        getPersonalShare(e, 'Alice', members) +
+        getPersonalShare(e, 'Bob', members) +
+        getPersonalShare(e, 'Carol', members)
+      ).toBe(1001);
     });
   });
 

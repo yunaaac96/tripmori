@@ -9,7 +9,7 @@ import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply, faCircleInfo } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faArrowUp, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply, faCircleInfo, faXmark } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -88,7 +88,7 @@ function useDarkMode(): boolean {
   return dark;
 }
 
-function PieChart({ data }: { data: { key: string; value: number; label: string }[] }) {
+function PieChart({ data, onSliceClick }: { data: { key: string; value: number; label: string }[]; onSliceClick?: (key: string) => void }) {
   const dark = useDarkMode();
   const PIE_COLORS = dark ? PIE_COLORS_DARK : PIE_COLORS_LIGHT;
   const total = data.reduce((s, d) => s + d.value, 0);
@@ -115,12 +115,17 @@ function PieChart({ data }: { data: { key: string; value: number; label: string 
   // Single-slice edge case: SVG arc with coincident start/end points collapses
   // to an invisible sliver. Render a plain filled circle instead.
   const onlyOne = slices.length === 1;
+  const clickable = !!onSliceClick;
   return (
     <svg viewBox="0 0 160 160" style={{ width: 130, height: 130, flexShrink: 0 }}>
       {onlyOne ? (
-        <circle cx={cx} cy={cy} r={r} fill={PIE_COLORS[slices[0].key] || (dark ? '#505050' : '#C8C8C8')} stroke={strokeColor} strokeWidth={1.5} />
+        <circle cx={cx} cy={cy} r={r} fill={PIE_COLORS[slices[0].key] || (dark ? '#505050' : '#C8C8C8')} stroke={strokeColor} strokeWidth={1.5}
+          style={clickable ? { cursor: 'pointer' } : undefined}
+          onClick={clickable ? () => onSliceClick!(slices[0].key) : undefined} />
       ) : slices.map(s => (
-        <path key={s.key} d={s.path} fill={PIE_COLORS[s.key] || (dark ? '#505050' : '#C8C8C8')} stroke={strokeColor} strokeWidth={1.5} />
+        <path key={s.key} d={s.path} fill={PIE_COLORS[s.key] || (dark ? '#505050' : '#C8C8C8')} stroke={strokeColor} strokeWidth={1.5}
+          style={clickable ? { cursor: 'pointer' } : undefined}
+          onClick={clickable ? () => onSliceClick!(s.key) : undefined} />
       ))}
     </svg>
   );
@@ -296,6 +301,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [stmtPaymentsOpen, setStmtPaymentsOpen] = useState(false);
   const [stmtSharesOpen, setStmtSharesOpen] = useState(true);
   const [stmtShowSettled, setStmtShowSettled] = useState(false);
+  // Sort direction for detail / statement lists. Default = newest first
+  // (most recent costs at top — typical traveler workflow during the trip).
+  const [detailSortDesc, setDetailSortDesc] = useState(true);
+  const [stmtSortDesc,   setStmtSortDesc]   = useState(true);
+  // Category click-filter on the 我的記帳明細 pie chart. null = no filter.
+  const [detailCategoryFilter, setDetailCategoryFilter] = useState<string | null>(null);
   // Reset section state whenever a different person's statement is opened
   useEffect(() => {
     if (settlementDetailName) { setStmtPaymentsOpen(false); setStmtSharesOpen(false); }
@@ -1713,7 +1724,13 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 const allMyShares = stmt.myShares.filter(item => item.payer !== name);
                 const unpaidShares = allMyShares.filter(item => !isShareSettled(item));
                 const settledCount = allMyShares.length - unpaidShares.length;
-                const displayShares = stmtShowSettled ? allMyShares : unpaidShares;
+                const displayShares = (stmtShowSettled ? allMyShares : unpaidShares)
+                  .slice()
+                  .sort((a, b) => {
+                    const da = a.date || '';
+                    const db = b.date || '';
+                    return stmtSortDesc ? db.localeCompare(da) : da.localeCompare(db);
+                  });
                 const unpaidTotal = unpaidShares.reduce((sum, item) => {
                   const sign = item.isIncome ? -1 : 1;
                   return sum + sign * (item.myShare || 0);
@@ -1737,20 +1754,28 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     </button>
                     {stmtSharesOpen && (
                       <>
-                        {/* 也顯示已結清 toggle — only render if there are settled
-                            items to reveal, otherwise the toggle has no effect. */}
-                        {settledCount > 0 && (
-                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 8, marginTop: 6 }}>
-                            <span style={{ fontSize: 11, color: C.barkLight }}>也顯示已結清（{settledCount}）</span>
-                            <button
-                              onClick={() => setStmtShowSettled(v => !v)}
-                              role="switch"
-                              aria-checked={stmtShowSettled}
-                              style={{ width: 32, height: 18, borderRadius: 9, border: 'none', background: stmtShowSettled ? C.sageDark : C.creamDark, position: 'relative', cursor: 'pointer', padding: 0, transition: 'background 0.2s' }}>
-                              <span style={{ position: 'absolute', top: 2, left: stmtShowSettled ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
-                            </button>
-                          </div>
-                        )}
+                        {/* Toggles row: 也顯示已結清（only when settled items exist）
+                            + 排序方向切換。Right-aligned for tidy stacking. */}
+                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 10, marginTop: 6, flexWrap: 'wrap' }}>
+                          <button onClick={() => setStmtSortDesc(v => !v)}
+                            title={stmtSortDesc ? '改為由舊到新' : '改為由新到舊'}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: C.barkLight, background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 10, padding: '3px 8px', cursor: 'pointer', fontFamily: FONT }}>
+                            <FontAwesomeIcon icon={stmtSortDesc ? faArrowDown : faArrowUp} style={{ fontSize: 9 }} />
+                            {stmtSortDesc ? '由新到舊' : '由舊到新'}
+                          </button>
+                          {settledCount > 0 && (
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{ fontSize: 11, color: C.barkLight }}>也顯示已結清（{settledCount}）</span>
+                              <button
+                                onClick={() => setStmtShowSettled(v => !v)}
+                                role="switch"
+                                aria-checked={stmtShowSettled}
+                                style={{ width: 32, height: 18, borderRadius: 9, border: 'none', background: stmtShowSettled ? C.sageDark : C.creamDark, position: 'relative', cursor: 'pointer', padding: 0, transition: 'background 0.2s' }}>
+                                <span style={{ position: 'absolute', top: 2, left: stmtShowSettled ? 16 : 2, width: 14, height: 14, borderRadius: '50%', background: 'white', boxShadow: '0 1px 3px rgba(0,0,0,0.2)', transition: 'left 0.2s' }} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
                         <div style={{ paddingLeft: 2, paddingRight: 2, marginTop: 2 }}>
                           {displayShares.map(item => (
                             <StmtRow key={item.id} item={item} showPayer={true} isSettled={isShareSettled(item)} />
@@ -1791,6 +1816,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
           tab === 'shared' ? sharedExpenses :
           tab === 'private' ? privateExpenses :
           [...sharedExpenses, ...privateExpenses];
+
+        // Display list = tabExpenses + optional category filter + date sort.
+        // Pie chart still uses unfiltered tabExpenses as the overview (per UX
+        // decision — pie shows the whole picture, list narrows down).
+        const displayedExpenses = (detailCategoryFilter
+          ? tabExpenses.filter((e: any) => e.category === detailCategoryFilter)
+          : tabExpenses
+        ).slice().sort((a: any, b: any) => {
+          const da = a.date || '';
+          const db = b.date || '';
+          return detailSortDesc ? db.localeCompare(da) : da.localeCompare(db);
+        });
+        const filterCatLabel = detailCategoryFilter
+          ? (EXPENSE_CATEGORY_MAP[detailCategoryFilter]?.label || detailCategoryFilter)
+          : '';
 
         // Personal share for tab rows. Income records subtract — refunds reduce
         // your share so the pie chart and totals must mirror that.
@@ -1897,32 +1937,63 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 {tabBtn('private', <><FontAwesomeIcon icon={faLock} style={{ fontSize: 10 }} />私人</>, privateExpenses.length, 'var(--tm-private)')}
               </div>
 
-              {/* Pie + category breakdown for selected tab */}
+              {/* Pie + category breakdown for selected tab. Slices and the
+                  rows beside them are clickable → filter the list below by
+                  the chosen category. Pie itself never re-renders to a single
+                  slice; it stays an overview. */}
               {tabTotal > 0 && (
                 <div style={{ display: 'flex', gap: 12, alignItems: 'center', marginBottom: 14, padding: '10px', borderRadius: 12, border: `1px solid ${C.creamDark}`, background: 'var(--tm-card-bg)' }}>
                   <div style={{ flexShrink: 0 }}>
-                    <PieChart data={tabBreakdown} />
+                    <PieChart data={tabBreakdown} onSliceClick={(key) =>
+                      setDetailCategoryFilter(prev => prev === key ? null : key)
+                    } />
                   </div>
                   <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 4 }}>
                     {tabBreakdown.map(d => {
                       const pct = Math.round(d.value / tabTotal * 100);
+                      const isSel = detailCategoryFilter === d.key;
                       return (
-                        <div key={d.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11 }}>
+                        <button key={d.key}
+                          onClick={() => setDetailCategoryFilter(prev => prev === d.key ? null : d.key)}
+                          style={{ all: 'unset', display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 11, cursor: 'pointer', padding: '2px 4px', borderRadius: 6, background: isSel ? 'var(--tm-section-bg)' : 'transparent', opacity: detailCategoryFilter && !isSel ? 0.5 : 1, fontFamily: FONT, fontWeight: 'normal' }}>
                           <span style={{ display: 'flex', alignItems: 'center', gap: 5, color: C.bark }}>
                             <span style={{ width: 8, height: 8, borderRadius: '50%', background: PIE_COLORS[d.key] || '#999' }} />
                             {d.label}
                           </span>
                           <span style={{ color: C.barkLight, fontWeight: 600 }}>NT$ {d.value.toLocaleString()} · {pct}%</span>
-                        </div>
+                        </button>
                       );
                     })}
                   </div>
                 </div>
               )}
 
-              <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', fontWeight: 600 }}>共 {tabExpenses.length} 筆</p>
+              {/* List header: count + filter chip + sort toggle */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8, margin: '0 0 10px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                  <span style={{ fontSize: 11, color: C.barkLight, fontWeight: 600, flexShrink: 0 }}>
+                    共 {displayedExpenses.length} 筆
+                    {detailCategoryFilter && tabExpenses.length !== displayedExpenses.length && (
+                      <span style={{ opacity: 0.6 }}>（{tabExpenses.length} 中）</span>
+                    )}
+                  </span>
+                  {detailCategoryFilter && (
+                    <button onClick={() => setDetailCategoryFilter(null)}
+                      style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: C.bark, background: 'var(--tm-section-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 10, padding: '2px 8px', cursor: 'pointer', fontFamily: FONT }}>
+                      <span>{filterCatLabel}</span>
+                      <FontAwesomeIcon icon={faXmark} style={{ fontSize: 9 }} />
+                    </button>
+                  )}
+                </div>
+                <button onClick={() => setDetailSortDesc(v => !v)}
+                  title={detailSortDesc ? '改為由舊到新' : '改為由新到舊'}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10, fontWeight: 700, color: C.barkLight, background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 10, padding: '3px 8px', cursor: 'pointer', fontFamily: FONT, flexShrink: 0 }}>
+                  <FontAwesomeIcon icon={detailSortDesc ? faArrowDown : faArrowUp} style={{ fontSize: 9 }} />
+                  {detailSortDesc ? '由新到舊' : '由舊到新'}
+                </button>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {tabExpenses.map((e: any) => {
+                {displayedExpenses.map((e: any) => {
                   const share = shareFor(e);
                   const amtTWD = effectiveTWD(e);
                   const isPayer = e.payer === detailName;
@@ -1955,8 +2026,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                     </div>
                   );
                 })}
-                {tabExpenses.length === 0 && (
-                  <p style={{ textAlign: 'center', fontSize: 13, color: C.barkLight, padding: '24px 0' }}>此分類目前沒有記帳</p>
+                {displayedExpenses.length === 0 && (
+                  <p style={{ textAlign: 'center', fontSize: 13, color: C.barkLight, padding: '24px 0' }}>
+                    {detailCategoryFilter ? `「${filterCatLabel}」分類沒有符合的記帳` : '此分類目前沒有記帳'}
+                  </p>
                 )}
               </div>
             </div>
@@ -2729,7 +2802,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 const isMe = name === currentUserName;
                 return (
                   <div key={ms.name}
-                    onClick={() => { if (isMe) { setDetailTab('all'); setMemberDetailName(ms.name); } }}
+                    onClick={() => { if (isMe) { setDetailTab('all'); setDetailCategoryFilter(null); setMemberDetailName(ms.name); } }}
                     style={{ background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, flexShrink: 0, width: 160, scrollSnapAlign: 'start', border: isMe ? `2px solid ${C.sageDark}` : undefined, cursor: isMe ? 'pointer' : 'default', userSelect: 'none' }}>
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 1 }}>
                       <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{ms.name}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}</p>
