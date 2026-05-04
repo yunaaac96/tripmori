@@ -3112,28 +3112,41 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
             </div>
             {showPie && (
               <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
-                <PieChart data={categoryBreakdown} />
+                {/* Pie slices + category rows are click filters → toggle the
+                    existing filterCat state (used by the chip row below). */}
+                <PieChart data={categoryBreakdown} onSliceClick={(key) =>
+                  setFilterCat(prev => prev === key ? 'all' : key)
+                } />
                 <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 4, justifyContent: 'center' }}>
-                  {categoryBreakdown.map(d => (
-                    <div key={d.key} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <div style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[d.key] || '#C8C8C8', flexShrink: 0 }} />
-                      <FontAwesomeIcon icon={CATEGORY_ICONS[d.key] || CATEGORY_ICONS.other} style={{ fontSize: 11, color: C.barkLight, width: 12 }} />
-                      <span style={{ fontSize: 11, color: C.bark, flex: 1 }}>{d.label}</span>
-                      <span style={{ fontSize: 11, color: C.earth, fontWeight: 600 }}>{catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%</span>
-                    </div>
-                  ))}
+                  {categoryBreakdown.map(d => {
+                    const isSel = filterCat === d.key;
+                    return (
+                      <button key={d.key}
+                        onClick={() => setFilterCat(prev => prev === d.key ? 'all' : d.key)}
+                        style={{ all: 'unset', display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', padding: '2px 4px', borderRadius: 6, background: isSel ? 'var(--tm-section-bg)' : 'transparent', opacity: filterCat !== 'all' && !isSel ? 0.5 : 1, fontFamily: FONT }}>
+                        <div style={{ width: 10, height: 10, borderRadius: 3, background: PIE_COLORS[d.key] || '#C8C8C8', flexShrink: 0 }} />
+                        <FontAwesomeIcon icon={CATEGORY_ICONS[d.key] || CATEGORY_ICONS.other} style={{ fontSize: 11, color: C.barkLight, width: 12 }} />
+                        <span style={{ fontSize: 11, color: C.bark, flex: 1 }}>{d.label}</span>
+                        <span style={{ fontSize: 11, color: C.earth, fontWeight: 600 }}>{catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%</span>
+                      </button>
+                    );
+                  })}
                 </div>
               </div>
             )}
             {!showPie && (
               <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 6 }}>
-                {categoryBreakdown.map(d => (
-                  <span key={d.key} className={`tm-expense-chip tm-expense-chip-${d.key}`}
-                    style={{ fontSize: 11, background: EXPENSE_CATEGORY_MAP[d.key]?.bg || '#F0F0F0', borderRadius: 8, padding: '5px 10px', color: C.bark, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
-                    <FontAwesomeIcon icon={CATEGORY_ICONS[d.key] || CATEGORY_ICONS.other} style={{ fontSize: 10 }} />
-                    {d.label} {catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%
-                  </span>
-                ))}
+                {categoryBreakdown.map(d => {
+                  const isSel = filterCat === d.key;
+                  return (
+                    <button key={d.key} className={`tm-expense-chip tm-expense-chip-${d.key}`}
+                      onClick={() => setFilterCat(prev => prev === d.key ? 'all' : d.key)}
+                      style={{ fontSize: 11, background: EXPENSE_CATEGORY_MAP[d.key]?.bg || '#F0F0F0', borderRadius: 8, padding: '5px 10px', color: C.bark, fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: 5, border: isSel ? `1.5px solid ${C.sageDark}` : '1.5px solid transparent', cursor: 'pointer', fontFamily: FONT, opacity: filterCat !== 'all' && !isSel ? 0.5 : 1 }}>
+                      <FontAwesomeIcon icon={CATEGORY_ICONS[d.key] || CATEGORY_ICONS.other} style={{ fontSize: 10 }} />
+                      {d.label} {catTotal > 0 ? Math.round(d.value / catTotal * 100) : 0}%
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
