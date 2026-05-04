@@ -884,7 +884,10 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
       )}
 
       {/* Share project keys (Owner only) */}
-      {project?.role === 'owner' && (
+      {/* 分享此旅行 — Owner sees full UI (含協作金鑰邀請編輯)；Editor 只看
+          得到訪客分享（避免 Editor 無限擴張 editor list，但讓他們可以
+          把訪客連結傳給家人觀看）。*/}
+      {(project?.role === 'owner' || project?.role === 'editor') && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faKey} style={{ fontSize: 11 }} /> 分享此旅行</p>
           {/* One-click share buttons — native share sheet on mobile, clipboard
@@ -892,14 +895,16 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
               collab key, and the visitor link so the owner can send straight
               away without manually composing a message. */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
-            <button onClick={() => shareOrCopy(buildInviteMessage(), 'invite-msg', `加入【${project?.title || '我們的旅行'}】`)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'invite-msg' ? '#E0F0D8' : C.sage, color: copied === 'invite-msg' ? '#4A7A35' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <FontAwesomeIcon icon={copied === 'invite-msg' ? faSquareCheck : faArrowUpFromBracket} style={{ fontSize: 14 }} />
-                <span>{copied === 'invite-msg' ? '已複製，可貼到聊天' : '邀請朋友共同編輯'}</span>
-              </span>
-              <span style={{ fontSize: 10, opacity: 0.85, fontWeight: 600 }}>含安裝步驟＋金鑰</span>
-            </button>
+            {project?.role === 'owner' && (
+              <button onClick={() => shareOrCopy(buildInviteMessage(), 'invite-msg', `加入【${project?.title || '我們的旅行'}】`)}
+                style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'invite-msg' ? '#E0F0D8' : C.sage, color: copied === 'invite-msg' ? '#4A7A35' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
+                <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FontAwesomeIcon icon={copied === 'invite-msg' ? faSquareCheck : faArrowUpFromBracket} style={{ fontSize: 14 }} />
+                  <span>{copied === 'invite-msg' ? '已複製，可貼到聊天' : '邀請朋友共同編輯'}</span>
+                </span>
+                <span style={{ fontSize: 10, opacity: 0.85, fontWeight: 600 }}>含安裝步驟＋金鑰</span>
+              </button>
+            )}
             <button onClick={() => shareOrCopy(buildVisitorMessage(), 'visit-msg', `分享【${project?.title || '我們的旅行'}】行程`)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'visit-msg' ? '#D8EDF8' : C.sky, color: copied === 'visit-msg' ? '#1A6A9A' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -910,21 +915,23 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
             </button>
           </div>
           <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 8px' }}>
-            或單獨複製金鑰／連結：
+            {project?.role === 'owner' ? '或單獨複製金鑰／連結：' : '或直接複製連結：'}
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-            {/* 協作金鑰 — tap to copy */}
-            <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
-              className={copied === 'collab' ? 'tm-copied-success' : 'tm-collab-key-bg'}
-              style={{ background: copied === 'collab' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
-                <p className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : undefined, margin: 0 }}>協作金鑰（編輯者）</p>
-                <span className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'collab' ? <><FontAwesomeIcon icon={faSquareCheck} style={{ marginRight: 3 }} />已複製</> : <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>點擊複製 <FontAwesomeIcon icon={faClipboardList} /></span>}</span>
+            {/* 協作金鑰 — Owner only (Editor 不能擴張 editor list) */}
+            {project?.role === 'owner' && (
+              <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
+                className={copied === 'collab' ? 'tm-copied-success' : 'tm-collab-key-bg'}
+                style={{ background: copied === 'collab' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 3 }}>
+                  <p className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, fontWeight: 700, color: copied === 'collab' ? '#4A7A35' : undefined, margin: 0 }}>協作金鑰（編輯者）</p>
+                  <span className={copied === 'collab' ? '' : 'tm-collab-key-label'} style={{ fontSize: 10, color: copied === 'collab' ? '#4A7A35' : undefined, fontWeight: 700 }}>{copied === 'collab' ? <><FontAwesomeIcon icon={faSquareCheck} style={{ marginRight: 3 }} />已複製</> : <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>點擊複製 <FontAwesomeIcon icon={faClipboardList} /></span>}</span>
+                </div>
+                <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{firestoreCollaboratorKey || project?.collaboratorKey || '—'}</p>
+                <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
               </div>
-              <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0, letterSpacing: 1, fontFamily: 'monospace' }}>{firestoreCollaboratorKey || project?.collaboratorKey || '—'}</p>
-              <p style={{ fontSize: 10, color: C.barkLight, margin: '3px 0 0' }}>分享此金鑰，對方可以共同編輯行程</p>
-            </div>
-            {/* 訪客連結 — tap to copy */}
+            )}
+            {/* 訪客連結 — Owner + Editor 都可以分享 */}
             <div onClick={() => handleCopy(`${window.location.origin}/?visit=${project.id}`, 'visit')}
               className={copied === 'visit' ? 'tm-copied-success' : 'tm-visitor-link-bg'}
               style={{ background: copied === 'visit' ? '#E0F0D8' : undefined, borderRadius: 10, padding: '10px 12px', cursor: 'pointer', transition: 'background 0.2s', userSelect: 'none' }}>
