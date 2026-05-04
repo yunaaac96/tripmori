@@ -3,7 +3,7 @@ import { C, FONT } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen, faHandshake, faUserShield } from '@fortawesome/free-solid-svg-icons';
+import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen, faHandshake, faUserShield, faArrowUpFromBracket, faEye } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
 import { useDangerConfirm } from '../../components/DangerConfirmModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -121,6 +121,61 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
       try { document.execCommand('copy'); done(); } catch {}
       document.body.removeChild(ta);
     }
+  };
+
+  // Build the share message templates (動態帶入 trip name、key、visit URL).
+  // Wording follows the user's existing 模板; the editor flow drops the
+  // 「只想看看？」訪客 fallback because invites are sent to actual travel
+  // companions — the訪客 button below covers the casual-viewer case.
+  const buildInviteMessage = () => {
+    const tripName = project?.title || '我們的旅行';
+    const key = firestoreCollaboratorKey || project?.collaboratorKey || 'COLLAB-XXXXXX-XXXX';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://tripmori.vercel.app';
+    return [
+      `嘿！我們要開始規劃【${tripName}】這趟旅行囉！🌴`,
+      ``,
+      `請按以下步驟加入我們的專屬 App：`,
+      ``,
+      `1️⃣ 開啟連結：${origin}/`,
+      ``,
+      `2️⃣ 安裝 App：`,
+      `   • iPhone：點擊瀏覽器下方的「分享」圖示 → 選擇「加入主畫面」`,
+      `   • Android：點擊右上角選單 → 選擇「安裝應用程式」`,
+      ``,
+      `3️⃣ 登入與同步：開啟 App 並登入 Google，點「輸入協作金鑰」並輸入：`,
+      `   🔑 ${key}`,
+      ``,
+      `4️⃣ 開啟通知：進入行程後若跳出「允許通知」請點允許，才能收到 @Mention 和航班提醒 ✈️`,
+    ].join('\n');
+  };
+  const buildVisitorMessage = () => {
+    const tripName = project?.title || '我們的旅行';
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://tripmori.vercel.app';
+    const url = `${origin}/?visit=${project?.id || ''}`;
+    return [
+      `這是我們【${tripName}】的行程規劃，給你參考：`,
+      ``,
+      `🔗 ${url}`,
+      ``,
+      `點開連結就可以直接看到完整的行程安排囉，不需要登入或下載，隨時可以點進去看我們走到哪了！🌸`,
+    ].join('\n');
+  };
+
+  // Hand off to native share sheet on mobile (most natural — opens LINE /
+  // Messenger / iMessage with the message preloaded). Fall back to clipboard
+  // on desktop where navigator.share isn't available or rejects.
+  const shareOrCopy = async (text: string, copyKey: string, title?: string) => {
+    if (typeof navigator !== 'undefined' && typeof (navigator as any).share === 'function') {
+      try {
+        await (navigator as any).share({ title, text });
+        return;
+      } catch (err: any) {
+        // AbortError = user dismissed the sheet. Don't treat as error.
+        if (err?.name === 'AbortError') return;
+        // Fall through to clipboard on other errors.
+      }
+    }
+    handleCopy(text, copyKey);
   };
 
   // 統一用 signInWithPopup，同步呼叫可相容 iOS Safari，避免 redirect sessionStorage 問題
@@ -832,6 +887,31 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
       {project?.role === 'owner' && (
         <div style={{ margin: '12px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '14px 16px', boxShadow: C.shadowSm }}>
           <p style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: '0 0 10px', display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faKey} style={{ fontSize: 11 }} /> 分享此旅行</p>
+          {/* One-click share buttons — native share sheet on mobile, clipboard
+              fallback on desktop. Templates auto-fill the trip name, the
+              collab key, and the visitor link so the owner can send straight
+              away without manually composing a message. */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 10 }}>
+            <button onClick={() => shareOrCopy(buildInviteMessage(), 'invite-msg', `加入【${project?.title || '我們的旅行'}】`)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'invite-msg' ? '#E0F0D8' : C.sage, color: copied === 'invite-msg' ? '#4A7A35' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FontAwesomeIcon icon={copied === 'invite-msg' ? faSquareCheck : faArrowUpFromBracket} style={{ fontSize: 14 }} />
+                <span>{copied === 'invite-msg' ? '已複製，可貼到聊天' : '邀請朋友共同編輯'}</span>
+              </span>
+              <span style={{ fontSize: 10, opacity: 0.85, fontWeight: 600 }}>含安裝步驟＋金鑰</span>
+            </button>
+            <button onClick={() => shareOrCopy(buildVisitorMessage(), 'visit-msg', `分享【${project?.title || '我們的旅行'}】行程`)}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '12px 14px', borderRadius: 12, border: 'none', background: copied === 'visit-msg' ? '#D8EDF8' : C.sky, color: copied === 'visit-msg' ? '#1A6A9A' : 'white', fontWeight: 700, fontSize: 13, cursor: 'pointer', fontFamily: FONT, transition: 'background 0.2s' }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <FontAwesomeIcon icon={copied === 'visit-msg' ? faSquareCheck : faEye} style={{ fontSize: 14 }} />
+                <span>{copied === 'visit-msg' ? '已複製，可貼到聊天' : '分享給朋友觀看'}</span>
+              </span>
+              <span style={{ fontSize: 10, opacity: 0.85, fontWeight: 600 }}>純訪客連結</span>
+            </button>
+          </div>
+          <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 8px' }}>
+            或單獨複製金鑰／連結：
+          </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
             {/* 協作金鑰 — tap to copy */}
             <div onClick={() => handleCopy(firestoreCollaboratorKey || project?.collaboratorKey || '', 'collab')}
