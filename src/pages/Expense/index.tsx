@@ -327,6 +327,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [stmtPaymentsOpen, setStmtPaymentsOpen] = useState(false);
   const [stmtSharesOpen, setStmtSharesOpen] = useState(true);
   const [stmtShowSettled, setStmtShowSettled] = useState(false);
+  // 結算行動 — waiting-for-other-party section. Pairs where this member already
+  // recorded payment and is waiting for the counterparty to confirm are pushed
+  // here so the action-needed pairs stay above-the-fold. Default collapsed.
+  const [stmtWaitingOpen, setStmtWaitingOpen] = useState(false);
   // Sort direction for detail / statement lists. Default = newest first
   // (most recent costs at top — typical traveler workflow during the trip).
   const [detailSortDesc, setDetailSortDesc] = useState(true);
@@ -335,7 +339,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [detailCategoryFilter, setDetailCategoryFilter] = useState<string | null>(null);
   // Reset section state whenever a different person's statement is opened
   useEffect(() => {
-    if (settlementDetailName) { setStmtPaymentsOpen(false); setStmtSharesOpen(false); }
+    if (settlementDetailName) { setStmtPaymentsOpen(false); setStmtSharesOpen(false); setStmtWaitingOpen(false); }
   }, [settlementDetailName]);
 
   // Member card scroll ref (used by the desktop arrow nav buttons below).
@@ -1572,85 +1576,141 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 <button onClick={() => setSettlementDetailName(null)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: C.barkLight, lineHeight: 1 }}>✕</button>
               </div>
 
-              {/* ── ① 結算行動（合併原「結算建議」+「待辦結算」，加入操作按鈕）── */}
-              <div style={{ marginBottom: 14 }}>
-                <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>結算行動</p>
-                {mySettlements.length === 0 ? (
-                  <div style={{ textAlign: 'center', padding: '12px 0' }}>
-                    <p style={{ fontSize: 13, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 帳目已結清，無待辦項目</p>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {mySettlements.map((s, i) => {
-                      const isPayer    = s.from === name;
-                      const other      = isPayer ? s.to : s.from;
-                      const otherColor = getMemberColor(other);
-                      const sKey       = `${s.from}-${s.to}`;
-                      const isProcessing = settlingId === sKey;
-                      const pendingEntry = (expenses as any[]).find((e: any) =>
-                        e.category === 'settlement' && e.status === 'pending' &&
-                        e.payer === s.from && e.splitWith?.[0] === s.to
-                      );
-                      const isPrimaryDebtor   = isPayer  && name === currentUserName;
-                      const isPrimaryCreditor = !isPayer && name === currentUserName;
-                      return (
-                        <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, background: isPayer ? '#FAE0E0' : '#EAF3DE', borderRadius: 12, padding: '8px 12px', border: `1.5px solid ${isPayer ? '#F0C0C0' : '#B5CFA7'}` }}>
-                          {/* Avatar */}
-                          <div style={{ width: 28, height: 28, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', boxShadow: '0 0 0 2px var(--tm-card-bg)' }}>
-                            {getMemberAvatar(other)
-                              ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                              : <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
+              {/* ── ① 結算行動（壓縮卡片 + 智慧分組）──
+                  Cards are categorised into two buckets so the actionable ones
+                  stay above-the-fold when a member has many pairs:
+                    • actionable — pair has a button the viewer can press now
+                    • waiting    — debtor already recorded; awaiting creditor
+                                   confirmation (no button shown). These get
+                                   pushed into a collapsed sub-section so they
+                                   don't push action items off-screen. */}
+              {(() => {
+                // Render helper for a single settlement pair card. Inlined so
+                // it can be reused for both buckets without prop-drilling.
+                const renderPairCard = (s: typeof mySettlements[number], i: number) => {
+                  const isPayer    = s.from === name;
+                  const other      = isPayer ? s.to : s.from;
+                  const otherColor = getMemberColor(other);
+                  const sKey       = `${s.from}-${s.to}`;
+                  const isProcessing = settlingId === sKey;
+                  const pendingEntry = (expenses as any[]).find((e: any) =>
+                    e.category === 'settlement' && e.status === 'pending' &&
+                    e.payer === s.from && e.splitWith?.[0] === s.to
+                  );
+                  const isPrimaryDebtor   = isPayer  && name === currentUserName;
+                  const isPrimaryCreditor = !isPayer && name === currentUserName;
+                  return (
+                    // Compacted: padding 6/10 (was 8/12), avatar 22 (was 28),
+                    // borderRadius 10 (was 12) — saves ~30% vertical space per row.
+                    <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, background: isPayer ? '#FAE0E0' : '#EAF3DE', borderRadius: 10, padding: '6px 10px', border: `1.5px solid ${isPayer ? '#F0C0C0' : '#B5CFA7'}` }}>
+                      <div style={{ width: 22, height: 22, borderRadius: '50%', background: otherColor, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, overflow: 'hidden', boxShadow: '0 0 0 1.5px var(--tm-card-bg)' }}>
+                        {getMemberAvatar(other)
+                          ? <img src={getMemberAvatar(other)!} alt={other} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          : <span style={{ fontSize: 10, fontWeight: 700, color: avatarTextColor(otherColor) }}>{other[0]?.toUpperCase()}</span>}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 6, flexWrap: 'wrap', rowGap: 0 }}>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35' }}>
+                          {isPayer ? `付給 ${other}` : `收自 ${other}`}
+                        </span>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.9 }}>
+                          NT$ {s.amount.toLocaleString()}
+                        </span>
+                      </div>
+                      {isProcessing
+                        ? <span style={{ flexShrink: 0, fontSize: 10, color: C.barkLight, fontWeight: 600 }}>處理中...</span>
+                        : !isReadOnly && (() => {
+                            if (isPrimaryDebtor) {
+                              if (pendingEntry) return (
+                                <span style={{ flexShrink: 0, fontSize: 10, color: '#9A6800', fontWeight: 600, padding: '3px 7px', background: '#FFF3CC', borderRadius: 6 }}>等待確認</span>
+                              );
+                              return (
+                                <button onClick={() => openPayModal(s.from, s.to, s.amount)}
+                                  style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#9A3A3A', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                  記錄還款
+                                </button>
+                              );
+                            }
+                            if (isPrimaryCreditor) return (
+                              <button onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
+                                style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                {pendingEntry ? '✓ 確認收款' : '確認收款'}
+                              </button>
+                            );
+                            if (adminMode) return (
+                              <button onClick={() => isPayer
+                                ? openPayModal(s.from, s.to, s.amount)
+                                : handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
+                                style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: isPayer ? '#5A8ACF' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
+                                {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收款' : '確認收款'}
+                              </button>
+                            );
+                            return null;
+                          })()
+                      }
+                    </div>
+                  );
+                };
+
+                // Classify each settlement: "waiting" = debtor (this member is the payer)
+                // already recorded payment, sitting in pending status, waiting for the
+                // creditor to confirm. All other pairs are actionable for the viewer
+                // (either this member's role has a button, or it's just informational
+                // for non-self viewers — in which case we still keep them visible up top
+                // for transparency since there's nothing to defer).
+                const actionable: typeof mySettlements = [];
+                const waiting: typeof mySettlements = [];
+                mySettlements.forEach(s => {
+                  const isPayer = s.from === name;
+                  const isPrimaryDebtor = isPayer && name === currentUserName;
+                  const pendingEntry = (expenses as any[]).find((e: any) =>
+                    e.category === 'settlement' && e.status === 'pending' &&
+                    e.payer === s.from && e.splitWith?.[0] === s.to
+                  );
+                  if (isPrimaryDebtor && pendingEntry) waiting.push(s);
+                  else actionable.push(s);
+                });
+
+                return (
+                  <div style={{ marginBottom: 14 }}>
+                    <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', textTransform: 'uppercase', letterSpacing: '0.05em' }}>結算行動</p>
+                    {mySettlements.length === 0 ? (
+                      <div style={{ textAlign: 'center', padding: '12px 0' }}>
+                        <p style={{ fontSize: 13, color: '#4A7A35', fontWeight: 700, margin: 0 }}>✓ 帳目已結清，無待辦項目</p>
+                      </div>
+                    ) : (
+                      <>
+                        {/* Actionable group — always visible */}
+                        {actionable.length > 0 && (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {actionable.map(renderPairCard)}
                           </div>
-                          {/* Labels + amount — single-line layout, wraps gracefully on long names */}
-                          <div style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap', rowGap: 0 }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35' }}>
-                              {isPayer ? `付給 ${other}` : `收自 ${other}`}
-                            </span>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.9 }}>
-                              NT$ {s.amount.toLocaleString()}
-                            </span>
+                        )}
+                        {/* Waiting group — collapsed by default; only shown when there ARE
+                            waiting pairs. Renders below actionable so it doesn't push
+                            buttons off-screen on long lists. */}
+                        {waiting.length > 0 && (
+                          <div style={{ marginTop: actionable.length > 0 ? 10 : 0 }}>
+                            <button onClick={() => setStmtWaitingOpen(v => !v)}
+                              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}`, borderRadius: 10, padding: '7px 12px', cursor: 'pointer', fontFamily: FONT }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, display: 'flex', alignItems: 'center', gap: 6 }}>
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#E8B96A', display: 'inline-block' }} />
+                                等對方確認
+                                <span style={{ fontSize: 10, fontWeight: 400 }}>（{waiting.length} 筆）</span>
+                              </span>
+                              <FontAwesomeIcon icon={stmtWaitingOpen ? faChevronUp : faChevronDown} style={{ fontSize: 10, color: C.barkLight }} />
+                            </button>
+                            {stmtWaitingOpen && (
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 6 }}>
+                                {waiting.map(renderPairCard)}
+                              </div>
+                            )}
                           </div>
-                          {/* Action buttons */}
-                          {isProcessing
-                            ? <span style={{ flexShrink: 0, fontSize: 11, color: C.barkLight, fontWeight: 600 }}>處理中...</span>
-                            : !isReadOnly && (() => {
-                                // Debtor view: this member owes someone
-                                if (isPrimaryDebtor) {
-                                  if (pendingEntry) return (
-                                    <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 600, padding: '5px 8px', background: '#FFF3CC', borderRadius: 8 }}>等待確認</span>
-                                  );
-                                  return (
-                                    <button onClick={() => openPayModal(s.from, s.to, s.amount)}
-                                      style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#9A3A3A', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                      記錄還款
-                                    </button>
-                                  );
-                                }
-                                // Creditor view: this member is owed by someone
-                                if (isPrimaryCreditor) return (
-                                  <button onClick={() => handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
-                                    style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                    {pendingEntry ? '✓ 確認收款' : '確認收款'}
-                                  </button>
-                                );
-                                // Admin viewing another member's modal
-                                if (adminMode) return (
-                                  <button onClick={() => isPayer
-                                    ? openPayModal(s.from, s.to, s.amount)
-                                    : handleCreditorConfirm(pendingEntry?.id ?? null, s.from, s.to, s.amount)}
-                                    style={{ flexShrink: 0, padding: '5px 10px', borderRadius: 8, border: 'none', background: isPayer ? '#5A8ACF' : '#4A7A35', color: 'white', fontSize: 11, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, whiteSpace: 'nowrap' }}>
-                                    {isPayer ? '代為記錄' : pendingEntry ? '✓ 確認收款' : '確認收款'}
-                                  </button>
-                                );
-                                return null;
-                              })()
-                          }
-                        </div>
-                      );
-                    })}
+                        )}
+                      </>
+                    )}
                   </div>
-                )}
-              </div>
+                );
+              })()}
 
               {/* ── ② 帳目摘要（垂直計算鏈：毛差額 → 已結清 → 目前餘額）── */}
               {(() => {

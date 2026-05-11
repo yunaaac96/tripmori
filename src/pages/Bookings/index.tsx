@@ -525,27 +525,24 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             return (
               <button key={m.id} type="button"
                 onClick={() => {
-                  // TEMP DEBUG: log every click to diagnose mobile-only deselect bug.
-                  // Remove once verified working.
-                  console.log('[chip-tap]', { name: m.name, id: m.id, sel, canToggle, at: Date.now() });
                   if (!canToggle) return;
-                  setValue(prev => {
-                    const next = prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id];
-                    console.log('[chip-tap setValue]', { prev, next, action: prev.includes(m.id) ? 'REMOVE' : 'ADD' });
-                    return next;
-                  });
+                  setValue(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]);
                 }}
                 title={!canToggle ? '編輯者僅能確認自己的參與狀態' : sel ? '取消參與' : '確認參與'}
-                // touchAction: 'manipulation' tells iOS Safari to skip the 300ms
-                // double-tap-to-zoom heuristic; without it, fully-opaque chips
-                // (selected state, opacity:1) sometimes register a tap as TWO
-                // click events — toggling off then on, looking like deselect failed.
-                // WebkitTapHighlightColor:'transparent' suppresses the iOS gray
-                // overlay so the user doesn't see a flash on the second phantom click.
-                style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.2, transition: 'opacity 0.15s', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' as const }}>
-                  {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                    : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+                // Selected chips get a ✓ badge and full color; deselected go
+                // grayscale + faded. The previous design relied solely on
+                // opacity 1 → 0.4 with a colored border that often matched the
+                // avatar background, making the visual difference invisible on
+                // mobile screens — users tapped but didn't perceive any change.
+                style={{ position: 'relative' as const, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.45 : 0.2, touchAction: 'manipulation' as const, WebkitTapHighlightColor: 'transparent' }}>
+                <div style={{ position: 'relative' as const, width: 44, height: 44, borderRadius: '50%', overflow: 'visible' as const, flexShrink: 0, pointerEvents: 'none' as const }}>
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden' as const, border: `3px solid ${sel ? C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: sel ? 'none' : 'grayscale(70%)' }}>
+                    {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                      : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+                  </div>
+                  {sel && (
+                    <div style={{ position: 'absolute' as const, top: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: C.sageDark, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, boxShadow: '0 0 0 2px var(--tm-sheet-bg)' }}>✓</div>
+                  )}
                 </div>
                 <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center' as const, lineHeight: 1.2, wordBreak: 'break-all' as const, pointerEvents: 'none' as const }}>{m.name}</span>
               </button>

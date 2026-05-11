@@ -1109,26 +1109,26 @@ export default function SchedulePage({ events, members = [], project, firestore,
                         return (
                           <button key={m.id} type="button"
                             onClick={() => {
-                              // TEMP DEBUG: log every click. Remove once mobile deselect verified.
-                              console.log('[sched-chip-tap]', { name: m.name, id: m.id, sel, canToggle, at: Date.now() });
                               if (!canToggle) return;
-                              setFormParticipants(prev => {
-                                const next = prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id];
-                                console.log('[sched-chip-tap setValue]', { prev, next, action: prev.includes(m.id) ? 'REMOVE' : 'ADD' });
-                                return next;
-                              });
+                              setFormParticipants(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]);
                             }}
                             title={!canToggle ? '編輯者僅能確認自己的參與狀態' : (sel ? '取消參與' : '確認參與')}
-                            // touchAction:'manipulation' + WebkitTapHighlightColor: see Bookings
-                            // renderParticipants for the iOS double-click-on-opacity-1 explanation.
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.25, transition: 'opacity 0.15s', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>
-                            {/* pointerEvents:'none' so taps on the inner avatar/text bubble up to the
-                                button itself — iOS Safari sometimes routes the click target to the
-                                <img> / <span> instead, which then has no onClick and looks broken. */}
-                            <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, pointerEvents: 'none' }}>
-                              {m.avatarUrl
-                                ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+                            // Strong visual differentiation: selected = vivid color + ✓ badge.
+                            // Deselected = grayscale + heavy fade. Previously the only visual
+                            // cue was a 0.6 opacity drop, which transitioned smoothly and was
+                            // easy to miss on mobile (especially when the colored border blended
+                            // into the avatar background of the same color).
+                            style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.45 : 0.25, touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>
+                            <div style={{ position: 'relative', width: 44, height: 44, borderRadius: '50%', overflow: 'visible', flexShrink: 0, pointerEvents: 'none' }}>
+                              <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: sel ? 'none' : 'grayscale(70%)' }}>
+                                {m.avatarUrl
+                                  ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                  : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+                              </div>
+                              {/* ✓ badge for selected — strong, immediate visual cue */}
+                              {sel && (
+                                <div style={{ position: 'absolute', top: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: C.sageDark, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, boxShadow: '0 0 0 2px var(--tm-sheet-bg)' }}>✓</div>
+                              )}
                             </div>
                             <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-all', pointerEvents: 'none' }}>{m.name}</span>
                           </button>
