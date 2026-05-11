@@ -525,8 +525,15 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
             return (
               <button key={m.id} type="button"
                 onClick={() => {
+                  // TEMP DEBUG: log every click to diagnose mobile-only deselect bug.
+                  // Remove once verified working.
+                  console.log('[chip-tap]', { name: m.name, id: m.id, sel, canToggle, at: Date.now() });
                   if (!canToggle) return;
-                  setValue(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]);
+                  setValue(prev => {
+                    const next = prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id];
+                    console.log('[chip-tap setValue]', { prev, next, action: prev.includes(m.id) ? 'REMOVE' : 'ADD' });
+                    return next;
+                  });
                 }}
                 title={!canToggle ? '編輯者僅能確認自己的參與狀態' : sel ? '取消參與' : '確認參與'}
                 // touchAction: 'manipulation' tells iOS Safari to skip the 300ms

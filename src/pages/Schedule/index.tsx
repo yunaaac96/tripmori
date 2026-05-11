@@ -1108,7 +1108,16 @@ export default function SchedulePage({ events, members = [], project, firestore,
                         const canToggle = isOwner || myMember?.id === m.id;
                         return (
                           <button key={m.id} type="button"
-                            onClick={() => { if (canToggle) setFormParticipants(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]); }}
+                            onClick={() => {
+                              // TEMP DEBUG: log every click. Remove once mobile deselect verified.
+                              console.log('[sched-chip-tap]', { name: m.name, id: m.id, sel, canToggle, at: Date.now() });
+                              if (!canToggle) return;
+                              setFormParticipants(prev => {
+                                const next = prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id];
+                                console.log('[sched-chip-tap setValue]', { prev, next, action: prev.includes(m.id) ? 'REMOVE' : 'ADD' });
+                                return next;
+                              });
+                            }}
                             title={!canToggle ? '編輯者僅能確認自己的參與狀態' : (sel ? '取消參與' : '確認參與')}
                             // touchAction:'manipulation' + WebkitTapHighlightColor: see Bookings
                             // renderParticipants for the iOS double-click-on-opacity-1 explanation.
