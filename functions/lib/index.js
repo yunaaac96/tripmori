@@ -110,22 +110,15 @@ async function notifyMember(tripId, memberName, title, body, data = {}) {
         tag: data.tag || '',
         createdAt: admin.firestore.FieldValue.serverTimestamp(),
     });
-    // webpush.notification: browser auto-displays the notification from this field.
-    // onBackgroundMessage in sw.ts detects payload.notification and returns early,
-    // so no second showNotification call is made — eliminating the duplicate.
-    // data also carries title/body for the foreground onMessage handler (useFcm.ts)
-    // and as a future-proof fallback.
+    // Data-only message: no webpush.notification field.
+    // - Background: onBackgroundMessage in sw.ts calls showNotification() from data.title/body.
+    // - Foreground: onMessage in useFcm.ts calls new Notification() from data.title/body.
+    // This ensures exactly ONE notification is displayed regardless of app state,
+    // eliminating the duplicate that occurred when webpush.notification caused an
+    // auto-display AND the foreground handler also called showNotification.
     const messages = tokens.map(token => ({
         token,
         webpush: {
-            notification: {
-                title,
-                body,
-                icon: 'https://tripmori.vercel.app/icons/icon-192-light.png',
-                badge: 'https://tripmori.vercel.app/icons/icon-192-light.png',
-                tag: data.tag || 'tripmori',
-                requireInteraction: false,
-            },
             fcmOptions: { link: data.url || '/' },
         },
         data: { title, body, ...data },
@@ -627,9 +620,15 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
     if (!isOwner && !isEditor)
         throw new https_1.HttpsError('permission-denied', 'Owner or editor only');
     // ── Static booking data (stored on trip document) ─────────────────────────
+    // Cars: new schema is `staticCars` (array, supports multiple rentals); legacy
+    // schema is `staticCar` (single object). Bookings page already migrates on
+    // write, so prefer the array but wrap the legacy single-car object for
+    // already-backed-up trips that haven't been touched in the new UI yet.
     const staticFlights = tripData.staticFlights || [];
     const staticHotels = tripData.staticHotels || [];
-    const staticCar = tripData.staticCar || null;
+    const staticCars = Array.isArray(tripData.staticCars)
+        ? tripData.staticCars
+        : (tripData.staticCar ? [tripData.staticCar] : []);
     // ── Aggregates ────────────────────────────────────────────────────────────
     const currency = tripData.currency || 'JPY';
     const memberNames = membersSnap.docs.map(d => d.data().name || '').filter(Boolean);
@@ -638,9 +637,13 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
     const dateRange = [tripData.startDate, tripData.endDate].filter(Boolean).join(' ～ ') || '—';
     const backupTime = new Date().toLocaleString('zh-TW', { timeZone: 'Asia/Taipei' });
     const TWD_RATES = { TWD: 1, JPY: 0.22, USD: 32, EUR: 35, KRW: 0.024, CNY: 4.4, HKD: 4.1, MYR: 7.2, THB: 0.9, IDR: 0.002 };
+    // Settlement records are stored with `category === 'settlement'` (not a
+    // separate `isSettlement` flag). The previous filter never matched, so
+    // settlement transfers were being double-counted in the total.
+    const isSettlementRecord = (e) => e?.category === 'settlement';
     const totalTWD = expensesSnap.docs.reduce((sum, d) => {
         const e = d.data();
-        if (e.isSettlement)
+        if (isSettlementRecord(e))
             return sum;
         const amt = Number(e.amountTWD) || Number(e.amount) * (TWD_RATES[e.currency] ?? 1);
         return sum + amt;
@@ -650,8 +653,8 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
         .map(d => d.data())
         .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const allExpenses = expensesSnap.docs
-        .filter(d => !d.data().isSettlement)
         .map(d => d.data())
+        .filter(e => !isSettlementRecord(e))
         .sort((a, b) => (a.date || '').localeCompare(b.date || ''));
     const allJournals = journalsSnap.docs
         .map(d => d.data())
@@ -738,15 +741,17 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
         blocks.push(para('（無住宿資料）'));
     }
     blocks.push(divider());
-    // 5. 租車
-    blocks.push(h2('🚗 租車'));
-    if (staticCar) {
-        blocks.push(para(`${staticCar.company || ''} ${staticCar.carType || ''}`));
-        blocks.push(para(`取車：${staticCar.pickupLocation || '—'}　${staticCar.pickupTime || ''}`));
-        blocks.push(para(`還車：${staticCar.returnLocation || '—'}　${staticCar.returnTime || ''}`));
-        blocks.push(para(`費用：${staticCar.totalCost || '—'} ${staticCar.currency || ''}　確認碼：${staticCar.confirmCode || '—'}`));
-        if (staticCar.notes)
-            blocks.push(...textBlocks(`備註：${staticCar.notes}`));
+    // 5. 租車（支援多筆 staticCars，舊版 staticCar 已在上方 wrap 進陣列）
+    blocks.push(h2(`🚗 租車（${staticCars.length} 筆）`));
+    if (staticCars.length) {
+        staticCars.forEach(c => {
+            blocks.push(h3(`${c.company || ''} ${c.carType || ''}`.trim() || '未命名租車'));
+            blocks.push(para(`取車：${c.pickupLocation || '—'}　${c.pickupTime || ''}`));
+            blocks.push(para(`還車：${c.returnLocation || '—'}　${c.returnTime || ''}`));
+            blocks.push(para(`費用：${c.totalCost || '—'} ${c.currency || ''}　確認碼：${c.confirmCode || '—'}`));
+            if (c.notes)
+                blocks.push(...textBlocks(`備註：${c.notes}`));
+        });
     }
     else {
         blocks.push(para('（無租車資料）'));
@@ -805,11 +810,14 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
             const twdPart = e.amountTWD ? ` ≈ NT$${Math.round(Number(e.amountTWD))}` : '';
             const splitPart = Array.isArray(e.splitWith) && e.splitWith.length
                 ? `（${e.splitWith.join('、')}）` : '';
+            // Real schema uses `payer`; the legacy `paidBy` field never existed,
+            // so this row used to render as 「付款：— 」 every time.
+            const payer = e.payer || e.paidBy || '—';
             const line = [
                 e.date || '—',
                 `| ${e.description || '—'}`,
                 `| ${e.amount} ${e.currency || ''}${twdPart}`,
-                `| 付款：${e.paidBy || '—'}${splitPart}`,
+                `| 付款：${payer}${splitPart}`,
                 e.notes ? `| ${String(e.notes).slice(0, 80)}` : '',
             ].filter(Boolean).join(' ');
             blocks.push(bullet(line));
@@ -820,14 +828,23 @@ exports.backupTripToNotion = (0, https_1.onCall)({ secrets: [NOTION_API_KEY] }, 
     }
     blocks.push(divider());
     // 9. 日誌（全部，完整內文）
+    // Schema reminder (src/pages/Journal/index.tsx): journals have
+    //   { date, content, authorName, photos[], reactions, visibleTo }
+    // — there is no `title` or `body` field. The previous implementation read
+    // `j.title` / `j.body`, so every entry rendered as 「（無標題）（無內文）」.
     blocks.push(h2(`📖 日誌（共 ${allJournals.length} 篇）`));
     if (allJournals.length) {
         allJournals.forEach(j => {
-            blocks.push(h3(`${j.date || '—'} — ${j.title || '（無標題）'}`));
-            if (j.body)
-                blocks.push(...textBlocks(j.body));
+            const heading = [j.date || '—', j.authorName].filter(Boolean).join(' — ');
+            blocks.push(h3(heading));
+            const body = (j.content || '').trim();
+            if (body)
+                blocks.push(...textBlocks(body));
             else
                 blocks.push(para('（無內文）'));
+            const photoCount = Array.isArray(j.photos) ? j.photos.length : 0;
+            if (photoCount)
+                blocks.push(para(`📷 附 ${photoCount} 張照片（請至 app 查看）`));
         });
     }
     else {

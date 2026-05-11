@@ -30,6 +30,10 @@
   --tm-bark: #6B5C4E;
   --tm-bark-light: #8C7B6E;
   --tm-text-inv: #FFFFFF;
+  /* Always-dark text token for use on light tinted pill backgrounds
+   * (sage-light, blush-light, honey, etc) — kept dark in BOTH light and
+   * dark modes so chips stay readable when the tint color is pale. */
+  --tm-text-on-tint: #2A241C;
   --tm-shadow: #D6D0BE;
   --tm-note-1: #FFF8C5;
   --tm-note-2: #D4F1F9;
@@ -113,6 +117,9 @@
     --tm-bark: #EDE4D8;
     --tm-bark-light: #C0AE9E;
     --tm-text-inv: #1C1A17;
+    /* Dark mode keeps the same dark text — the tint pills (sage-light etc) are
+     * also pale here, so dark text continues to give the strongest contrast. */
+    --tm-text-on-tint: #15110D;
     --tm-shadow: #080706;
     /* note backgrounds: clearly distinguishable, enough saturation to read as color */
     --tm-note-1: #332E0C;    /* warm yellow */

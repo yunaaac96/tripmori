@@ -127,6 +127,14 @@ const LS_SEEN_JOURNAL = 'tripmori_seen_journal';
 const getLastSeen = (key: string) => Number(localStorage.getItem(key) || '0');
 const markSeen    = (key: string) => localStorage.setItem(key, String(Date.now()));
 
+// ── Project-restore guard ────────────────────────────────────
+// When every trip the user owns / co-edits has been moved to 已結束,
+// auto-restoring "the last opened trip" on app open is unhelpful — they
+// expect the hub instead so they can start a new trip or browse the archive.
+// Returns true only when there's at least one project AND every one is archived.
+const allProjectsArchived = (projects: StoredProject[]) =>
+  projects.length > 0 && projects.every(p => !!p.archived);
+
 function App() {
   const wasGoogleSignedIn = useRef(false);
   const logoutTimerRef    = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -227,11 +235,13 @@ function App() {
           if (synced) { setActiveProject(synced.id); return synced; }
           return prev;
         }
-        // No active project — try to restore the last used one
+        // No active project — try to restore the last used one,
+        // unless every trip is archived (then keep user on the hub).
+        if (allProjectsArchived(updated)) return prev;
         const lastId = localStorage.getItem('tripmori_last_project');
         if (lastId) {
           const last = updated.find(p => p.id === lastId);
-          if (last) {
+          if (last && !last.archived) {
             setActiveProject(last.id);
             return last;
           }
@@ -303,9 +313,13 @@ function App() {
                 return { ...prev, role: 'owner' };
               }
               // 若 owner 尚未有 activeProject，從 localStorage 載入
+              // — but skip when the owner has archived every trip (incl. Okinawa);
+              // they expect the hub, not to be force-dropped back into a finished trip.
               if (!prev) {
-                const p = loadProjects().find(x => x.id === '74pfE7RXyEIusEdRV0rZ');
-                if (p) {
+                const all = loadProjects();
+                if (allProjectsArchived(all)) return prev;
+                const p = all.find(x => x.id === '74pfE7RXyEIusEdRV0rZ');
+                if (p && !p.archived) {
                   setActiveProject(p.id);
                   return p;
                 }
@@ -392,7 +406,14 @@ function App() {
     }
     const id = getActiveProject();
     if (!id) return null;
-    return loadProjects().find(p => p.id === id) || null;
+    const projects = loadProjects();
+    // If all trips have been archived, fall back to hub instead of restoring
+    // an already-finished trip the user explicitly moved to 已結束.
+    if (allProjectsArchived(projects)) {
+      localStorage.removeItem('tripmori_active_project');
+      return null;
+    }
+    return projects.find(p => p.id === id) || null;
   });
 
   // ── Handle ?visit=TRIP_ID URL param (visitor auto-join) ────────

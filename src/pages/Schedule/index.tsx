@@ -1107,16 +1107,19 @@ export default function SchedulePage({ events, members = [], project, firestore,
                         // Owner can toggle all; editor can only toggle their own bound member card
                         const canToggle = isOwner || myMember?.id === m.id;
                         return (
-                          <button key={m.id}
-                            onClick={() => { if (canToggle) setFormParticipants(prev => sel ? prev.filter(id => id !== m.id) : [...prev, m.id]); }}
+                          <button key={m.id} type="button"
+                            onClick={() => { if (canToggle) setFormParticipants(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]); }}
                             title={!canToggle ? '編輯者僅能確認自己的參與狀態' : (sel ? '取消參與' : '確認參與')}
                             style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.25, transition: 'opacity 0.15s' }}>
-                            <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                            {/* pointerEvents:'none' so taps on the inner avatar/text bubble up to the
+                                button itself — iOS Safari sometimes routes the click target to the
+                                <img> / <span> instead, which then has no onClick and looks broken. */}
+                            <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, pointerEvents: 'none' }}>
                               {m.avatarUrl
                                 ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                                 : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
                             </div>
-                            <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-all' }}>{m.name}</span>
+                            <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center', lineHeight: 1.2, wordBreak: 'break-all', pointerEvents: 'none' }}>{m.name}</span>
                           </button>
                         );
                       })}

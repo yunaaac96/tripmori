@@ -489,40 +489,52 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     );
   };
 
-  const ParticipantSelector = ({ value, onChange }: { value: string[]; onChange: (ids: string[]) => void }) => {
+  // Render helper for the participant chip selector.
+  // ⚠️ Was previously a sub-component (`const ParticipantSelector = (...) => ...`)
+  // declared inside the parent render function — that recreates the component
+  // type on every render and forces React to unmount + remount the entire chip
+  // strip on each parent update. Switching to a regular render function (no
+  // <Component /> wrapper) keeps the DOM stable so click events land reliably.
+  // Also takes the React state SETTER directly (not just a value+onChange),
+  // so updates can use the functional `prev =>` form and never read stale
+  // closure state from a captured `value`.
+  const renderParticipants = (
+    value: string[],
+    setValue: React.Dispatch<React.SetStateAction<string[]>>,
+  ) => {
     if (!members.length) return null;
+    const order: string[] = project?.memberOrder || [];
+    const indexOf = (m: any) => {
+      const i = order.indexOf(m.name);
+      return i === -1 ? order.length : i;
+    };
+    const sorted = [...members].sort((a: any, b: any) => {
+      if (a.id === myMember?.id) return -1;
+      if (b.id === myMember?.id) return 1;
+      return indexOf(a) - indexOf(b);
+    });
     return (
       <div>
         <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 8 }}>
           參與人 <span style={{ fontWeight: 400, opacity: 0.7 }}>(選填)</span>
         </label>
         <div style={{ display: 'flex', flexWrap: 'wrap' as const, gap: 8 }}>
-          {(() => {
-            // Use the trip's memberOrder (set on the Members page) as the
-            // canonical sort, then pin the current user's card to the front.
-            const order: string[] = project?.memberOrder || [];
-            const indexOf = (m: any) => {
-              const i = order.indexOf(m.name);
-              return i === -1 ? order.length : i;
-            };
-            return [...members].sort((a: any, b: any) => {
-              if (a.id === myMember?.id) return -1;
-              if (b.id === myMember?.id) return 1;
-              return indexOf(a) - indexOf(b);
-            });
-          })().map((m: any) => {
+          {sorted.map((m: any) => {
             const sel = value.includes(m.id);
             const canToggle = isOwner || myMember?.id === m.id;
             return (
-              <button key={m.id}
-                onClick={() => { if (canToggle) onChange(sel ? value.filter(id => id !== m.id) : [...value, m.id]); }}
+              <button key={m.id} type="button"
+                onClick={() => {
+                  if (!canToggle) return;
+                  setValue(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]);
+                }}
                 title={!canToggle ? '編輯者僅能確認自己的參與狀態' : sel ? '取消參與' : '確認參與'}
                 style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.2, transition: 'opacity 0.15s' }}>
-                <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' as const }}>
                   {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
                 </div>
-                <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center' as const, lineHeight: 1.2, wordBreak: 'break-all' as const }}>{m.name}</span>
+                <span style={{ fontSize: 10, color: C.barkLight, fontWeight: sel ? 700 : 400, maxWidth: 48, textAlign: 'center' as const, lineHeight: 1.2, wordBreak: 'break-all' as const, pointerEvents: 'none' as const }}>{m.name}</span>
               </button>
             );
           })}
@@ -1157,7 +1169,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 </div>
               </>)}
 
-              <ParticipantSelector value={editParticipants} onChange={setEditParticipants} />
+              {renderParticipants(editParticipants, setEditParticipants)}
 
               {/* Action buttons */}
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
@@ -1221,7 +1233,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               </Row>
               <Field label="每人票價（選填）"><input style={inSt} type="number" value={singleFlightForm.costPerPerson || ''} onChange={e => setSF('costPerPerson', e.target.value)} /></Field>
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 56, resize: 'vertical' as const, lineHeight: 1.6 }} value={singleFlightForm.notes || ''} onChange={e => setSF('notes', e.target.value)} /></Field>
-              <ParticipantSelector value={singleFlightParticipants} onChange={setSingleFlightParticipants} />
+              {renderParticipants(singleFlightParticipants, setSingleFlightParticipants)}
               <div style={{ display: 'flex', gap: 8, marginTop: 6 }}>
                 {!isNewFlight && (
                   <button onClick={() => { setEditFlightIdx(null); handleDeleteFlight(editFlightIdx!); }}
@@ -1277,7 +1289,7 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
               </div>
               <Field label="費用（選填）"><input style={inSt} type="number" placeholder="0" value={customForm.cost} onChange={e => setC('cost', e.target.value)} /></Field>
               <Field label="備註（選填）"><textarea style={{ ...inSt, minHeight: 60, resize: 'vertical' as const, lineHeight: 1.6 }} placeholder="注意事項..." value={customForm.notes} onChange={e => setC('notes', e.target.value)} /></Field>
-              <ParticipantSelector value={customParticipants} onChange={setCustomParticipants} />
+              {renderParticipants(customParticipants, setCustomParticipants)}
               <div>
                 <label style={lblSt}>QR Code（選填）</label>
                 <input ref={qrFileRef} type="file" accept="image/*" style={{ display: 'none' }}

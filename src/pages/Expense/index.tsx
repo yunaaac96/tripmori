@@ -26,6 +26,31 @@ type SplitMode = 'equal' | 'weighted' | 'amount';
 type SortMode = 'newest' | 'oldest' | 'largest' | 'date-asc' | 'date-desc';
 type Currency = string;
 
+// ── Live thousands-separator helpers for amount inputs ──────────────────────
+// HTML <input type="number"> can't render commas, so the amount field is
+// switched to type="text" + inputMode="decimal" and these helpers manage the
+// display ↔ storage conversion. Storage stays as a plain numeric string
+// (e.g. "12345.6"); display gets commas (e.g. "12,345.6"). Trailing dots and
+// empty decimals are preserved during typing so users can naturally type
+// "1234." → "1,234." → "1,234.5".
+const formatAmountForDisplay = (raw: string): string => {
+  if (!raw) return '';
+  const cleaned = raw.replace(/,/g, '');
+  if (!/^\d*\.?\d*$/.test(cleaned)) return raw;
+  const [intPart, decPart] = cleaned.split('.');
+  const intFormatted = intPart ? Number(intPart).toLocaleString('en-US') : '';
+  if (cleaned.includes('.')) return `${intFormatted || '0'}.${decPart ?? ''}`;
+  return intFormatted;
+};
+// Strip commas before storing. Also rejects anything that isn't a valid decimal
+// pattern by returning the previous value (caller decides whether to commit).
+const parseAmountInput = (input: string): string | null => {
+  const stripped = input.replace(/,/g, '');
+  if (stripped === '') return '';
+  if (!/^\d*\.?\d*$/.test(stripped)) return null;
+  return stripped;
+};
+
 const EMPTY_FORM = {
   description: '', amount: '', currency: 'JPY' as Currency,
   isIncome: false,
@@ -1924,9 +1949,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       amount here so users notice and remember to fill in
                       the actual TWD when the statement arrives. */}
                   {awaitingCount > 0 && (
-                    <p style={{ fontSize: 10, color: '#9A6800', opacity: 0.85, margin: '8px 0 0', display: 'flex', alignItems: 'center', gap: 4 }}>
-                      <FontAwesomeIcon icon={faHourglass} style={{ fontSize: 9 }} />
-                      等卡單 {awaitingCount} 筆 NT$ {Math.abs(awaitingShareTWD).toLocaleString()} 尚未計入（卡單到後請至該筆補實際金額）
+                    <p style={{ fontSize: 10, color: '#9A6800', opacity: 0.85, margin: '8px 0 0', display: 'flex', alignItems: 'flex-start', gap: 4, lineHeight: 1.55 }}>
+                      <FontAwesomeIcon icon={faHourglass} style={{ fontSize: 9, marginTop: 3, flexShrink: 0 }} />
+                      <span>等卡單 {awaitingCount} 筆 NT$ {Math.abs(awaitingShareTWD).toLocaleString()} 尚未計入（卡單到後請至該筆補實際金額）</span>
                     </p>
                   )}
                 </div>
@@ -2417,7 +2442,18 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 {/* Amount */}
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 4 }}>金額 *</label>
-                  <input ref={amtRef} style={{ ...iStyle, textAlign: 'right' }} type="number" inputMode="decimal" placeholder="0" value={form.amount} onChange={e => set('amount', e.target.value)} />
+                  <input
+                    ref={amtRef}
+                    style={{ ...iStyle, textAlign: 'right' }}
+                    type="text"
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={formatAmountForDisplay(form.amount)}
+                    onChange={e => {
+                      const next = parseAmountInput(e.target.value);
+                      if (next !== null) set('amount', next);
+                    }}
+                  />
                   {form.amount && (
                     <p style={{ fontSize: 12, color: C.barkLight, margin: '4px 0 0', textAlign: 'right' }}>
                       ≈ NT$ {form.currency === 'IDR' && liveIdrRate
@@ -2696,7 +2732,17 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       {form.subItems.map((si, idx) => (
                         <div key={idx} style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
                           <input style={{ ...iStyle, flex: 2 }} placeholder="細項名稱" value={si.name} onChange={e => updateSubItem(idx, 'name', e.target.value)} />
-                          <input style={{ ...iStyle, flex: 1 }} type="number" inputMode="decimal" placeholder="金額" value={si.amount} onChange={e => updateSubItem(idx, 'amount', e.target.value)} />
+                          <input
+                            style={{ ...iStyle, flex: 1 }}
+                            type="text"
+                            inputMode="decimal"
+                            placeholder="金額"
+                            value={formatAmountForDisplay(si.amount)}
+                            onChange={e => {
+                              const next = parseAmountInput(e.target.value);
+                              if (next !== null) updateSubItem(idx, 'amount', next);
+                            }}
+                          />
                           <button onClick={() => removeSubItem(idx)}
                             style={{ width: 28, height: 28, borderRadius: 8, border: 'none', background: '#FAE0E0', color: '#9A3A3A', cursor: 'pointer', fontSize: 12, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>✕</button>
                         </div>
@@ -2723,7 +2769,11 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 {/* Receipt photo attachment */}
                 <div>
                   <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}><FontAwesomeIcon icon={faPaperclip} style={{ marginRight: 4 }} />附件（發票／收據）</label>
-                  <input ref={receiptRef} type="file" accept="image/*" capture="environment" style={{ display: 'none' }}
+                  {/* Removed `capture="environment"` so the OS file picker offers all
+                      sources (Photo Library / Camera / Files) instead of forcing the
+                      camera open. Mobile browsers show the chooser dialog automatically
+                      when `accept="image/*"` and no capture attribute is set. */}
+                  <input ref={receiptRef} type="file" accept="image/*" style={{ display: 'none' }}
                     onChange={e => { if (e.target.files?.[0]) handleReceiptUpload(e.target.files[0]); e.target.value = ''; }} />
                   {form.receiptUrl ? (
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -2740,7 +2790,7 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   ) : (
                     <button onClick={() => receiptRef.current?.click()} disabled={receiptUploading}
                       style={{ width: '100%', padding: '11px 14px', borderRadius: 14, border: `2px dashed ${C.creamDark}`, background: 'var(--tm-input-bg)', color: receiptUploading ? C.sageDark : C.barkLight, fontWeight: 700, fontSize: 13, cursor: receiptUploading ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-                      {receiptUploading ? '上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />拍照 / 上傳附件</>}
+                      {receiptUploading ? '上傳中...' : <><FontAwesomeIcon icon={faCamera} style={{ fontSize: 11, marginRight: 5 }} />拍照 / 從相簿選 / 上傳檔案</>}
                     </button>
                   )}
                 </div>
@@ -3538,12 +3588,20 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       </button>
                       {isExpanded && (
                         <div style={{ marginTop: 6, background: C.cream, borderRadius: 10, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                          {e.subItems.map((si: any, idx: number) => (
-                            <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                              <span style={{ fontSize: 12, color: C.bark }}>{si.name}</span>
-                              <span style={{ fontSize: 12, fontWeight: 600, color: C.earth }}>{si.amount} {e.currency}</span>
-                            </div>
-                          ))}
+                          {e.subItems.map((si: any, idx: number) => {
+                            // Format amount with thousands separator. subItem.amount is stored
+                            // as a string (raw user input), so coerce to number first; if it's
+                            // not a valid number, fall back to the original string to avoid
+                            // showing "NaN" for old/manual entries.
+                            const n = Number(si.amount);
+                            const display = Number.isFinite(n) ? n.toLocaleString() : si.amount;
+                            return (
+                              <div key={idx} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                                <span style={{ fontSize: 12, color: C.bark }}>{si.name}</span>
+                                <span style={{ fontSize: 12, fontWeight: 600, color: C.earth }}>{display} {e.currency}</span>
+                              </div>
+                            );
+                          })}
                         </div>
                       )}
                     </div>

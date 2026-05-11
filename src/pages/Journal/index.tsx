@@ -390,7 +390,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                 <div style={{ display: 'flex', gap: 6, marginBottom: visibleToMode === 'restricted' ? 10 : 0 }}>
                   <button
                     onClick={() => setVisibleToMode('all')}
-                    style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1.5px solid ${visibleToMode === 'all' ? C.sage : 'var(--tm-cream-dark)'}`, background: visibleToMode === 'all' ? C.sageLight : 'var(--tm-card-bg)', color: visibleToMode === 'all' ? C.sageDark : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
+                    style={{ flex: 1, padding: '9px 0', borderRadius: 10, border: `1.5px solid ${visibleToMode === 'all' ? C.sage : 'var(--tm-cream-dark)'}`, background: visibleToMode === 'all' ? C.sageLight : 'var(--tm-card-bg)', color: visibleToMode === 'all' ? 'var(--tm-text-on-tint)' : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5 }}>
                     <FontAwesomeIcon icon={faUsers} />所有成員
                   </button>
                   <button
@@ -418,7 +418,7 @@ export default function JournalPage({ journals, members, journalComments, firest
                             onClick={() => setFormVisibleTo(prev =>
                               selected ? prev.filter(n => n !== name) : [...prev, name]
                             )}
-                            style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${selected ? C.sageDark : 'var(--tm-cream-dark)'}`, background: selected ? C.sageLight : 'var(--tm-card-bg)', color: selected ? C.sageDark : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            style={{ padding: '6px 12px', borderRadius: 20, border: `1.5px solid ${selected ? C.sageDark : 'var(--tm-cream-dark)'}`, background: selected ? C.sageLight : 'var(--tm-card-bg)', color: selected ? 'var(--tm-text-on-tint)' : 'var(--tm-bark-light)', fontWeight: 700, fontSize: 12, cursor: 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 6 }}>
                             <span style={{ width: 18, height: 18, borderRadius: '50%', background: members.find((m: any) => m.name === name)?.color || C.blush, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 700, color: 'white', flexShrink: 0 }}>{name[0]?.toUpperCase()}</span>
                             {name}
                           </button>
@@ -437,7 +437,16 @@ export default function JournalPage({ journals, members, journalComments, firest
               <div style={{ display: 'flex', gap: 8, marginTop: 4 }}>
                 <button onClick={closeForm} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid var(--tm-cream-dark)`, background: 'var(--tm-card-bg)', color: 'var(--tm-bark-light)', fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.content || !(form.author || currentUser)}
-                  style={{ ...btnPrimary(), flex: 2, opacity: saving||!form.content||!(form.author||currentUser)?0.6:1 }}>
+                  style={(() => {
+                    const isDisabled = saving || !form.content || !(form.author || currentUser);
+                    // Disabled state used to dim the primary button to opacity 0.6, which
+                    // in dark mode made the white text on pale-teal nearly invisible.
+                    // Switch to a neutral gray fill instead — clearly signals "not ready"
+                    // while staying readable in both color schemes.
+                    return isDisabled
+                      ? { ...btnPrimary(), flex: 2, background: 'var(--tm-cream-dark)', color: 'var(--tm-bark-light)', boxShadow: 'none', cursor: 'not-allowed' }
+                      : { ...btnPrimary(), flex: 2 };
+                  })()}>
                   {saving ? '儲存中...' : editingId ? '✓ 儲存' : '✓ 新增'}
                 </button>
               </div>
