@@ -529,7 +529,13 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   setValue(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]);
                 }}
                 title={!canToggle ? '編輯者僅能確認自己的參與狀態' : sel ? '取消參與' : '確認參與'}
-                style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.2, transition: 'opacity 0.15s' }}>
+                // touchAction: 'manipulation' tells iOS Safari to skip the 300ms
+                // double-tap-to-zoom heuristic; without it, fully-opaque chips
+                // (selected state, opacity:1) sometimes register a tap as TWO
+                // click events — toggling off then on, looking like deselect failed.
+                // WebkitTapHighlightColor:'transparent' suppresses the iOS gray
+                // overlay so the user doesn't see a flash on the second phantom click.
+                style={{ display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.2, transition: 'opacity 0.15s', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>
                 <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? m.color || C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' as const }}>
                   {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
                     : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}

@@ -1110,7 +1110,9 @@ export default function SchedulePage({ events, members = [], project, firestore,
                           <button key={m.id} type="button"
                             onClick={() => { if (canToggle) setFormParticipants(prev => prev.includes(m.id) ? prev.filter(id => id !== m.id) : [...prev, m.id]); }}
                             title={!canToggle ? '編輯者僅能確認自己的參與狀態' : (sel ? '取消參與' : '確認參與')}
-                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.25, transition: 'opacity 0.15s' }}>
+                            // touchAction:'manipulation' + WebkitTapHighlightColor: see Bookings
+                            // renderParticipants for the iOS double-click-on-opacity-1 explanation.
+                            style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.4 : 0.25, transition: 'opacity 0.15s', touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>
                             {/* pointerEvents:'none' so taps on the inner avatar/text bubble up to the
                                 button itself — iOS Safari sometimes routes the click target to the
                                 <img> / <span> instead, which then has no onClick and looks broken. */}
