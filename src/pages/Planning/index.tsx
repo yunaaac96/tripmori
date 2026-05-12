@@ -487,6 +487,10 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                   {form.listType === 'packing' ? (
                     /* ── Packing: Segmented control 全員 / 自己 / 指定 ── */
                     <div>
+                      {/* I10: 全域 vs 個人 packing 說明 */}
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px', lineHeight: 1.55, padding: '6px 8px', background: 'var(--tm-section-bg)', borderRadius: 8 }}>
+                        💡 <strong>全員</strong>：大家共用一份（例如護照、轉換插頭）；<strong>自己</strong>：只有自己看得到
+                      </p>
                       <div style={{ display: 'flex', gap: 6, marginBottom: 8 }}>
                         {[
                           { val: '__all__',  icon: faUsers,   label: '全員',  title: '加入所有人清單' },

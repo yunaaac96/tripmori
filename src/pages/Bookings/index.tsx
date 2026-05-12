@@ -5,6 +5,7 @@ import { toTWDCalc } from '../../utils/expenseCalc';
 import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
+import FirstTimeHint from '../../components/FirstTimeHint';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { getDoc, updateDoc, doc as fsDoc, deleteField } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
@@ -618,6 +619,18 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       )}
 
       <div style={{ padding: '8px 16px 80px' }}>
+        {/* B2: editor permissions banner */}
+        <FirstTimeHint
+          hintId="bookings-editor-permissions"
+          show={!isReadOnly && !isOwner}
+          title="你是編輯者，這是你的權限範圍"
+          body={
+            <>
+              <p style={{ margin: '0 0 3px' }}>✓ 新增、編輯任何預訂（機票/住宿/租車/票券）</p>
+              <p style={{ margin: 0 }}>✗ 刪除預訂（需擁有者處理）</p>
+            </>
+          }
+        />
 
         {/* ── 航班 ── */}
         <SectionTitle action={!isReadOnly && flights?.length ? (

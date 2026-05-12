@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { C, FONT } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
+import FirstTimeHint from '../../components/FirstTimeHint';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen, faHandshake, faUserShield, faArrowUpFromBracket, faEye } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
@@ -811,6 +812,20 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
         className="tm-hero-page-earth"
       />
 
+      {/* B4: Google bind benefits banner */}
+      <div style={{ padding: '8px 16px 0' }}>
+        <FirstTimeHint
+          hintId="members-google-bind-benefits"
+          title="綁定 Google 帳號的好處"
+          body={
+            <>
+              <p style={{ margin: '0 0 3px' }}>看得到完整對帳單、收得到留言／結算／卡單推播、可以幫人代錄</p>
+              <p style={{ margin: 0 }}>建議把 app 加到主畫面（PWA）以收推播</p>
+            </>
+          }
+        />
+      </div>
+
       {/* Copy toast */}
       {copied && (
         <div style={{ position: 'fixed', bottom: 90, left: '50%', transform: 'translateX(-50%)', background: '#3A5A3A', color: 'white', borderRadius: 24, padding: '10px 22px', fontSize: 13, fontWeight: 700, zIndex: 500, boxShadow: '0 4px 20px rgba(0,0,0,0.25)', whiteSpace: 'nowrap', fontFamily: FONT }}>
@@ -821,8 +836,12 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
       {/* Google sign-in / status — shown first, right below header */}
       {!googleUid && !firestore.isReadOnly && (
         <div style={{ margin: '8px 16px 0', background: 'var(--tm-card-bg)', borderRadius: 16, padding: '12px 14px', boxShadow: C.shadowSm, border: '1.5px solid #EDE8D5' }}>
+          {/* I9: persistent benefits reminder for unbound viewers */}
           <p style={{ fontSize: 12, color: C.barkLight, margin: '0 0 8px', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 5 }}>
-            <FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 登入 Google 後可綁定成員卡，以自己的身份留言
+            <FontAwesomeIcon icon={faLock} style={{ fontSize: 11 }} /> 登入 Google 帳號的好處
+          </p>
+          <p style={{ fontSize: 11, color: C.barkLight, margin: '0 0 10px', lineHeight: 1.55 }}>
+            綁定成員卡後可以：以自己的身份留言、看完整對帳單、收推播提醒、幫人代錄。加到主畫面（PWA）就能收推播。
           </p>
           <button onClick={handleGoogleSignIn} disabled={signingIn}
             style={{ width: '100%', padding: '10px 14px', borderRadius: 12, border: '1.5px solid #E0D9C8', background: signingIn ? '#F5F5F5' : 'var(--tm-card-bg)', cursor: signingIn ? 'default' : 'pointer', fontFamily: FONT, display: 'flex', alignItems: 'center', gap: 10, justifyContent: 'center', boxShadow: C.shadowSm, opacity: signingIn ? 0.6 : 1 }}>

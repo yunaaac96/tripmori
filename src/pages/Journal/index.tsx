@@ -407,6 +407,11 @@ export default function JournalPage({ journals, members, journalComments, firest
                 </div>
                 {visibleToMode === 'restricted' && (
                   <div>
+                    {/* I8: strengthened privacy explanation */}
+                    <p style={{ fontSize: 10, color: 'var(--tm-bark-light)', margin: '0 0 8px', lineHeight: 1.55, display: 'flex', alignItems: 'flex-start', gap: 4, padding: '6px 8px', background: 'var(--tm-section-bg)', borderRadius: 8 }}>
+                      <FontAwesomeIcon icon={faEye} style={{ fontSize: 9, marginTop: 2, flexShrink: 0, opacity: 0.7 }} />
+                      <span>👁 只有勾選的成員 + 作者本人看得到。其他人完全看不到這篇日誌（也看不到有這篇存在）</span>
+                    </p>
                     <p style={{ fontSize: 11, color: 'var(--tm-bark-light)', margin: '0 0 8px' }}>
                       選取可閱讀的成員（作者本人永遠可見）
                     </p>

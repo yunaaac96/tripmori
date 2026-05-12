@@ -8,6 +8,7 @@ import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'fire
 import { useGoogleUid } from '../../hooks/useAuth';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
+import FirstTimeHint from '../../components/FirstTimeHint';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faArrowUp, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply, faCircleInfo, faXmark } from '@fortawesome/free-solid-svg-icons';
 
@@ -2435,6 +2436,21 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               </div>
             )}
 
+            {/* B3: expense features banner — first-time orientation for the
+                Add Expense modal. Only on new entries (not editing). */}
+            {!editingId && (
+              <FirstTimeHint
+                hintId="expense-features-overview"
+                title="記帳進階功能"
+                body={
+                  <>
+                    <p style={{ margin: '0 0 4px' }}>本系統支援：海外刷卡（自動換算）、等卡單後補實際金額、按外幣比例分帳、私人費用、收入記帳、代錄（幫懶惰的旅伴記帳）</p>
+                    <p style={{ margin: 0 }}>下方各選項旁有更詳細說明，逐個試看看就會熟</p>
+                  </>
+                }
+              />
+            )}
+
             {/* 支出 / 收入 toggle */}
             {!editingId && (
               <div style={{ display: 'flex', background: 'var(--tm-input-bg)', borderRadius: 12, padding: 3, gap: 3, marginBottom: 16 }}>
@@ -2572,17 +2588,25 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       </p>
                     )}
                     {form.paymentMethod === 'card' && (
-                      <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
-                        <input type="checkbox" checked={form.awaitCardStatement}
-                          onChange={ev => set('awaitCardStatement', ev.target.checked)}
-                          style={{ marginTop: 2 }} />
-                        <div>
-                          <p style={{ fontSize: 12, color: C.bark, fontWeight: 600, margin: 0 }}>等卡單下來再結算</p>
-                          <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0', lineHeight: 1.5 }}>
-                            勾選後此筆暫不納入結算建議，等刷卡單下來用「補實際金額」填入實際 TWD 即自動納入
-                          </p>
-                        </div>
-                      </label>
+                      <>
+                        {/* I1: 海外刷卡 inline guidance — only when foreign + card */}
+                        <p style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.55, display: 'flex', alignItems: 'flex-start', gap: 4, padding: '6px 8px', background: 'var(--tm-section-bg)', borderRadius: 8 }}>
+                          <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 9, marginTop: 2, flexShrink: 0, opacity: 0.7 }} />
+                          <span>💳 海外刷卡會自動加 {form.cardFeePercent || '1.5'}% 國際手續費。實際金額以卡單為準，建議搭配下方「等卡單」使用</span>
+                        </p>
+                        <label style={{ display: 'flex', alignItems: 'flex-start', gap: 8, cursor: 'pointer' }}>
+                          <input type="checkbox" checked={form.awaitCardStatement}
+                            onChange={ev => set('awaitCardStatement', ev.target.checked)}
+                            style={{ marginTop: 2 }} />
+                          <div>
+                            <p style={{ fontSize: 12, color: C.bark, fontWeight: 600, margin: 0 }}>等卡單下來再結算</p>
+                            {/* I2: strengthened wording — explain the full lifecycle */}
+                            <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0', lineHeight: 1.55 }}>
+                              ⏳ 勾選後這筆暫不納入結算建議。卡單到了再點該筆「補實際金額」按鈕填入 TWD，系統會自動納入並用實際金額重新計算分攤
+                            </p>
+                          </div>
+                        </label>
+                      </>
                     )}
                   </div>
                 )}
@@ -2620,6 +2644,11 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 {/* Income benefit scope */}
                 {form.isIncome && !form.isPrivate && (
                   <div>
+                    {/* I5: 收入記帳 inline guidance */}
+                    <p style={{ fontSize: 10, color: C.barkLight, margin: '0 0 6px', lineHeight: 1.55, display: 'flex', alignItems: 'flex-start', gap: 4, padding: '6px 8px', background: 'var(--tm-section-bg)', borderRadius: 8 }}>
+                      <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 9, marginTop: 2, flexShrink: 0, opacity: 0.7 }} />
+                      <span>💰 整團共同收到的錢（例如旅遊金回饋、退稅）。可選全員均分，或指定單一受益人</span>
+                    </p>
                     <label style={{ fontSize: 11, fontWeight: 600, color: C.barkLight, display: 'block', marginBottom: 6 }}>收益方式</label>
                     <div style={{ display: 'flex', gap: 8, marginBottom: form.incomeScope === 'personal' ? 10 : 0 }}>
                       {([
@@ -2727,6 +2756,11 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   )}
                   {form.splitMode === 'amount' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {/* I3: 自訂金額分帳 inline guidance */}
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.55, display: 'flex', alignItems: 'flex-start', gap: 4, padding: '6px 8px', background: 'var(--tm-section-bg)', borderRadius: 8 }}>
+                        <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 9, marginTop: 2, flexShrink: 0, opacity: 0.7 }} />
+                        <span>🔢 填入每人分配金額（用原幣別填），系統會按比例分配實際 TWD。例：30k:20k:50k JPY，卡單到後填 NT$ 23,500，三人分到 7,050 / 4,700 / 11,750</span>
+                      </p>
                       {displayMemberNames.map((name: string) => (
                         <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ width: 60, fontSize: 13, fontWeight: 600, color: C.bark, flexShrink: 0 }}>{name}</span>
@@ -2766,10 +2800,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                       </span>
                     </button>
                     {form.isPrivate && (
-                      <p style={{ fontSize: 11, color: 'var(--tm-private)', margin: '4px 0 0', paddingLeft: 2 }}>
-                        {form.payer && form.payer !== currentUserName
+                      <p style={{ fontSize: 11, color: 'var(--tm-private)', margin: '4px 0 0', paddingLeft: 2, lineHeight: 1.55 }}>
+                        🔒 {form.payer && form.payer !== currentUserName
                           ? `此筆支出不計入分帳結算，僅 ${form.payer} 本人可見`
-                          : '此筆支出不計入分帳結算，僅記錄個人花費'}
+                          : '此筆支出不計入分帳、不會出現在其他人的對帳單，僅記錄個人花費'}
                       </p>
                     )}
                   </div>

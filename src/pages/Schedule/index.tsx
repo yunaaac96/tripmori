@@ -7,6 +7,7 @@ import DateRangePicker from '../../components/DateRangePicker';
 import { C, FONT, CATEGORY_MAP, EMPTY_EVENT_FORM, cardStyle, inputStyle, btnPrimary, ExpandableNotes } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
+import FirstTimeHint from '../../components/FirstTimeHint';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faTree, faUtensils, faPalette, faBus, faBed, faEllipsis, faTrashCan, faPen, faPlus, faCircleExclamation, faLightbulb, faClipboardList, faLocationDot, faPlane, faCar, faTicket, faCalendarDays, faThumbtack, faPersonWalking, faClock, faRocket } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
@@ -1158,6 +1159,13 @@ export default function SchedulePage({ events, members = [], project, firestore,
                 <button onClick={() => setMode('view')} style={{ flex: 1, padding: 12, borderRadius: 12, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.barkLight, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>取消</button>
                 <button onClick={handleSave} disabled={saving || !form.title || !form.startTime} style={{ ...btnPrimary(), flex: 2, opacity: saving || !form.title || !form.startTime ? 0.6 : 1 }}>{saving ? '儲存中...' : mode === 'add' ? '✓ 新增' : '✓ 儲存'}</button>
               </div>
+              {/* I6: editor delete-restriction note */}
+              {mode === 'edit' && !isReadOnly && !isOwner && (
+                <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 0 0', lineHeight: 1.5, display: 'flex', alignItems: 'flex-start', gap: 4 }}>
+                  <FontAwesomeIcon icon={faCircleExclamation} style={{ fontSize: 9, marginTop: 2, flexShrink: 0, opacity: 0.7 }} />
+                  <span>編輯者無法刪除活動，需請擁有者處理</span>
+                </p>
+              )}
             </div>
           </div>
         </div>
@@ -1267,6 +1275,19 @@ export default function SchedulePage({ events, members = [], project, firestore,
       </PageHeader>
 
       <div style={{ padding: '16px 16px 0', textAlign: 'left' }}>
+        {/* B1: editor permissions banner — only shown to editors (owners
+            already know they can do everything; visitors have read-only UI). */}
+        <FirstTimeHint
+          hintId="schedule-editor-permissions"
+          show={!isReadOnly && !isOwner}
+          title="你是編輯者，這是你的權限範圍"
+          body={
+            <>
+              <p style={{ margin: '0 0 3px' }}>✓ 新增、編輯任何活動（標題/時間/地點/參與成員）</p>
+              <p style={{ margin: 0 }}>✗ 刪除活動（需擁有者處理）</p>
+            </>
+          }
+        />
         {/* Day selector */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 14 }}>
           {DAY_OPTIONS.length > 5 && (

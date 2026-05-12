@@ -16,6 +16,7 @@ import type { User } from 'firebase/auth';
 import { C, FONT } from '../../App';
 import CurrencySearch from '../../components/CurrencySearch';
 import DateRangePicker from '../../components/DateRangePicker';
+import { resetAllHints } from '../../utils/hints';
 
 export type TripRole = 'owner' | 'editor' | 'visitor';
 
@@ -1129,6 +1130,21 @@ export default function ProjectHub({ onEnterProject, syncedProjects }: Props) {
                     <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>查看完整使用者說明書</span>
                     <FontAwesomeIcon icon={faArrowUpRightFromSquare} style={{ fontSize: 11, color: C.barkLight }} />
                   </a>
+
+                  {/* Reset all dismissed hints — for users who accidentally
+                      closed a help banner and want to see it again. */}
+                  <button
+                    type="button"
+                    onClick={() => {
+                      resetAllHints();
+                      alert('已重新顯示所有功能提示。回到各頁面就會再次看到 💡 黃色提示橫幅。');
+                    }}
+                    style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 10, padding: '13px 16px', borderRadius: 14, background: 'var(--tm-section-bg)', border: `1.5px solid ${C.creamDark}`, cursor: 'pointer', fontFamily: FONT, marginBottom: 8 }}>
+                    <div style={{ width: 28, height: 28, borderRadius: 8, background: '#FFF3CC', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <FontAwesomeIcon icon={faLightbulb} style={{ fontSize: 13, color: '#9A6800' }} />
+                    </div>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark, textAlign: 'left' }}>重新顯示所有功能提示</span>
+                  </button>
                 </div>
               </div>
             </div>
