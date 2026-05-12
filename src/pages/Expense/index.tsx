@@ -27,6 +27,50 @@ type SplitMode = 'equal' | 'weighted' | 'amount';
 type SortMode = 'newest' | 'oldest' | 'largest' | 'date-asc' | 'date-desc';
 type Currency = string;
 
+// ── I3 inline-hint example amounts (custom-amount split) ──────────────────
+// Used by the dynamic example sentence shown when splitMode === 'amount'.
+// Tuned so the total amount × FX rate lands in a plausible NT$ travel-expense
+// magnitude (~NT$ 5k–25k), and the per-person figures are recognizable round
+// numbers. Currencies absent from this map fall back to a rate-based heuristic
+// in `pickExampleAmounts()` so custom/exotic currencies still produce a sane
+// example sentence.
+const SPLIT_EXAMPLE_BY_CURRENCY: Record<string, [number, number, number]> = {
+  TWD: [3000, 2000, 5000],
+  JPY: [30000, 20000, 50000],
+  KRW: [60000, 40000, 100000],
+  IDR: [3000000, 2000000, 5000000],
+  VND: [600000, 400000, 1000000],
+  THB: [3000, 2000, 5000],
+  USD: [30, 20, 50],
+  EUR: [30, 20, 50],
+  GBP: [30, 20, 50],
+  AUD: [60, 40, 100],
+  NZD: [60, 40, 100],
+  CAD: [60, 40, 100],
+  CHF: [30, 20, 50],
+  SGD: [60, 40, 100],
+  HKD: [300, 200, 500],
+  MOP: [300, 200, 500],
+  CNY: [300, 200, 500],
+  MYR: [300, 200, 500],
+  PHP: [3000, 2000, 5000],
+  AED: [300, 200, 500],
+  SAR: [300, 200, 500],
+  TRY: [600, 400, 1000],
+  ZAR: [600, 400, 1000],
+  MXN: [600, 400, 1000],
+  BRL: [300, 200, 500],
+  INR: [3000, 2000, 5000],
+};
+const pickExampleAmounts = (cur: string, rate: number): [number, number, number] => {
+  const known = SPLIT_EXAMPLE_BY_CURRENCY[cur];
+  if (known) return known;
+  // Fallback: pick a magnitude so the 10× base unit ≈ NT$ 10,000.
+  const base = Math.max(1, 1000 / Math.max(rate, 0.0001));
+  const mag = Math.pow(10, Math.round(Math.log10(base)));
+  return [3 * mag, 2 * mag, 5 * mag];
+};
+
 // ── Live thousands-separator helpers for amount inputs ──────────────────────
 // HTML <input type="number"> can't render commas, so the amount field is
 // switched to type="text" + inputMode="decimal" and these helpers manage the
@@ -2756,11 +2800,32 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                   )}
                   {form.splitMode === 'amount' && (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                      {/* I3: 自訂金額分帳 inline guidance */}
-                      <p style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.55, display: 'flex', alignItems: 'flex-start', gap: 4, padding: '6px 8px', background: 'var(--tm-section-bg)', borderRadius: 8 }}>
-                        <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 9, marginTop: 2, flexShrink: 0, opacity: 0.7 }} />
-                        <span>🔢 填入每人分配金額（用原幣別填），系統會按比例分配實際 TWD。例：30k:20k:50k JPY，卡單到後填 NT$ 23,500，三人分到 7,050 / 4,700 / 11,750</span>
-                      </p>
+                      {/* I3: 自訂金額分帳 inline guidance — example sentence is
+                          dynamically generated to match the form's current
+                          currency + rate so it always feels relevant. */}
+                      {(() => {
+                        const cur = form.currency;
+                        const rate = resolvedRate.rate;
+                        const [a, b, c] = pickExampleAmounts(cur, rate);
+                        const totalForeign = a + b + c;
+                        const cardFeeRate = (form.paymentMethod === 'card' && cur !== 'TWD')
+                          ? (Number(form.cardFeePercent || '1.5') || 1.5) / 100
+                          : 0;
+                        const twdTotal = Math.round(totalForeign * rate * (1 + cardFeeRate));
+                        const shares = [a, b, c].map(n => Math.round(twdTotal * n / totalForeign));
+                        const isTWD = cur === 'TWD';
+                        const isCard = form.paymentMethod === 'card' && !isTWD;
+                        return (
+                          <p style={{ fontSize: 10, color: C.barkLight, margin: 0, lineHeight: 1.55, display: 'flex', alignItems: 'flex-start', gap: 4, padding: '6px 8px', background: 'var(--tm-section-bg)', borderRadius: 8 }}>
+                            <FontAwesomeIcon icon={faCircleInfo} style={{ fontSize: 9, marginTop: 2, flexShrink: 0, opacity: 0.7 }} />
+                            {isTWD ? (
+                              <span>🔢 填入每人分配金額。例：{a.toLocaleString()}:{b.toLocaleString()}:{c.toLocaleString()} TWD，三人各自分到 NT$ {a.toLocaleString()} / {b.toLocaleString()} / {c.toLocaleString()}</span>
+                            ) : (
+                              <span>🔢 填入每人分配金額（用 {cur} 填），系統會按比例分配實際 TWD。例：{a.toLocaleString()}:{b.toLocaleString()}:{c.toLocaleString()} {cur}，{isCard ? '卡單到後填' : '換算成'} NT$ {twdTotal.toLocaleString()}，三人分到 {shares[0].toLocaleString()} / {shares[1].toLocaleString()} / {shares[2].toLocaleString()}</span>
+                            )}
+                          </p>
+                        );
+                      })()}
                       {displayMemberNames.map((name: string) => (
                         <div key={name} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                           <span style={{ width: 60, fontSize: 13, fontWeight: 600, color: C.bark, flexShrink: 0 }}>{name}</span>
