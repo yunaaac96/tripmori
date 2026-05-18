@@ -305,6 +305,10 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   const [form, setForm] = useState({ ...defaultForm });
   const [showSubItems, setShowSubItems] = useState(false);
   const [expandedExpense, setExpandedExpense] = useState<string | null>(null);
+  // ID of the expense card currently being visually highlighted (e.g. after
+  // the "等卡單" banner shortcut scrolls the user to the first awaiting one).
+  // Auto-clears via a timeout so the glow doesn't linger forever.
+  const [highlightedExpenseId, setHighlightedExpenseId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [descOnlyEdit, setDescOnlyEdit] = useState(false); // editing description/notes only on a settled expense
 
@@ -3083,17 +3087,44 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
         )}
 
         {/* ── Settlement suggestions (hidden for visitors) ── */}
-        {/* Awaiting-statement reminder — these expenses are excluded from stats */}
+        {/* Awaiting-statement reminder — these expenses are excluded from stats.
+            The whole banner is tappable: it scrolls to the first awaiting card
+            in `filteredExpenses` order (the user's currently-applied filter so
+            the target is actually in view), then briefly highlights it via the
+            `highlightedExpenseId` glow. Saves users from scrolling through many
+            rows of cards to locate the ones still needing 補實際金額. */}
         {!isVisitor && (() => {
-          const awaitCount = visibleExpenses.filter((e: any) => e.awaitCardStatement).length;
+          const awaiting = visibleExpenses.filter((e: any) => e.awaitCardStatement);
+          const awaitCount = awaiting.length;
           if (awaitCount === 0) return null;
+          const jumpToFirstAwaiting = () => {
+            // Prefer a target that's actually in the currently-filtered list;
+            // otherwise the scroll would land on something the user can't see.
+            const firstVisibleId = filteredExpenses
+              .filter((e: any) => e.awaitCardStatement)
+              .map((e: any) => e.id)[0]
+              ?? awaiting[0]?.id;
+            if (!firstVisibleId) return;
+            const el = document.getElementById(`expense-card-${firstVisibleId}`);
+            if (el) {
+              el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              setHighlightedExpenseId(firstVisibleId);
+              window.setTimeout(() => setHighlightedExpenseId(null), 2200);
+            }
+          };
           return (
-            <div style={{ marginBottom: 10, padding: '9px 12px', borderRadius: 12, background: '#FFE8CC', border: '1px solid #E8B96A', display: 'flex', alignItems: 'flex-start', gap: 8 }}>
-              <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 12, color: '#9A6800', marginTop: 2, flexShrink: 0 }} />
-              <span style={{ fontSize: 11, color: '#9A6800', fontWeight: 600, lineHeight: 1.55 }}>
-                共 {awaitCount} 筆刷卡記帳等卡單中，暫未納入結算。卡單到後請至該筆記帳點「補實際金額」按鈕填入。
+            <button
+              type="button"
+              onClick={jumpToFirstAwaiting}
+              style={{ width: '100%', marginBottom: 10, padding: '9px 12px', borderRadius: 12, background: '#FFE8CC', border: '1px solid #E8B96A', display: 'flex', alignItems: 'center', gap: 8, cursor: 'pointer', fontFamily: FONT, textAlign: 'left' as const, touchAction: 'manipulation' as const, WebkitTapHighlightColor: 'transparent' }}>
+              <FontAwesomeIcon icon={faCreditCard} style={{ fontSize: 12, color: '#9A6800', flexShrink: 0 }} />
+              <span style={{ flex: 1, fontSize: 11, color: '#9A6800', fontWeight: 600, lineHeight: 1.55 }}>
+                共 {awaitCount} 筆刷卡記帳等卡單中，暫未納入結算。卡單到後點「補實際金額」按鈕填入。
               </span>
-            </div>
+              <span style={{ flexShrink: 0, fontSize: 11, color: '#9A6800', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 3, padding: '3px 8px', background: 'rgba(154, 104, 0, 0.12)', borderRadius: 8 }}>
+                跳到 <FontAwesomeIcon icon={faArrowDown} style={{ fontSize: 9 }} />
+              </span>
+            </button>
           );
         })()}
 
@@ -3425,8 +3456,23 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
               const isAwaiting = !!e.awaitCardStatement;
               const hasActual  = e.actualTWD != null;
               const isForeignCard = e.paymentMethod === 'card' && (e.currency || projCurrency) !== 'TWD';
+              const isHighlighted = highlightedExpenseId === e.id;
               return (
-                <div key={e.id} style={{ ...cardStyle, padding: '12px 14px', borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid var(--tm-settlement)` : isIncome ? `3px solid #4A8A4A` : undefined, opacity: isAwaiting ? 0.55 : 1 }}>
+                <div
+                  key={e.id}
+                  id={`expense-card-${e.id}`}
+                  style={{
+                    ...cardStyle,
+                    padding: '12px 14px',
+                    borderLeft: isPrivateExpense ? `3px solid #9A5AC8` : isSettlement ? `3px solid var(--tm-settlement)` : isIncome ? `3px solid #4A8A4A` : undefined,
+                    opacity: isAwaiting ? 0.55 : 1,
+                    // Glow pulse when this card is the jump target from the
+                    // 等卡單 banner shortcut. Overrides shadow only — keeps
+                    // the rest of cardStyle (padding/border) intact.
+                    boxShadow: isHighlighted ? '0 0 0 3px #E8B96A, 0 4px 16px rgba(232, 185, 106, 0.45)' : undefined,
+                    transition: 'box-shadow 0.4s ease',
+                  }}>
+
                   <div style={{ display: 'flex', alignItems: 'flex-start', gap: 10 }}>
                     {/* Category icon */}
                     {(() => {
