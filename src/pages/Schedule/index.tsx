@@ -363,12 +363,25 @@ export default function SchedulePage({ events, members = [], project, firestore,
         applyFallback(locationName);
         return;
       }
+      // Open-Meteo /forecast hard-caps end_date at today + 16 days; any further
+      // returns HTTP 400 for the WHOLE request, not just the offending days —
+      // which is why a long trip (e.g. 6/6 → 6/15 from today 5/27, with the back
+      // end 19 days out) used to silently fail into the generic fallback even
+      // though the front of the trip was well within the forecast window.
+      // Clamp the request range so we always get back the days that ARE
+      // forecastable; per-day fallback below fills in anything we trimmed off.
+      const FORECAST_HORIZON_DAYS = 15;
+      const horizonMs = Date.now() + FORECAST_HORIZON_DAYS * 86400000;
+      const endDateMs = new Date(endDate).getTime();
+      const clampedEnd = endDateMs > horizonMs
+        ? new Date(horizonMs).toISOString().slice(0, 10)
+        : endDate;
       const url =
         `https://api.open-meteo.com/v1/forecast` +
         `?latitude=${lat}&longitude=${lng}` +
         `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max` +
         `&timezone=${encodeURIComponent(timezone)}` +
-        `&start_date=${startDate}&end_date=${endDate}`;
+        `&start_date=${startDate}&end_date=${clampedEnd}`;
 
       fetch(url)
         .then(r => r.json())
