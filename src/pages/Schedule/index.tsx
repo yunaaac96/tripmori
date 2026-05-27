@@ -369,22 +369,49 @@ export default function SchedulePage({ events, members = [], project, firestore,
         .then(r => r.json())
         .then(data => {
           const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_max } = data.daily;
+          // Per-day strategy: pre-fill every trip date with the fallback climate
+          // estimate, then overlay real API data on top for days the model
+          // actually returned values for. This means each day-tab always shows
+          // SOMETHING, days within the 16-day forecast horizon show their real
+          // per-day forecast, and days past the horizon (e.g. the back end of
+          // a 10-day trip that starts 8 days from now) gracefully degrade to
+          // the fallback instead of going blank.
           const result: Record<string, WeatherDay> = {};
-          time.forEach((date: string, i: number) => {
-            const max = Math.round(temperature_2m_max[i]);
-            const { emoji, desc } = wmoToDisplay(weathercode[i]);
+          TRIP_DATES.forEach(d => { result[d] = { ...FALLBACK_CLIMATE }; });
+          let realDayCount = 0;
+          (time || []).forEach((date: string, i: number) => {
+            const tMax = temperature_2m_max?.[i];
+            const tMin = temperature_2m_min?.[i];
+            const wCode = weathercode?.[i];
+            // Open-Meteo returns null for dates outside the model's confident
+            // window — skip those so the fallback stays in place for that day.
+            if (tMax == null || tMin == null || wCode == null) return;
+            const max = Math.round(tMax);
+            const { emoji, desc } = wmoToDisplay(wCode);
             result[date] = {
               max,
-              min: Math.round(temperature_2m_min[i]),
+              min: Math.round(tMin),
               emoji, desc,
-              precipProb: precipitation_probability_max[i] ?? 0,
+              precipProb: precipitation_probability_max?.[i] ?? 0,
               outfit: outfitForTemp(max),
             };
+            realDayCount++;
           });
           setWeather(result);
-          const subtitle = daysUntilTrip <= 0
-            ? `${locationName}　今日預報`
-            : `${locationName}　出發當天即時天氣預報`;
+          // Subtitle reflects what the user actually got: all real / partial /
+          // none — so they understand why some day-tabs feel "real" and others
+          // look generic.
+          const totalDays = TRIP_DATES.length;
+          let subtitle: string;
+          if (realDayCount === 0) {
+            subtitle = `${locationName}　📅 全部日期仍為氣候估算（請稍後再試）`;
+          } else if (realDayCount < totalDays) {
+            subtitle = `${locationName}　即時預報 ${realDayCount}/${totalDays} 天（其餘為氣候估算）`;
+          } else if (daysUntilTrip <= 0) {
+            subtitle = `${locationName}　今日預報`;
+          } else {
+            subtitle = `${locationName}　出發前即時天氣預報`;
+          }
           setWeatherSubtitle(subtitle);
         })
         .catch(() => applyFallback(locationName));
