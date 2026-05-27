@@ -341,7 +341,19 @@ export default function SchedulePage({ events, members = [], project, firestore,
     };
 
     const fetchWeather = (lat: number, lng: number, timezone: string, locationName: string) => {
-      const daysUntilTrip = Math.floor((new Date(startDate).getTime() - Date.now()) / 86400000);
+      // Determine "is the trip imminent" using the EARLIEST signal we have.
+      // Previously this only looked at project.startDate (the declared trip
+      // start, usually the arrival date). For trips with an overnight outbound
+      // flight, the outbound departure can be a day earlier than the declared
+      // start date — so the countdown could read "8 天" while the weather
+      // threshold still saw "11 天" and stayed on the fallback climate.
+      // Now we use min(outbound departure, declared start) to match the
+      // countdown's "trip is starting" notion.
+      const startDateMs = new Date(startDate).getTime();
+      const startSignalMs = flightStartMs != null
+        ? Math.min(flightStartMs, startDateMs)
+        : startDateMs;
+      const daysUntilTrip = Math.floor((startSignalMs - Date.now()) / 86400000);
       if (daysUntilTrip > 10) {
         applyFallback(locationName);
         return;
@@ -400,7 +412,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
         setWeatherSubtitle('尚未設定目的地　輕點兩下設定');
       })
       .catch(() => applyFallback(project?.title || '目的地'));
-  }, [TRIP_ID, weatherLocationKey]);
+    // `flightStartMs` is added so the 10-day check re-evaluates the moment
+    // the outbound flight time loads (it arrives asynchronously from a
+    // separate Firestore fetch). Without this dep, the fallback baked in
+    // at first mount would never be replaced even after flight data arrives.
+  }, [TRIP_ID, weatherLocationKey, flightStartMs]);
 
   const dayInfo = DAY_OPTIONS.find(d => d.date === activeDay) ?? DAY_OPTIONS[0];
   const currentWeather = weather[activeDay];
