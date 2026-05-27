@@ -388,7 +388,13 @@ export default function SchedulePage({ events, members = [], project, firestore,
       const url =
         `https://api.open-meteo.com/v1/forecast` +
         `?latitude=${lat}&longitude=${lng}` +
-        `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max` +
+        // Use _mean (daily average) not _max (peak hourly). _max reports the
+        // single hour with the highest chance, which in tropical climates
+        // routinely lands at 70-95% even on dry-season days where the
+        // average is <25%. Users read this as "will it rain today?" not
+        // "what's the peak hourly probability?", so mean matches their
+        // mental model better.
+        `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_mean` +
         `&timezone=${encodeURIComponent(timezone)}` +
         `&start_date=${startDate}&end_date=${clampedEnd}`;
 
@@ -399,7 +405,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
             applyFallback(locationName);
             return;
           }
-          const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_max } = data.daily;
+          const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_mean } = data.daily;
           // Per-day strategy: pre-fill every trip date with the fallback climate
           // estimate, then overlay real API data on top for days the model
           // actually returned values for. This means each day-tab always shows
@@ -423,7 +429,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
               max,
               min: Math.round(tMin),
               emoji, desc,
-              precipProb: precipitation_probability_max?.[i] ?? 0,
+              precipProb: Math.round(precipitation_probability_mean?.[i] ?? 0),
               outfit: outfitForTemp(max),
               // Real API value — labelled as 即時預報 in the subtitle when this
               // day-tab is active.
