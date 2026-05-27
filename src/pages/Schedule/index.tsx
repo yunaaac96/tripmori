@@ -359,10 +359,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
       // fire the API the moment ANY trip day enters the horizon, even if the
       // back end of the trip is still too far out. The user gets real data
       // for the near days and graceful estimates for the far days.
-      // TEMP DEBUG (remove once weather verified working on mobile):
-      console.log('[weather] startDate=', startDate, 'endDate=', endDate, 'lat=', lat, 'lng=', lng, 'tz=', timezone, 'flightStartMs=', flightStartMs, 'daysUntilTrip=', daysUntilTrip);
       if (daysUntilTrip > 16) {
-        console.log('[weather] threshold-fail: daysUntilTrip > 16');
         applyFallback(locationName);
         return;
       }
@@ -385,17 +382,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
         `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_max` +
         `&timezone=${encodeURIComponent(timezone)}` +
         `&start_date=${startDate}&end_date=${clampedEnd}`;
-      console.log('[weather] fetch url:', url);
 
       fetch(url)
-        .then(r => {
-          console.log('[weather] response status:', r.status, r.ok);
-          return r.json();
-        })
+        .then(r => r.json())
         .then(data => {
-          console.log('[weather] response data:', JSON.stringify(data).slice(0, 500));
           if (!data.daily) {
-            console.log('[weather] no .daily field — applying fallback');
             applyFallback(locationName);
             return;
           }
@@ -444,12 +435,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
             subtitle = `${locationName}　出發前即時天氣預報`;
           }
           setWeatherSubtitle(subtitle);
-          console.log('[weather] success: realDayCount=', realDayCount, '/', TRIP_DATES.length);
         })
-        .catch(err => {
-          console.error('[weather] fetch error:', err);
-          applyFallback(locationName);
-        });
+        .catch(() => applyFallback(locationName));
     };
 
     // Fetch trip location from Firestore; fall back to a generic default if not set
@@ -457,7 +444,6 @@ export default function SchedulePage({ events, members = [], project, firestore,
       .then(snap => {
         if (snap.exists()) {
           const d = snap.data();
-          console.log('[weather] trip doc location:', { lat: d.locationLat, lng: d.locationLng, tz: d.locationTimezone, name: d.locationName });
           if (d.locationLat && d.locationLng) {
             fetchWeather(
               d.locationLat,
@@ -467,20 +453,14 @@ export default function SchedulePage({ events, members = [], project, firestore,
             );
             return;
           }
-        } else {
-          console.log('[weather] trip doc does not exist');
         }
         // No location stored yet — show fallback climate + hint
-        console.log('[weather] no location set → fallback');
         const fallback: Record<string, WeatherDay> = {};
         TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
         setWeather(fallback);
         setWeatherSubtitle('尚未設定目的地　輕點兩下設定');
       })
-      .catch(err => {
-        console.error('[weather] getDoc error:', err);
-        applyFallback(project?.title || '目的地');
-      });
+      .catch(() => applyFallback(project?.title || '目的地'));
     // `flightStartMs` is added so the 10-day check re-evaluates the moment
     // the outbound flight time loads (it arrives asynchronously from a
     // separate Firestore fetch). Without this dep, the fallback baked in
