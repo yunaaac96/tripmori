@@ -337,24 +337,29 @@ export default function SchedulePage({ events, members = [], project, firestore,
       const fallback: Record<string, WeatherDay> = {};
       TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
       setWeather(fallback);
-      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 10 天更新即時預報）`);
+      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 16 天起更新即時預報）`);
     };
 
     const fetchWeather = (lat: number, lng: number, timezone: string, locationName: string) => {
       // Determine "is the trip imminent" using the EARLIEST signal we have.
-      // Previously this only looked at project.startDate (the declared trip
-      // start, usually the arrival date). For trips with an overnight outbound
-      // flight, the outbound departure can be a day earlier than the declared
-      // start date — so the countdown could read "8 天" while the weather
-      // threshold still saw "11 天" and stayed on the fallback climate.
-      // Now we use min(outbound departure, declared start) to match the
-      // countdown's "trip is starting" notion.
+      // We use min(outbound departure, declared start) to match the countdown's
+      // "trip is starting" notion — important for trips with an overnight
+      // outbound flight where departure is a day before the arrival date.
       const startDateMs = new Date(startDate).getTime();
       const startSignalMs = flightStartMs != null
         ? Math.min(flightStartMs, startDateMs)
         : startDateMs;
       const daysUntilTrip = Math.floor((startSignalMs - Date.now()) / 86400000);
-      if (daysUntilTrip > 10) {
+      // Skip the API call only when the ENTIRE trip is past Open-Meteo's
+      // 16-day forecast horizon (nothing real to fetch). Previously this was
+      // `> 10`, a conservative cap chosen back when there was no per-day
+      // fallback — if even one trip day fell outside the horizon, the whole
+      // request was skipped and every day showed the generic estimate.
+      // Now that we overlay real data per-day on top of fallback, we should
+      // fire the API the moment ANY trip day enters the horizon, even if the
+      // back end of the trip is still too far out. The user gets real data
+      // for the near days and graceful estimates for the far days.
+      if (daysUntilTrip > 16) {
         applyFallback(locationName);
         return;
       }
