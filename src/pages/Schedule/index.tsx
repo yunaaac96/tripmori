@@ -57,6 +57,12 @@ type WeatherDay = {
   desc: string;
   precipProb: number;
   outfit: string;
+  // `true` when this day's values came from the generic FALLBACK_CLIMATE
+  // (because the date is past Open-Meteo's 16-day horizon or the API errored).
+  // `false` when overlaid with real per-day API data. Used by the weather
+  // card subtitle to label the CURRENTLY-VIEWED day as 即時/估算 rather than
+  // a global "N/M 天" summary.
+  isFallback: boolean;
 };
 
 type Mode = 'view' | 'add' | 'edit';
@@ -79,12 +85,14 @@ function outfitForTemp(max: number): string {
   return '短袖短褲＋防曬必備 ☀️';
 }
 
-// Generic fallback climate (mild/warm travel weather)
+// Generic fallback climate (mild/warm travel weather). `isFallback: true`
+// so the weather card subtitle labels this day as 氣候估算.
 const FALLBACK_CLIMATE: WeatherDay = {
   max: 26, min: 21,
   emoji: '⛅', desc: '多雲',
   precipProb: 25,
   outfit: outfitForTemp(26),
+  isFallback: true,
 };
 
 export default function SchedulePage({ events, members = [], project, firestore, onProjectUpdate }: { events: any[]; members: any[]; project: any; firestore: any; onProjectUpdate?: (p: any) => void }) {
@@ -337,7 +345,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
       const fallback: Record<string, WeatherDay> = {};
       TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
       setWeather(fallback);
-      setWeatherSubtitle(`${locationLabel}　📅 氣候估算（出發前 16 天起更新即時預報）`);
+      // Subtitle is just the location; per-day 氣候估算 chip is added at render.
+      setWeatherSubtitle(locationLabel);
     };
 
     const fetchWeather = (lat: number, lng: number, timezone: string, locationName: string) => {
@@ -416,25 +425,19 @@ export default function SchedulePage({ events, members = [], project, firestore,
               emoji, desc,
               precipProb: precipitation_probability_max?.[i] ?? 0,
               outfit: outfitForTemp(max),
+              // Real API value — labelled as 即時預報 in the subtitle when this
+              // day-tab is active.
+              isFallback: false,
             };
             realDayCount++;
           });
           setWeather(result);
-          // Subtitle reflects what the user actually got: all real / partial /
-          // none — so they understand why some day-tabs feel "real" and others
-          // look generic.
-          const totalDays = TRIP_DATES.length;
-          let subtitle: string;
-          if (realDayCount === 0) {
-            subtitle = `${locationName}　📅 全部日期仍為氣候估算（請稍後再試）`;
-          } else if (realDayCount < totalDays) {
-            subtitle = `${locationName}　即時預報 ${realDayCount}/${totalDays} 天（其餘為氣候估算）`;
-          } else if (daysUntilTrip <= 0) {
-            subtitle = `${locationName}　今日預報`;
-          } else {
-            subtitle = `${locationName}　出發前即時天氣預報`;
-          }
-          setWeatherSubtitle(subtitle);
+          // Subtitle is just the location now. The 即時/估算 status is rendered
+          // per-day at the card site (a small chip next to this subtitle) based
+          // on whichever day-tab is currently active — much more direct than
+          // a global "6/10 days" summary that didn't tell users which day-tabs
+          // were which.
+          setWeatherSubtitle(locationName);
         })
         .catch(() => applyFallback(locationName));
     };
@@ -1388,7 +1391,23 @@ export default function SchedulePage({ events, members = [], project, firestore,
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{currentWeather.emoji}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <p style={{ fontSize: 10, color: '#6A8F5C', fontWeight: 600, margin: '0 0 3px' }}>{weatherSubtitle}</p>
+                  {/* Subtitle now shows per-day source: 即時預報 vs 氣候估算,
+                      labelled with the chip on the right, so the user knows
+                      whether THIS day-tab is the real forecast or the climate
+                      estimate without having to read a global N/M summary. */}
+                  <p style={{ fontSize: 10, color: '#6A8F5C', fontWeight: 600, margin: '0 0 3px', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                    <span>{weatherSubtitle}</span>
+                    <span style={{
+                      fontSize: 9,
+                      fontWeight: 700,
+                      padding: '1px 6px',
+                      borderRadius: 8,
+                      background: currentWeather.isFallback ? 'rgba(154, 104, 0, 0.15)' : 'rgba(74, 122, 53, 0.15)',
+                      color: currentWeather.isFallback ? '#9A6800' : '#4A7A35',
+                    }}>
+                      {currentWeather.isFallback ? '📅 氣候估算' : '✓ 即時預報'}
+                    </span>
+                  </p>
                   <p style={{ fontSize: 14, color: '#3A5A3A', fontWeight: 700, margin: '0 0 3px' }}>
                     {currentWeather.desc} · {currentWeather.max}°<span style={{ fontWeight: 500, fontSize: 12 }}>/{currentWeather.min}°C</span>
                   </p>
