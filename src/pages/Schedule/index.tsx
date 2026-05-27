@@ -1391,22 +1391,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{currentWeather.emoji}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  {/* Subtitle now shows per-day source: 即時預報 vs 氣候估算,
-                      labelled with the chip on the right, so the user knows
-                      whether THIS day-tab is the real forecast or the climate
-                      estimate without having to read a global N/M summary. */}
-                  <p style={{ fontSize: 10, color: '#6A8F5C', fontWeight: 600, margin: '0 0 3px', display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                    <span>{weatherSubtitle}</span>
-                    <span style={{
-                      fontSize: 9,
-                      fontWeight: 700,
-                      padding: '1px 6px',
-                      borderRadius: 8,
-                      background: currentWeather.isFallback ? 'rgba(154, 104, 0, 0.15)' : 'rgba(74, 122, 53, 0.15)',
-                      color: currentWeather.isFallback ? '#9A6800' : '#4A7A35',
-                    }}>
-                      {currentWeather.isFallback ? '📅 氣候估算' : '✓ 即時預報'}
-                    </span>
+                  {/* Subtitle: "{location}　{即時預報|氣候估算}". Plain text —
+                      no chip / badge / color tint — to keep visual consistency
+                      with the rest of the card and avoid pill-shaped clutter. */}
+                  <p style={{ fontSize: 10, color: '#6A8F5C', fontWeight: 600, margin: '0 0 3px' }}>
+                    {weatherSubtitle}　{currentWeather.isFallback ? '氣候估算' : '即時預報'}
                   </p>
                   <p style={{ fontSize: 14, color: '#3A5A3A', fontWeight: 700, margin: '0 0 3px' }}>
                     {currentWeather.desc} · {currentWeather.max}°<span style={{ fontWeight: 500, fontSize: 12 }}>/{currentWeather.min}°C</span>
