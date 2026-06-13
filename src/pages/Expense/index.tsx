@@ -461,8 +461,25 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       let pcts = { ...p.percentages };
       if (Object.keys(pcts).length === 0) pcts = getEqualPcts(activeMems);
       const cur = pcts[name] ?? Math.floor(100 / activeMems.length / 5) * 5;
-      const newVal = Math.min(100 - (activeMems.length - 1) * 5, Math.max(5, cur + delta));
+      // Bounds: [0, 100]. Lowered from min=5 so members can be excluded by
+      // tapping − until 0; raised from max=100−(n−1)*5 to 100 because others
+      // can now be 0 too, freeing this person to take the full share.
+      const newVal = Math.min(100, Math.max(0, cur + delta));
       const updated = normalizePcts(pcts, name, newVal);
+      return { ...p, percentages: updated };
+    });
+  };
+
+  // Manual-input variant: caller passes the exact target % (e.g. 7, 13 — values
+  // the 5%-step − / + buttons can't reach). Clamped to [0, 100], rounded, then
+  // normalised the same way as the buttons so the row total still sums to 100.
+  const setPercentageExact = (name: string, value: number) => {
+    setForm(p => {
+      const activeMems = p.splitWith.length > 0 ? p.splitWith : memberNames;
+      let pcts = { ...p.percentages };
+      if (Object.keys(pcts).length === 0) pcts = getEqualPcts(activeMems);
+      const clamped = Math.min(100, Math.max(0, Math.round(value || 0)));
+      const updated = normalizePcts(pcts, name, clamped);
       return { ...p, percentages: updated };
     });
   };
@@ -2790,7 +2807,28 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: C.bark }}>{name}</span>
                             <button onClick={() => setPercentage(name, -5)}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>−</button>
-                            <span style={{ minWidth: 38, textAlign: 'center', fontSize: 14, fontWeight: 700, color: C.bark }}>{pct}%</span>
+                            {/* The % value is now a tappable number input so users
+                                can type exact values (e.g. 7, 13) that the 5%-step
+                                buttons can't reach. Tab/blur commits via the
+                                controlled setPercentageExact path. */}
+                            <span style={{ display: 'flex', alignItems: 'baseline', minWidth: 38, justifyContent: 'center' }}>
+                              <input
+                                type="number"
+                                inputMode="numeric"
+                                min={0}
+                                max={100}
+                                value={pct}
+                                onChange={e => {
+                                  const raw = e.target.value;
+                                  if (raw === '') return;
+                                  const n = Number(raw);
+                                  if (Number.isFinite(n)) setPercentageExact(name, n);
+                                }}
+                                onFocus={e => e.currentTarget.select()}
+                                style={{ width: 28, textAlign: 'center', fontSize: 14, fontWeight: 700, color: C.bark, background: 'transparent', border: 'none', padding: 0, fontFamily: FONT, MozAppearance: 'textfield' as const }}
+                              />
+                              <span style={{ fontSize: 14, fontWeight: 700, color: C.bark }}>%</span>
+                            </span>
                             <button onClick={() => setPercentage(name, 5)}
                               style={{ width: 28, height: 28, borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontWeight: 700, cursor: 'pointer', fontSize: 14, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>＋</button>
                             <span style={{ minWidth: 70, textAlign: 'right', fontSize: 12, color: C.earth, fontWeight: 600 }}>NT$ {share.toLocaleString()}</span>

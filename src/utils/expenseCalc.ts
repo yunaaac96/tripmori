@@ -58,14 +58,18 @@ export const normalizePcts = (
         result[n] = remaining - distributed;
       } else {
         const share = Math.round((pcts[n] / otherTotal) * remaining / 5) * 5;
-        result[n] = Math.max(5, share);
+        // Lowered floor from 5 → 0 so members can be explicitly excluded
+        // from a weighted split (0% = does not participate). The previous
+        // floor forced every member to ≥5%, which prevented true exclusion
+        // and silently bumped up shares the payer wanted at zero.
+        result[n] = Math.max(0, share);
         distributed += result[n];
       }
     });
     const total = Object.values(result).reduce((s, v) => s + v, 0);
     if (total !== 100) {
       const diff = 100 - total;
-      result[others[0]] = Math.max(5, result[others[0]] + diff);
+      result[others[0]] = Math.max(0, result[others[0]] + diff);
     }
   }
   return result;
