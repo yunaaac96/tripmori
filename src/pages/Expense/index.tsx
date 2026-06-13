@@ -3564,8 +3564,34 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         <p style={{ fontSize: 11, color: C.barkLight, margin: e.notes ? '0 0 2px' : 0 }}>
                           {splitModeLabel(e)}
                           {(() => {
+                            // For 'amount' and 'weighted' modes, members with 0
+                            // in customAmounts / percentages are NOT actually
+                            // participating in the split (the settlement engine
+                            // correctly gives them 0 share). Previously the card
+                            // still divided the total by the full splitWith list,
+                            // producing a misleading 「人均 NT$ X」 for everyone
+                            // — including the 8 members who paid nothing on a
+                            // 2-person custom-amount expense. Now we count only
+                            // the actual participants and show '分擔人數' instead
+                            // of '人均', because amounts in these modes are
+                            // intentionally unequal.
                             const sw3 = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
                             if (sw3.length <= 1) return null;
+                            if (e.splitMode === 'amount') {
+                              const realCount = sw3.filter((n: string) =>
+                                Number(e.customAmounts?.[n] ?? 0) > 0
+                              ).length;
+                              if (realCount <= 1) return null;
+                              return <span style={{ color: C.barkLight }}> · {realCount} 人分擔</span>;
+                            }
+                            if (e.splitMode === 'weighted') {
+                              const realCount = sw3.filter((n: string) =>
+                                Number(e.percentages?.[n] ?? 0) > 0
+                              ).length;
+                              if (realCount <= 1) return null;
+                              return <span style={{ color: C.barkLight }}> · {realCount} 人分擔</span>;
+                            }
+                            // 'equal' mode — 人均 is accurate and useful here.
                             const avg = Math.round(amtTWD / sw3.length);
                             return <span style={{ color: C.barkLight }}> · 人均 NT$ {avg.toLocaleString()}</span>;
                           })()}
