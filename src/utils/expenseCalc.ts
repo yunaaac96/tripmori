@@ -24,6 +24,38 @@ export const toTWDCalc = (amount: number, currency: string): number =>
  * Generate equal percentages for `names`, rounded to nearest 5%.
  * Any rounding remainder goes to names[0].
  */
+// ── Participant check ───────────────────────────────────────────────────────
+/**
+ * Returns true if `memberName` actually participates in this expense's
+ * cost / benefit. Members in splitWith with an explicit 0 in customAmounts
+ * (amount mode) or 0 in percentages (weighted mode) are formally listed
+ * but have zero share — the settlement engine already gives them 0, but
+ * display-side filters (personal-statement share list, debt badges, card
+ * '分擔人數') need this helper to avoid showing the expense to them as
+ * if they were on the hook.
+ *
+ * NOTE: this is a DISPLAY-side helper. The split-math functions
+ * (getPersonalShare, computeMemberStats.owed/share) already return 0 for
+ * zero-share members via the splitMode-specific branches — those paths are
+ * the source of truth and must not change.
+ */
+export const isExpenseParticipant = (
+  e: { splitWith?: string[]; splitMode?: 'equal' | 'weighted' | 'amount'; customAmounts?: Record<string, string | number>; percentages?: Record<string, number> },
+  memberName: string,
+  memberNames: string[],
+): boolean => {
+  const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
+  if (!sw.includes(memberName)) return false;
+  if (e.splitMode === 'amount') {
+    return Number(e.customAmounts?.[memberName] ?? 0) > 0;
+  }
+  if (e.splitMode === 'weighted') {
+    return Number(e.percentages?.[memberName] ?? 0) > 0;
+  }
+  // 'equal' (and undefined-mode legacy data) — every splitWith member is in.
+  return true;
+};
+
 export const getEqualPcts = (names: string[]): Record<string, number> => {
   if (names.length === 0) return {};
   const base = Math.floor(100 / names.length / 5) * 5;
@@ -461,11 +493,13 @@ export const buildPersonalStatement = (
     .sort((a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description));
 
   // Section 2: expenses where this member is a participant (includes self-paid).
+  // Uses isExpenseParticipant — previously this filter only checked splitWith
+  // membership, so amount-mode expenses with the member at customAmounts=0
+  // (e.g. 沙努 襯衫 for uu, where uu was deliberately given no share) still
+  // appeared in their statement with a NT$ 0 line item, falsely suggesting
+  // they owed something.
   const myShares = relevant
-    .filter(e => {
-      const sw = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-      return sw.includes(memberName);
-    })
+    .filter(e => isExpenseParticipant(e, memberName, memberNames))
     .map(toLineItem)
     .sort((a, b) => a.date.localeCompare(b.date) || a.description.localeCompare(b.description));
 
@@ -660,8 +694,11 @@ export const getSettlementBadge = (
   // signature for backward compat, but no longer drive lock state.
   void confirmedAmountsMap; void pairDebtsMap;
 
-  // Viewer is a debtor for this expense (in splitWith, not the payer)
-  if (e.payer !== viewerName && sw.includes(viewerName)) {
+  // Viewer is a debtor for this expense (in splitWith with a non-zero share,
+  // not the payer). The non-zero-share check uses isExpenseParticipant so that
+  // amount/weighted-mode expenses with viewer at 0 customAmount or 0% don't
+  // wrongly get a 'settled' / 'received' badge as if they were ever on the hook.
+  if (e.payer !== viewerName && isExpenseParticipant(e, viewerName, memberNames)) {
     if (e.settledAt) return 'settled';                       // legacy stamp
     if (wholeTripSettled) return 'settled';                  // entire trip closed
     if (isPerExpenseSettled(viewerName)) return 'settled';   // this line specifically settled
