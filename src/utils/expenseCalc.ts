@@ -248,13 +248,24 @@ export const getPersonalShare = (
     const myRankInFracs = fracs.findIndex(f => f.idx === myIdx);
     return floors[myIdx] + (myRankInFracs < rem ? 1 : 0);
   }
-  if (e.splitMode === 'amount' && e.customAmounts?.[name] != null) {
-    // Compute share proportionally from effectiveTWD so that sum(shares) == effectiveTWD
-    // regardless of which FX rate was used when the expense was recorded.
+  if (e.splitMode === 'amount' && e.customAmounts) {
+    // Proportional share from effectiveTWD (sum(shares) == effectiveTWD regardless
+    // of FX rate). The condition was previously `customAmounts[name] != null`,
+    // which fell through to equal split for any member missing from the map —
+    // but the data convention is that customAmounts only stores entries the
+    // user actually typed into, so a missing entry means "did not participate",
+    // not "no preference, use equal". Members like uu who were intentionally
+    // left out of a 沙努 襯衫 (filled by 寶翠+小乘 only) were getting an
+    // equal-split share they shouldn't have, inflating their 分攤份額 / owed.
+    // Now: any positive entry in the map means amount-mode is active, and
+    // unlisted members get 0 share. Fall through to equal only when no one
+    // filled anything (legacy / freshly-switched mode).
     const totalCustom = Object.values(e.customAmounts)
       .reduce((s, v) => s + (Number(v) || 0), 0);
-    if (totalCustom <= 0) return 0;
-    return Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom);
+    if (totalCustom > 0) {
+      return Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom);
+    }
+    // fall through to equal split below
   }
   // Equal split: distribute remainder to lexicographically earliest names
   const sortedSw = [...sw].sort();
@@ -323,15 +334,19 @@ export const computeMemberStats = (
         const share2 = floors2[myIdx2] + (myRank2 < rem2 ? 1 : 0);
         return s + sign * share2;
       }
-      if (e.splitMode === 'amount' && e.customAmounts && e.customAmounts[name] != null) {
-        // Use proportional split from effectiveTWD — avoids FX-rate mismatch between
-        // the stored amountTWD (may use custom rate) and the fallback toTWDCalc table.
+      if (e.splitMode === 'amount' && e.customAmounts) {
+        // See getPersonalShare for the rationale: customAmounts only stores
+        // entries the user actually typed, so a missing entry means "did not
+        // participate" (0 share), not "no preference, use equal". The previous
+        // `e.customAmounts[name] != null` gate fell through to equal split for
+        // unlisted members, inflating their owed total in computeMemberStats.
         const totalCustom = Object.values(e.customAmounts)
           .reduce((s2, v) => s2 + (Number(v) || 0), 0);
-        const share = totalCustom > 0
-          ? Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom)
-          : 0;
-        return s + sign * share;
+        if (totalCustom > 0) {
+          const share = Math.round(eAmt * (Number(e.customAmounts[name]) || 0) / totalCustom);
+          return s + sign * share;
+        }
+        // fall through to equal split when customAmounts is empty
       }
       const sortedSw = [...sw].sort();
       const myIdx = sortedSw.indexOf(name);

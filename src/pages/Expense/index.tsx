@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { deleteField } from 'firebase/firestore';
 import { C, FONT, EXPENSE_CATEGORY_MAP, JPY_TO_TWD, cardStyle, inputStyle, btnPrimary, ExpandableNotes, SmartText } from '../../App';
 import { avatarTextColor } from '../../utils/helpers';
-import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD, buildPersonalStatement, getConfirmedSettlementPairMap, getConfirmedSettlementAmountsMap, getPerExpenseConfirmedSet, getSettlementBadge } from '../../utils/expenseCalc';
+import { CURRENCY_TO_TWD, toTWDCalc, getEqualPcts, normalizePcts, getPersonalShare, computeMemberStats, computeSettlements, effectiveTWD, computeAmountTWD, buildPersonalStatement, getConfirmedSettlementPairMap, getConfirmedSettlementAmountsMap, getPerExpenseConfirmedSet, getSettlementBadge, isExpenseParticipant } from '../../utils/expenseCalc';
 import type { StatementLineItem } from '../../utils/expenseCalc';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { useGoogleUid } from '../../hooks/useAuth';
@@ -1943,12 +1943,14 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
       {/* ── Member Detail Modal — self only; private visible only to owner ── */}
       {memberDetailName && memberDetailName === currentUserName && (() => {
         const detailName = memberDetailName;
-        // Shared expenses this member is part of (payer or in splitWith); exclude settlements.
+        // Shared expenses this member is part of (payer or actually-sharing).
+        // Uses isExpenseParticipant so amount-mode expenses where detailName
+        // has 0 or no entry in customAmounts (e.g. uu on 沙努 襯衫) are
+        // excluded from the list, count, pie chart and 分攤份額 total.
         const sharedExpenses = visibleExpenses.filter((e: any) => {
           if (e.category === 'settlement') return false;
           if (e.isPrivate) return false;
-          const sw: string[] = e.splitWith && e.splitWith.length > 0 ? e.splitWith : memberNames;
-          return e.payer === detailName || sw.includes(detailName);
+          return e.payer === detailName || isExpenseParticipant(e, detailName, memberNames);
         });
         // Own private expenses (only accessible here because modal is self-only).
         const privateExpenses = visibleExpenses.filter((e: any) =>
