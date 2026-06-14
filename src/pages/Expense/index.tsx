@@ -1897,6 +1897,24 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         <FontAwesomeIcon icon={stmtSharesOpen ? faChevronUp : faChevronDown} style={{ fontSize: 11, color: C.barkLight }} />
                       </div>
                     </button>
+                    {/* Math-chain explainer: this list shows 「他人付款」 only,
+                        so the total here differs from the 我應分攤 in the
+                        summary above. Surface the missing piece (my own share
+                        in expenses I paid myself) so the user can reconcile
+                        instead of suspecting a bug. Hidden when no gap exists
+                        (e.g. user never paid anything). */}
+                    {(() => {
+                      const selfPaidShare = Math.round(stmt.myPaymentsTotal - stmt.myAdvancedTotal);
+                      if (selfPaidShare < 1) return null;
+                      return (
+                        <p style={{ fontSize: 10, color: C.barkLight, margin: '6px 4px 0', lineHeight: 1.55 }}>
+                          此處僅列他人付款；我自付分攤 NT$ {selfPaidShare.toLocaleString()} 已計入上方「我實際付出」
+                          <span style={{ color: C.barkLight, opacity: 0.85 }}>
+                            ・合計 = 我應分攤 NT$ {stmt.mySharesTotal.toLocaleString()}
+                          </span>
+                        </p>
+                      );
+                    })()}
                     {stmtSharesOpen && (
                       <>
                         {/* Toggles row: 也顯示已結清（only when settled items exist）
