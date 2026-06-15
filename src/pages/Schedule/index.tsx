@@ -259,22 +259,40 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const [segDraftFrom, setSegDraftFrom] = useState('');
   const [segDraftTo,   setSegDraftTo]   = useState('');
 
-  // Persist the in-memory `segments` list back to Firestore. Clears the legacy
-  // single-location fields the first time we write a real array, so future
-  // reads exclusively follow the new path.
+  // Persist the in-memory `segments` list back to Firestore. Also nukes the
+  // legacy single-location fields whenever we write — otherwise the useEffect
+  // reads back the stored data, sees an empty (or shorter) `locationSegments`
+  // array, falls through to the legacy fallback because `locationLat` is still
+  // there, and resurrects the synthesised segment the user just deleted.
   const writeSegments = async (next: LocationSegment[]) => {
-    if (!isOwner) return;
+    if (!isOwner) {
+      console.warn('[locationSegments] writeSegments: not owner, skipping');
+      return;
+    }
+    console.log('[locationSegments] writing', next);
     try {
+      const { deleteField } = await import('firebase/firestore');
       await updateDoc(doc(db, 'trips', TRIP_ID), {
         locationSegments: next.map(s => ({
           from: s.from, to: s.to,
           lat:  s.lat,  lng: s.lng,
           tz:   s.tz,   name: s.name,
         })),
+        // Tombstone the legacy single-location fields. Once at least one
+        // explicit write happens we want the loader to trust `locationSegments`
+        // as authoritative; leaving the old fields alive lets the migration
+        // fallback fire after delete.
+        locationLat:      deleteField(),
+        locationLng:      deleteField(),
+        locationTimezone: deleteField(),
+        locationName:     deleteField(),
       });
       setSegments(next);
       setWeatherLocationKey(k => k + 1);
-    } catch (e) { console.error(e); }
+    } catch (e) {
+      console.error('[locationSegments] write failed', e);
+      alert('儲存失敗，請確認網路後重試。錯誤：' + (e instanceof Error ? e.message : String(e)));
+    }
   };
 
   // Add: turn the picked search result + draft date range into a new segment
@@ -516,7 +534,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
         let segs: LocationSegment[] = [];
         if (snap.exists()) {
           const d = snap.data();
-          if (Array.isArray(d.locationSegments) && d.locationSegments.length > 0) {
+          // Authoritative once the field exists at all — even if the array is
+          // empty, that means the user has explicitly deleted every segment.
+          // Falling back to the legacy single-location fields in that case
+          // would resurrect the segment the user just removed.
+          if (Array.isArray(d.locationSegments)) {
             segs = d.locationSegments
               .filter((s: any) => s && typeof s.lat === 'number' && typeof s.lng === 'number' && s.from && s.to)
               .map((s: any) => ({
@@ -529,8 +551,8 @@ export default function SchedulePage({ events, members = [], project, firestore,
           } else if (d.locationLat && d.locationLng) {
             // Legacy single-location migration — wrap the old fields as one
             // segment spanning the whole trip. Stays in memory only; gets
-            // persisted as a real `locationSegments` array next time the user
-            // edits.
+            // persisted (and the old fields tombstoned) the first time the
+            // user edits via writeSegments().
             segs = [{
               from: TRIP_DATES[0],
               to:   TRIP_DATES[TRIP_DATES.length - 1],
