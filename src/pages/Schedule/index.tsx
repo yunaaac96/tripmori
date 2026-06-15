@@ -167,21 +167,32 @@ export default function SchedulePage({ events, members = [], project, firestore,
     const now = Date.now();
     if (now - lastTapRef.current < 350) {
       lastTapRef.current = 0;
-      // Pre-fill the draft range with "day after last segment → trip end" so
-      // the natural flow for a multi-stop trip (Bali first, then add Kyoto)
-      // works without touching the date inputs. If nothing's set yet, span
-      // the whole trip.
-      const tripStart = TRIP_DATES[0];
-      const tripEnd   = TRIP_DATES[TRIP_DATES.length - 1];
+      // Always give the date inputs concrete defaults — leaving them blank
+      // produces an "empty fallback" path that silently wrote whole-trip
+      // segments and overlapped with anything the user had set up before.
+      const tripStart = TRIP_DATES[0] || '';
+      const tripEnd   = TRIP_DATES[TRIP_DATES.length - 1] || '';
       if (segments.length === 0) {
-        setSegDraftFrom(tripStart || '');
-        setSegDraftTo(tripEnd || '');
+        // First segment: default to the whole trip span. User can still
+        // shorten it (e.g. only 1/10-1/14 if the trip is 1/10-1/16).
+        setSegDraftFrom(tripStart);
+        setSegDraftTo(tripEnd);
       } else {
+        // Chain: pick up the day after the last existing segment.
         const last = segments[segments.length - 1];
-        const nextDayMs = new Date(last.to).getTime() + 86400000;
-        const nextFrom  = new Date(nextDayMs).toISOString().slice(0, 10);
-        setSegDraftFrom(nextFrom > tripEnd ? '' : nextFrom);
-        setSegDraftTo(tripEnd || '');
+        const nextFromMs = new Date(last.to).getTime() + 86400000;
+        const nextFrom   = new Date(nextFromMs).toISOString().slice(0, 10);
+        if (nextFrom <= tripEnd) {
+          setSegDraftFrom(nextFrom);
+          setSegDraftTo(tripEnd);
+        } else {
+          // The trip is already fully covered. Default to the trip span so
+          // the user has SOMETHING reasonable to edit (and so search results
+          // never write empty/garbage dates). They can adjust before tapping
+          // a city, or delete an existing segment to free up days.
+          setSegDraftFrom(tripStart);
+          setSegDraftTo(tripEnd);
+        }
       }
       setLocInput(''); setLocResults([]); setShowLocEdit(true);
     } else {
@@ -300,24 +311,27 @@ export default function SchedulePage({ events, members = [], project, firestore,
   // adding more cities for a multi-stop trip.
   const handleAddSegment = async (result: any) => {
     if (!isOwner) return;
+    // Strict validation — handleWeatherTap pre-fills these to the whole trip
+    // span or the next-available chunk, so empty / inverted ranges only
+    // happen when the user actively clears one. Bail loudly instead of
+    // silently spanning the whole trip (the old fallback path that caused
+    // the "new segment swallows the entire trip" bug).
     if (!segDraftFrom || !segDraftTo) {
-      // No date range picked → fall back to spanning the whole trip (mirrors
-      // the legacy single-location flow for users who only need one segment).
-      const from = TRIP_DATES[0];
-      const to   = TRIP_DATES[TRIP_DATES.length - 1];
-      if (!from || !to) return;
-      const seg: LocationSegment = {
-        from, to,
-        lat:  result.latitude,
-        lng:  result.longitude,
-        tz:   result.timezone || 'Asia/Tokyo',
-        name: result.name,
-      };
-      await writeSegments([...segments.filter(s => !(s.from === from && s.to === to)), seg]
-        .sort((a, b) => a.from.localeCompare(b.from)));
-      setLocInput(''); setLocResults([]);
-      setShowLocEdit(false);
+      alert('請選擇日期範圍');
       return;
+    }
+    if (segDraftFrom > segDraftTo) {
+      alert('「從」必須早於或等於「到」');
+      return;
+    }
+    // Warn (don't block) when the new range overlaps an existing segment —
+    // weather is per-day so the latter segment would silently win on overlap
+    // days, which is rarely what the user means.
+    const overlap = segments.find(s => !(segDraftTo < s.from || segDraftFrom > s.to));
+    if (overlap) {
+      if (!confirm(`日期範圍與「${overlap.name}」(${overlap.from} ~ ${overlap.to}) 重疊，新增後重疊那幾天會以新段落為準，要繼續嗎？`)) {
+        return;
+      }
     }
     const seg: LocationSegment = {
       from: segDraftFrom,
@@ -329,7 +343,21 @@ export default function SchedulePage({ events, members = [], project, firestore,
     };
     await writeSegments([...segments, seg].sort((a, b) => a.from.localeCompare(b.from)));
     setLocInput(''); setLocResults([]);
-    setSegDraftFrom(''); setSegDraftTo('');
+    // Re-roll the draft date range for the next segment the user might want
+    // to add — same chain logic as handleWeatherTap so they can keep tapping
+    // cities without manually moving the date inputs every time.
+    const tripEnd = TRIP_DATES[TRIP_DATES.length - 1] || '';
+    const newNextMs  = new Date(seg.to).getTime() + 86400000;
+    const newNextStr = new Date(newNextMs).toISOString().slice(0, 10);
+    if (newNextStr <= tripEnd) {
+      setSegDraftFrom(newNextStr);
+      setSegDraftTo(tripEnd);
+    } else {
+      // Trip fully covered now — leave the modal open so user can review,
+      // and just reset to the whole-trip span as a safe fallback.
+      setSegDraftFrom(TRIP_DATES[0] || '');
+      setSegDraftTo(tripEnd);
+    }
   };
 
   const handleDeleteSegment = async (idx: number) => {
@@ -1410,26 +1438,28 @@ export default function SchedulePage({ events, members = [], project, firestore,
               </div>
             )}
 
-            {/* Add new segment form */}
+            {/* Add new segment form — date inputs are always visible (the
+                previous `segments.length > 0` gate hid them on first setup,
+                making users think the first city automatically took the whole
+                trip span with no way to do partial-coverage like "Sapporo for
+                days 1-5 only"). */}
             <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
               {segments.length === 0 ? '設定地點' : '新增段落'}
             </p>
-            {segments.length > 0 && (
-              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 10, color: C.barkLight, display: 'block', marginBottom: 3 }}>從</label>
-                  <input type="date" value={segDraftFrom} onChange={e => setSegDraftFrom(e.target.value)}
-                    min={TRIP_DATES[0]} max={TRIP_DATES[TRIP_DATES.length - 1]}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--tm-cream-dark)', fontSize: 13, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)' }} />
-                </div>
-                <div style={{ flex: 1 }}>
-                  <label style={{ fontSize: 10, color: C.barkLight, display: 'block', marginBottom: 3 }}>到</label>
-                  <input type="date" value={segDraftTo} onChange={e => setSegDraftTo(e.target.value)}
-                    min={segDraftFrom || TRIP_DATES[0]} max={TRIP_DATES[TRIP_DATES.length - 1]}
-                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--tm-cream-dark)', fontSize: 13, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)' }} />
-                </div>
+            <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 10, color: C.barkLight, display: 'block', marginBottom: 3 }}>從</label>
+                <input type="date" value={segDraftFrom} onChange={e => setSegDraftFrom(e.target.value)}
+                  min={TRIP_DATES[0]} max={TRIP_DATES[TRIP_DATES.length - 1]}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--tm-cream-dark)', fontSize: 13, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)' }} />
               </div>
-            )}
+              <div style={{ flex: 1 }}>
+                <label style={{ fontSize: 10, color: C.barkLight, display: 'block', marginBottom: 3 }}>到</label>
+                <input type="date" value={segDraftTo} onChange={e => setSegDraftTo(e.target.value)}
+                  min={segDraftFrom || TRIP_DATES[0]} max={TRIP_DATES[TRIP_DATES.length - 1]}
+                  style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--tm-cream-dark)', fontSize: 13, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)' }} />
+              </div>
+            </div>
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <input
                 value={locInput}
