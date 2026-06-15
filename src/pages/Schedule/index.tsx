@@ -65,6 +65,27 @@ type WeatherDay = {
   isFallback: boolean;
 };
 
+/**
+ * Single location segment within a multi-destination trip.
+ * Date range is inclusive (from/to). Segments are expected to be
+ * non-overlapping and sorted ascending by `from`; gaps are allowed
+ * (those days will fall back to the climate estimate).
+ */
+type LocationSegment = {
+  from: string;  // YYYY-MM-DD inclusive
+  to:   string;  // YYYY-MM-DD inclusive
+  lat:  number;
+  lng:  number;
+  tz:   string;
+  name: string;
+};
+
+/** Find which segment contains the given date (or null if no segment covers it). */
+const segmentForDate = (segments: LocationSegment[], date: string): LocationSegment | null => {
+  if (!date) return null;
+  return segments.find(s => date >= s.from && date <= s.to) || null;
+};
+
 type Mode = 'view' | 'add' | 'edit';
 
 // WMO weather code → emoji + description
@@ -122,6 +143,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
   const [weather, setWeather]       = useState<Record<string, WeatherDay>>({});
   const [weatherSubtitle, setWeatherSubtitle] = useState('氣象資訊載入中…');
   const [weatherLocationKey, setWeatherLocationKey] = useState(0); // increments to re-trigger fetch
+  // Multi-destination support — each segment carries its own coords + date
+  // range. Legacy single-location trips get migrated into a one-segment array
+  // when the doc first loads (and again written back to Firestore on the
+  // user's next edit, so old fields get phased out organically).
+  const [segments, setSegments]     = useState<LocationSegment[]>([]);
 
   // ── Day selector scroll (desktop) ──
   const dayScrollRef = useRef<HTMLDivElement>(null);
@@ -141,6 +167,22 @@ export default function SchedulePage({ events, members = [], project, firestore,
     const now = Date.now();
     if (now - lastTapRef.current < 350) {
       lastTapRef.current = 0;
+      // Pre-fill the draft range with "day after last segment → trip end" so
+      // the natural flow for a multi-stop trip (Bali first, then add Kyoto)
+      // works without touching the date inputs. If nothing's set yet, span
+      // the whole trip.
+      const tripStart = TRIP_DATES[0];
+      const tripEnd   = TRIP_DATES[TRIP_DATES.length - 1];
+      if (segments.length === 0) {
+        setSegDraftFrom(tripStart || '');
+        setSegDraftTo(tripEnd || '');
+      } else {
+        const last = segments[segments.length - 1];
+        const nextDayMs = new Date(last.to).getTime() + 86400000;
+        const nextFrom  = new Date(nextDayMs).toISOString().slice(0, 10);
+        setSegDraftFrom(nextFrom > tripEnd ? '' : nextFrom);
+        setSegDraftTo(tripEnd || '');
+      }
       setLocInput(''); setLocResults([]); setShowLocEdit(true);
     } else {
       lastTapRef.current = now;
@@ -211,18 +253,70 @@ export default function SchedulePage({ events, members = [], project, firestore,
     setLocSearching(false);
   };
 
-  const handleLocSelect = async (result: any) => {
+  // Draft date range for the "add segment" form inside the location editor.
+  // Defaults to (last existing segment's to+1)–(trip end) so consecutive
+  // additions tend to chain naturally; user can override.
+  const [segDraftFrom, setSegDraftFrom] = useState('');
+  const [segDraftTo,   setSegDraftTo]   = useState('');
+
+  // Persist the in-memory `segments` list back to Firestore. Clears the legacy
+  // single-location fields the first time we write a real array, so future
+  // reads exclusively follow the new path.
+  const writeSegments = async (next: LocationSegment[]) => {
     if (!isOwner) return;
     try {
       await updateDoc(doc(db, 'trips', TRIP_ID), {
-        locationLat:      result.latitude,
-        locationLng:      result.longitude,
-        locationTimezone: result.timezone || 'Asia/Tokyo',
-        locationName:     result.name,
+        locationSegments: next.map(s => ({
+          from: s.from, to: s.to,
+          lat:  s.lat,  lng: s.lng,
+          tz:   s.tz,   name: s.name,
+        })),
       });
-      setShowLocEdit(false);
-      setWeatherLocationKey(k => k + 1); // re-trigger weather useEffect
+      setSegments(next);
+      setWeatherLocationKey(k => k + 1);
     } catch (e) { console.error(e); }
+  };
+
+  // Add: turn the picked search result + draft date range into a new segment
+  // and append/sort. The location-edit sheet stays open so the user can keep
+  // adding more cities for a multi-stop trip.
+  const handleAddSegment = async (result: any) => {
+    if (!isOwner) return;
+    if (!segDraftFrom || !segDraftTo) {
+      // No date range picked → fall back to spanning the whole trip (mirrors
+      // the legacy single-location flow for users who only need one segment).
+      const from = TRIP_DATES[0];
+      const to   = TRIP_DATES[TRIP_DATES.length - 1];
+      if (!from || !to) return;
+      const seg: LocationSegment = {
+        from, to,
+        lat:  result.latitude,
+        lng:  result.longitude,
+        tz:   result.timezone || 'Asia/Tokyo',
+        name: result.name,
+      };
+      await writeSegments([...segments.filter(s => !(s.from === from && s.to === to)), seg]
+        .sort((a, b) => a.from.localeCompare(b.from)));
+      setLocInput(''); setLocResults([]);
+      setShowLocEdit(false);
+      return;
+    }
+    const seg: LocationSegment = {
+      from: segDraftFrom,
+      to:   segDraftTo,
+      lat:  result.latitude,
+      lng:  result.longitude,
+      tz:   result.timezone || 'Asia/Tokyo',
+      name: result.name,
+    };
+    await writeSegments([...segments, seg].sort((a, b) => a.from.localeCompare(b.from)));
+    setLocInput(''); setLocResults([]);
+    setSegDraftFrom(''); setSegDraftTo('');
+  };
+
+  const handleDeleteSegment = async (idx: number) => {
+    if (!isOwner) return;
+    await writeSegments(segments.filter((_, i) => i !== idx));
   };
 
   // Trip meta edit (owner only)
@@ -334,146 +428,138 @@ export default function SchedulePage({ events, members = [], project, firestore,
     return () => clearInterval(t);
   }, [project?.startDate, project?.endDate, flightStartMs, flightEndMs]);
 
-  // Weather fetch — reads project location from Firestore, then calls Open-Meteo
+  // Weather fetch — reads project location segments from Firestore (or
+  // migrates a legacy single-location trip into a one-segment array), then
+  // calls Open-Meteo once per segment and merges the daily values into one
+  // per-date map. Days not covered by any segment, or in segments beyond the
+  // API's 16-day horizon, keep the seeded climate fallback so each day-tab
+  // always renders something.
   useEffect(() => {
     if (!db || !TRIP_ID || !doc) return;
     const startDate = TRIP_DATES[0];
-    const endDate   = TRIP_DATES[TRIP_DATES.length - 1];
     if (!startDate) return;
 
-    const applyFallback = (locationLabel: string) => {
-      const fallback: Record<string, WeatherDay> = {};
-      TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
-      setWeather(fallback);
-      // Subtitle is just the location; per-day 氣候估算 chip is added at render.
-      setWeatherSubtitle(locationLabel);
+    const seedFallback = (): Record<string, WeatherDay> => {
+      const m: Record<string, WeatherDay> = {};
+      TRIP_DATES.forEach(d => { m[d] = { ...FALLBACK_CLIMATE }; });
+      return m;
     };
 
-    const fetchWeather = (lat: number, lng: number, timezone: string, locationName: string) => {
-      // Determine "is the trip imminent" using the EARLIEST signal we have.
-      // We use min(outbound departure, declared start) to match the countdown's
-      // "trip is starting" notion — important for trips with an overnight
-      // outbound flight where departure is a day before the arrival date.
-      const startDateMs = new Date(startDate).getTime();
-      const startSignalMs = flightStartMs != null
-        ? Math.min(flightStartMs, startDateMs)
-        : startDateMs;
-      const daysUntilTrip = Math.floor((startSignalMs - Date.now()) / 86400000);
-      // Skip the API call only when the ENTIRE trip is past Open-Meteo's
-      // 16-day forecast horizon (nothing real to fetch). Previously this was
-      // `> 10`, a conservative cap chosen back when there was no per-day
-      // fallback — if even one trip day fell outside the horizon, the whole
-      // request was skipped and every day showed the generic estimate.
-      // Now that we overlay real data per-day on top of fallback, we should
-      // fire the API the moment ANY trip day enters the horizon, even if the
-      // back end of the trip is still too far out. The user gets real data
-      // for the near days and graceful estimates for the far days.
-      if (daysUntilTrip > 16) {
-        applyFallback(locationName);
+    // Imminence threshold (same convention as countdown): use the earlier of
+    // declared trip start vs outbound flight departure. When the entire trip
+    // is past Open-Meteo's 16-day horizon, every segment will be skipped and
+    // the seeded fallback remains everywhere.
+    const startDateMs   = new Date(startDate).getTime();
+    const startSignalMs = flightStartMs != null
+      ? Math.min(flightStartMs, startDateMs)
+      : startDateMs;
+    const daysUntilTrip = Math.floor((startSignalMs - Date.now()) / 86400000);
+
+    // /forecast hard-caps end_date at today+16d; beyond that the whole request
+    // 400s. Clamp per-segment end to the horizon so the request succeeds for
+    // the forecastable portion of long trips.
+    const FORECAST_HORIZON_DAYS = 15;
+    const horizonMs = Date.now() + FORECAST_HORIZON_DAYS * 86400000;
+
+    const fetchSegments = async (segs: LocationSegment[]) => {
+      const merged = seedFallback();
+      if (daysUntilTrip > 16 || segs.length === 0) {
+        setWeather(merged);
         return;
       }
-      // Open-Meteo /forecast hard-caps end_date at today + 16 days; any further
-      // returns HTTP 400 for the WHOLE request, not just the offending days —
-      // which is why a long trip (e.g. 6/6 → 6/15 from today 5/27, with the back
-      // end 19 days out) used to silently fail into the generic fallback even
-      // though the front of the trip was well within the forecast window.
-      // Clamp the request range so we always get back the days that ARE
-      // forecastable; per-day fallback below fills in anything we trimmed off.
-      const FORECAST_HORIZON_DAYS = 15;
-      const horizonMs = Date.now() + FORECAST_HORIZON_DAYS * 86400000;
-      const endDateMs = new Date(endDate).getTime();
-      const clampedEnd = endDateMs > horizonMs
-        ? new Date(horizonMs).toISOString().slice(0, 10)
-        : endDate;
-      const url =
-        `https://api.open-meteo.com/v1/forecast` +
-        `?latitude=${lat}&longitude=${lng}` +
-        // Use _mean (daily average) not _max (peak hourly). _max reports the
-        // single hour with the highest chance, which in tropical climates
-        // routinely lands at 70-95% even on dry-season days where the
-        // average is <25%. Users read this as "will it rain today?" not
-        // "what's the peak hourly probability?", so mean matches their
-        // mental model better.
-        `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_mean` +
-        `&timezone=${encodeURIComponent(timezone)}` +
-        `&start_date=${startDate}&end_date=${clampedEnd}`;
-
-      fetch(url)
-        .then(r => r.json())
-        .then(data => {
-          if (!data.daily) {
-            applyFallback(locationName);
-            return;
-          }
-          const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_mean } = data.daily;
-          // Per-day strategy: pre-fill every trip date with the fallback climate
-          // estimate, then overlay real API data on top for days the model
-          // actually returned values for. This means each day-tab always shows
-          // SOMETHING, days within the 16-day forecast horizon show their real
-          // per-day forecast, and days past the horizon (e.g. the back end of
-          // a 10-day trip that starts 8 days from now) gracefully degrade to
-          // the fallback instead of going blank.
-          const result: Record<string, WeatherDay> = {};
-          TRIP_DATES.forEach(d => { result[d] = { ...FALLBACK_CLIMATE }; });
-          let realDayCount = 0;
-          (time || []).forEach((date: string, i: number) => {
-            const tMax = temperature_2m_max?.[i];
-            const tMin = temperature_2m_min?.[i];
-            const wCode = weathercode?.[i];
-            // Open-Meteo returns null for dates outside the model's confident
-            // window — skip those so the fallback stays in place for that day.
-            if (tMax == null || tMin == null || wCode == null) return;
-            const max = Math.round(tMax);
-            const { emoji, desc } = wmoToDisplay(wCode);
-            result[date] = {
-              max,
-              min: Math.round(tMin),
-              emoji, desc,
-              precipProb: Math.round(precipitation_probability_mean?.[i] ?? 0),
-              outfit: outfitForTemp(max),
-              // Real API value — labelled as 即時預報 in the subtitle when this
-              // day-tab is active.
-              isFallback: false,
-            };
-            realDayCount++;
-          });
-          setWeather(result);
-          // Subtitle is just the location now. The 即時/估算 status is rendered
-          // per-day at the card site (a small chip next to this subtitle) based
-          // on whichever day-tab is currently active — much more direct than
-          // a global "6/10 days" summary that didn't tell users which day-tabs
-          // were which.
-          setWeatherSubtitle(locationName);
-        })
-        .catch(() => applyFallback(locationName));
+      // Per-segment Open-Meteo call. Promise.allSettled so one network hiccup
+      // on, say, Kyoto doesn't drop the Bali days from the merged map.
+      const tasks = segs.map(async (seg) => {
+        const segStartMs = new Date(seg.from).getTime();
+        if (segStartMs > horizonMs) return null;
+        const segEndMs     = new Date(seg.to).getTime();
+        const clampedEndMs = Math.min(segEndMs, horizonMs);
+        const clampedEnd   = new Date(clampedEndMs).toISOString().slice(0, 10);
+        const url =
+          `https://api.open-meteo.com/v1/forecast` +
+          `?latitude=${seg.lat}&longitude=${seg.lng}` +
+          `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_probability_mean` +
+          `&timezone=${encodeURIComponent(seg.tz)}` +
+          `&start_date=${seg.from}&end_date=${clampedEnd}`;
+        try {
+          const r = await fetch(url);
+          const j = await r.json();
+          return j?.daily || null;
+        } catch { return null; }
+      });
+      const results = await Promise.allSettled(tasks);
+      for (const r of results) {
+        if (r.status !== 'fulfilled' || !r.value) continue;
+        const { time, temperature_2m_max, temperature_2m_min, weathercode, precipitation_probability_mean } = r.value;
+        (time || []).forEach((date: string, i: number) => {
+          const tMax = temperature_2m_max?.[i];
+          const tMin = temperature_2m_min?.[i];
+          const wCode = weathercode?.[i];
+          if (tMax == null || tMin == null || wCode == null) return;
+          const max = Math.round(tMax);
+          const { emoji, desc } = wmoToDisplay(wCode);
+          merged[date] = {
+            max,
+            min: Math.round(tMin),
+            emoji, desc,
+            precipProb: Math.round(precipitation_probability_mean?.[i] ?? 0),
+            outfit: outfitForTemp(max),
+            isFallback: false,
+          };
+        });
+      }
+      setWeather(merged);
     };
 
-    // Fetch trip location from Firestore; fall back to a generic default if not set
     getDoc(doc(db, 'trips', TRIP_ID))
       .then(snap => {
+        let segs: LocationSegment[] = [];
         if (snap.exists()) {
           const d = snap.data();
-          if (d.locationLat && d.locationLng) {
-            fetchWeather(
-              d.locationLat,
-              d.locationLng,
-              d.locationTimezone || 'Asia/Tokyo',
-              d.locationName || project?.title || '目的地',
-            );
-            return;
+          if (Array.isArray(d.locationSegments) && d.locationSegments.length > 0) {
+            segs = d.locationSegments
+              .filter((s: any) => s && typeof s.lat === 'number' && typeof s.lng === 'number' && s.from && s.to)
+              .map((s: any) => ({
+                from: s.from, to: s.to,
+                lat:  s.lat,  lng: s.lng,
+                tz:   s.tz   || 'Asia/Tokyo',
+                name: s.name || project?.title || '目的地',
+              }))
+              .sort((a: LocationSegment, b: LocationSegment) => a.from.localeCompare(b.from));
+          } else if (d.locationLat && d.locationLng) {
+            // Legacy single-location migration — wrap the old fields as one
+            // segment spanning the whole trip. Stays in memory only; gets
+            // persisted as a real `locationSegments` array next time the user
+            // edits.
+            segs = [{
+              from: TRIP_DATES[0],
+              to:   TRIP_DATES[TRIP_DATES.length - 1],
+              lat:  d.locationLat,
+              lng:  d.locationLng,
+              tz:   d.locationTimezone || 'Asia/Tokyo',
+              name: d.locationName || project?.title || '目的地',
+            }];
           }
         }
-        // No location stored yet — show fallback climate + hint
-        const fallback: Record<string, WeatherDay> = {};
-        TRIP_DATES.forEach(d => { fallback[d] = { ...FALLBACK_CLIMATE }; });
-        setWeather(fallback);
-        setWeatherSubtitle('尚未設定目的地　輕點兩下設定');
+        setSegments(segs);
+        if (segs.length === 0) {
+          setWeather(seedFallback());
+          setWeatherSubtitle('尚未設定目的地　輕點兩下設定');
+          return;
+        }
+        // Subtitle now derived from the active day's segment at render time,
+        // so we just clear the legacy state — the render reads segments+
+        // activeDay directly.
+        setWeatherSubtitle('');
+        fetchSegments(segs);
       })
-      .catch(() => applyFallback(project?.title || '目的地'));
-    // `flightStartMs` is added so the 10-day check re-evaluates the moment
-    // the outbound flight time loads (it arrives asynchronously from a
-    // separate Firestore fetch). Without this dep, the fallback baked in
-    // at first mount would never be replaced even after flight data arrives.
+      .catch(() => {
+        setWeather(seedFallback());
+        setWeatherSubtitle(project?.title || '目的地');
+      });
+    // flightStartMs is in deps so the horizon threshold re-evaluates the
+    // moment the outbound flight time arrives async from a separate Firestore
+    // fetch.
   }, [TRIP_ID, weatherLocationKey, flightStartMs]);
 
   const dayInfo = DAY_OPTIONS.find(d => d.date === activeDay) ?? DAY_OPTIONS[0];
@@ -1266,22 +1352,68 @@ export default function SchedulePage({ events, members = [], project, firestore,
         </div>
       )}
 
-      {/* ── Location edit sheet ── */}
+      {/* ── Location segments edit sheet ── */}
       {showLocEdit && (
         <div style={{ position: 'fixed', inset: 0, background: 'rgba(107,92,78,0.45)', display: 'flex', alignItems: 'flex-end', justifyContent: 'center', zIndex: 300 }}
           onClick={e => { if (e.target === e.currentTarget) setShowLocEdit(false); }}>
-          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, boxSizing: 'border-box' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
-              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 13 }} /> 設定目的地</p>
+          <div style={{ background: 'var(--tm-sheet-bg)', borderRadius: '24px 24px 0 0', padding: '24px 20px 40px', width: '100%', maxWidth: 430, fontFamily: FONT, boxSizing: 'border-box', maxHeight: '88vh', overflowY: 'auto' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+              <p style={{ fontSize: 16, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}>
+                <FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 13 }} /> 設定目的地
+              </p>
               <button onClick={() => setShowLocEdit(false)} style={{ background: 'none', border: 'none', fontSize: 22, cursor: 'pointer', color: 'var(--tm-bark-light)' }}>✕</button>
             </div>
+            <p style={{ fontSize: 11, color: 'var(--tm-bark-light)', margin: '0 0 16px', lineHeight: 1.55 }}>
+              旅行涵蓋多個城市時，可以分段設定 — 例如 6/6–6/10 峇里島、6/11–6/14 京都。每段獨立預報。
+            </p>
+
+            {/* Existing segments list */}
+            {segments.length > 0 && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 16 }}>
+                <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: 0, letterSpacing: '0.05em', textTransform: 'uppercase' }}>已設定段落</p>
+                {segments.map((s, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px', borderRadius: 12, background: 'var(--tm-card-bg)', border: `1px solid ${C.creamDark}` }}>
+                    <FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 12, color: C.sage, flexShrink: 0 }} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <p style={{ fontSize: 13, fontWeight: 700, color: C.bark, margin: 0 }}>{s.name}</p>
+                      <p style={{ fontSize: 10, color: C.barkLight, margin: '2px 0 0' }}>{s.from} ～ {s.to}</p>
+                    </div>
+                    <button onClick={() => handleDeleteSegment(i)}
+                      style={{ background: '#FAE0E0', color: '#9A3A3A', border: 'none', borderRadius: 8, padding: '5px 9px', cursor: 'pointer', fontFamily: FONT, fontSize: 11, fontWeight: 700, flexShrink: 0 }}
+                      title="刪除這段">
+                      <FontAwesomeIcon icon={faTrashCan} />
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Add new segment form */}
+            <p style={{ fontSize: 11, fontWeight: 700, color: C.barkLight, margin: '0 0 8px', letterSpacing: '0.05em', textTransform: 'uppercase' }}>
+              {segments.length === 0 ? '設定地點' : '新增段落'}
+            </p>
+            {segments.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, marginBottom: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: C.barkLight, display: 'block', marginBottom: 3 }}>從</label>
+                  <input type="date" value={segDraftFrom} onChange={e => setSegDraftFrom(e.target.value)}
+                    min={TRIP_DATES[0]} max={TRIP_DATES[TRIP_DATES.length - 1]}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--tm-cream-dark)', fontSize: 13, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)' }} />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 10, color: C.barkLight, display: 'block', marginBottom: 3 }}>到</label>
+                  <input type="date" value={segDraftTo} onChange={e => setSegDraftTo(e.target.value)}
+                    min={segDraftFrom || TRIP_DATES[0]} max={TRIP_DATES[TRIP_DATES.length - 1]}
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: 10, border: '1.5px solid var(--tm-cream-dark)', fontSize: 13, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)' }} />
+                </div>
+              </div>
+            )}
             <div style={{ display: 'flex', gap: 8, marginBottom: 12 }}>
               <input
-                autoFocus
                 value={locInput}
                 onChange={e => setLocInput(e.target.value)}
                 onKeyDown={e => { if (e.key === 'Enter') handleLocSearch(); }}
-                placeholder="搜尋城市或地名，例如：沖繩、東京"
+                placeholder="搜尋城市或地名，例如：京都、峇里島"
                 style={{ flex: 1, padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', fontSize: 15, fontFamily: FONT, color: 'var(--tm-bark)', background: 'var(--tm-input-bg)', outline: 'none' }}
               />
               <button onClick={handleLocSearch} disabled={locSearching || !locInput.trim()}
@@ -1292,7 +1424,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
             {locResults.length > 0 && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {locResults.map((r: any, i: number) => (
-                  <button key={i} onClick={() => handleLocSelect(r)}
+                  <button key={i} onClick={() => handleAddSegment(r)}
                     style={{ textAlign: 'left', padding: '10px 14px', borderRadius: 12, border: '1.5px solid var(--tm-cream-dark)', background: 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT }}>
                     <p style={{ fontSize: 14, fontWeight: 700, color: 'var(--tm-bark)', margin: 0, display: 'flex', alignItems: 'center', gap: 6 }}><FontAwesomeIcon icon={faLocationDot} style={{ fontSize: 12 }} />{r.name}</p>
                     <p style={{ fontSize: 11, color: 'var(--tm-bark-light)', margin: '2px 0 0' }}>
@@ -1397,11 +1529,14 @@ export default function SchedulePage({ events, members = [], project, firestore,
               <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
                 <span style={{ fontSize: 36, lineHeight: 1, flexShrink: 0, marginTop: 2 }}>{currentWeather.emoji}</span>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  {/* Subtitle: "{location}　{即時預報|氣候估算}". Plain text —
-                      no chip / badge / color tint — to keep visual consistency
-                      with the rest of the card and avoid pill-shaped clutter. */}
+                  {/* Subtitle: "{location for THIS day}　{即時預報|氣候估算}".
+                      Multi-segment trips show the per-day segment name (Bali
+                      one day, Kyoto the next) instead of one fixed name; falls
+                      back to project title when no segment covers the active
+                      day OR when the legacy single-location subtitle state
+                      hasn't been replaced yet. */}
                   <p style={{ fontSize: 10, color: '#6A8F5C', fontWeight: 600, margin: '0 0 3px' }}>
-                    {weatherSubtitle}　{currentWeather.isFallback ? '氣候估算' : '即時預報'}
+                    {(segmentForDate(segments, activeDay)?.name) || weatherSubtitle || project?.title || '目的地'}　{currentWeather.isFallback ? '氣候估算' : '即時預報'}
                   </p>
                   <p style={{ fontSize: 14, color: '#3A5A3A', fontWeight: 700, margin: '0 0 3px' }}>
                     {currentWeather.desc} · {currentWeather.max}°<span style={{ fontWeight: 500, fontSize: 12 }}>/{currentWeather.min}°C</span>
