@@ -691,17 +691,22 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
   const couplePairs: Array<[string, string]> =
     localCouplePairs ?? (project?.couplePairs ?? []);
 
-  /** Persist a new couplePairs array to Firestore + project localStorage. */
+  /** Persist a new couplePairs array to Firestore + project localStorage.
+   *  Firestore doesn't allow nested arrays — each array element must be a
+   *  primitive or map. So we serialize each [a, b] tuple as `{a, b}` for
+   *  storage, and let the App.tsx loader convert back to tuples on read. */
   const writeCouplePairs = async (next: Array<[string, string]>) => {
     if (firestore.role !== 'owner') return;
     setLocalCouplePairs(next);
     try {
-      await _updateDoc(_doc(db, 'trips', TRIP_ID), { couplePairs: next });
+      await _updateDoc(_doc(db, 'trips', TRIP_ID), {
+        couplePairs: next.map(([a, b]) => ({ a, b })),
+      });
       if (project) saveProject({ ...project, couplePairs: next });
     } catch (e) {
-      console.error(e);
+      console.error('[couplePairs] write failed', e);
       setLocalCouplePairs(null); // revert optimistic update
-      alert('儲存失敗，請確認網路後重試');
+      alert('儲存失敗：' + (e instanceof Error ? e.message : String(e)));
     }
   };
 

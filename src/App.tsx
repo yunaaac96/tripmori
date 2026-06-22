@@ -179,8 +179,13 @@ function App() {
             memberOrder:    (data.memberOrder as string[] | undefined) ?? prev?.memberOrder,
             // Same pattern for the couple-pair config — Firestore is the
             // source of truth so multi-device edits propagate, but we keep
-            // the prior local copy if Firestore has nothing yet.
-            couplePairs:    (data.couplePairs as Array<[string, string]> | undefined) ?? prev?.couplePairs,
+            // the prior local copy if Firestore has nothing yet. Firestore
+            // doesn't allow nested arrays, so couple pairs are stored as
+            // `{a, b}` objects — convert back to tuples here for the rest
+            // of the app to consume.
+            couplePairs:    (Array.isArray(data.couplePairs)
+              ? (data.couplePairs as Array<{ a: string; b: string }>).map(p => [p.a, p.b] as [string, string])
+              : prev?.couplePairs),
             // Preserve local-only flags (not stored in Firestore). Without
             // this the sync would overwrite the user's local archive choice
             // every time they reopen the app, kicking the trip back to
@@ -873,7 +878,13 @@ function App() {
             const newDescription  = data.description  ?? prev.description;
             const newStartDate    = data.startDate    ?? prev.startDate;
             const newEndDate      = data.endDate      ?? prev.endDate;
-            const newCouplePairs  = data.couplePairs as Array<[string, string]> | undefined;
+            // Firestore stores couple pairs as `{a, b}` objects (nested arrays
+            // aren't allowed); convert to in-memory tuples for the rest of
+            // the app. undefined = field absent on this revision → preserve
+            // prev's value.
+            const newCouplePairs: Array<[string, string]> | undefined = Array.isArray(data.couplePairs)
+              ? (data.couplePairs as Array<{ a: string; b: string }>).map(p => [p.a, p.b] as [string, string])
+              : undefined;
             const unchanged =
               newTitle === prev.title &&
               newEmoji === prev.emoji &&
