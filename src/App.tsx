@@ -177,6 +177,10 @@ function App() {
             // Preserve member sort order — read from Firestore first,
             // fall back to what was previously saved in localStorage.
             memberOrder:    (data.memberOrder as string[] | undefined) ?? prev?.memberOrder,
+            // Same pattern for the couple-pair config — Firestore is the
+            // source of truth so multi-device edits propagate, but we keep
+            // the prior local copy if Firestore has nothing yet.
+            couplePairs:    (data.couplePairs as Array<[string, string]> | undefined) ?? prev?.couplePairs,
             // Preserve local-only flags (not stored in Firestore). Without
             // this the sync would overwrite the user's local archive choice
             // every time they reopen the app, kicking the trip back to
@@ -869,10 +873,12 @@ function App() {
             const newDescription  = data.description  ?? prev.description;
             const newStartDate    = data.startDate    ?? prev.startDate;
             const newEndDate      = data.endDate      ?? prev.endDate;
+            const newCouplePairs  = data.couplePairs as Array<[string, string]> | undefined;
             const unchanged =
               newTitle === prev.title &&
               newEmoji === prev.emoji &&
               JSON.stringify(newMemberOrder) === JSON.stringify(prev.memberOrder) &&
+              JSON.stringify(newCouplePairs) === JSON.stringify(prev.couplePairs) &&
               newCurrency      === prev.currency &&
               newExchangeRate  === (prev as any).exchangeRate &&
               newDescription   === prev.description &&
@@ -882,6 +888,7 @@ function App() {
             const updated = {
               ...prev,
               title: newTitle, emoji: newEmoji, memberOrder: newMemberOrder,
+              couplePairs: newCouplePairs,
               currency: newCurrency,
               exchangeRate: newExchangeRate,
               description: newDescription,

@@ -998,7 +998,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   // getPersonalShare and memberStats/settlements are imported from utils/expenseCalc
   const memberStats = computeMemberStats(expenses, memberNames);
-  const settlements = computeSettlements(memberStats);
+  // Couple-first routing: pairs declared on the trip doc get to settle
+  // internally before the greedy minimum-transfer kicks in for everyone else.
+  // Each entry is [name, name]; defaults to empty (= classic greedy behaviour).
+  const couplePairs: Array<[string, string]> = (project?.couplePairs || [])
+    .filter((p: any) => Array.isArray(p) && p.length === 2 && memberNames.includes(p[0]) && memberNames.includes(p[1]));
+  const settlements = computeSettlements(memberStats, couplePairs);
 
   // Method B: per-pair settlement state derived from settlement records (not individual stamps)
   const confirmedPairMap = getConfirmedSettlementPairMap(expenses as any[]);
@@ -1681,6 +1686,12 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                         <span style={{ fontSize: 11, fontWeight: 700, color: isPayer ? '#9A3A3A' : '#4A7A35', opacity: 0.9 }}>
                           NT$ {s.amount.toLocaleString()}
                         </span>
+                        {s.isCoupleInternal && (
+                          <span title="情侶／同行伴內部轉帳"
+                            style={{ fontSize: 9, fontWeight: 700, color: '#9A4A8A', background: 'rgba(154, 74, 138, 0.12)', borderRadius: 6, padding: '1px 5px' }}>
+                            💑 情侶內
+                          </span>
+                        )}
                       </div>
                       {isProcessing
                         ? <span style={{ flexShrink: 0, fontSize: 10, color: C.barkLight, fontWeight: 600 }}>處理中...</span>
@@ -3276,7 +3287,15 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                             style={{ fontSize: 12, fontWeight: 700, color: C.bark, margin: 0, cursor: 'pointer', textDecoration: 'underline dotted', textUnderlineOffset: 3, display: 'inline-block' }}>
                             {debt.from}{isMe ? <FontAwesomeIcon icon={faUser} style={{ marginLeft: 4, fontSize: 10 }} /> : ''}<span style={{ marginLeft: 4, fontSize: 11, opacity: 0.6 }}>›</span>
                           </p>
-                          <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0 }}>NT$ {debt.amount.toLocaleString()}</p>
+                          <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
+                            NT$ {debt.amount.toLocaleString()}
+                            {debt.isCoupleInternal && (
+                              <span title="情侶／同行伴內部轉帳，優先處理"
+                                style={{ fontSize: 9, fontWeight: 700, color: '#9A4A8A', background: 'rgba(154, 74, 138, 0.12)', borderRadius: 6, padding: '1px 5px' }}>
+                                💑 情侶內
+                              </span>
+                            )}
+                          </p>
                         </div>
                         {/* Role-based buttons — show even if pair was previously confirmed (new balance may exist) */}
                         {!isReadOnly && (() => {

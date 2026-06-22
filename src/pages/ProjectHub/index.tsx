@@ -34,6 +34,13 @@ export interface StoredProject {
   currency?: string;
   archived?: boolean;
   memberOrder?: string[];
+  /** Declared couple/partner pairings — each entry is [memberName, memberName].
+   *  The settlement engine prefers routing each couple's internal balance
+   *  through the partner before falling back to greedy minimum-transfer
+   *  with everyone else. Configured per-trip (not a global member property)
+   *  because the same person may have different "couple" pairings on
+   *  different trips (e.g. once with a partner, once on a buddy trip). */
+  couplePairs?: Array<[string, string]>;
 }
 
 const LS_PROJECTS  = 'tripmori_projects';

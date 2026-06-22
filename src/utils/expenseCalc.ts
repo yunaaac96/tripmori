@@ -381,6 +381,11 @@ export interface Settlement {
   from: string;
   to: string;
   amount: number;
+  /** True when this settlement was routed via a declared couple pair (the
+   *  payer and payee are partners, so they get prioritised over routing to
+   *  external members). Used by the UI to group / label these rows; the
+   *  transfer itself is still a real one the parties have to perform. */
+  isCoupleInternal?: boolean;
 }
 
 /**
@@ -388,15 +393,69 @@ export interface Settlement {
  * to settle all debts. Amounts are rounded up (Math.ceil) so creditors
  * always receive at least what they're owed.
  */
-export const computeSettlements = (memberStats: MemberStat[]): Settlement[] => {
+/**
+ * Compute settlement transfers from per-member net balances.
+ *
+ * @param memberStats per-member balance after all expenses
+ * @param couplePairs optional list of [name, name] pairs whose members should
+ *   prefer to settle within the couple first (e.g. partners, roommates with
+ *   pooled finances). The standard greedy minimum-transfer algorithm runs on
+ *   whatever remains after the couple pre-pass.
+ *
+ * Returned settlements are tagged with `isCoupleInternal: true` for the pairs
+ * absorbed by the couple pass so the UI can group / label them. The total
+ * sum of `amount` across the returned list is unchanged regardless of whether
+ * couplePairs is passed — it always equals the total absolute net (because
+ * every dollar of debt still has to be matched by an equal-value transfer,
+ * we just reroute WHICH transfer covers which dollar).
+ */
+export const computeSettlements = (
+  memberStats: MemberStat[],
+  couplePairs: ReadonlyArray<readonly [string, string]> = [],
+): Settlement[] => {
   const result: Settlement[] = [];
+  // Mutable net per member — we deduct as we route transfers.
+  const nets = new Map<string, number>(memberStats.map(m => [m.name, m.net]));
+
+  // ── Pass 1: couple-internal routing ──
+  // For each pair, if one is debtor (-) and the other creditor (+), shave as
+  // much as possible off both sides — the couple presumably has easier
+  // transfer rails (Apple Cash, joint account, etc) than randomly-paired
+  // external members. The settlements produced here are REAL transfers the
+  // couple still has to perform; "internal" only means routing priority, NOT
+  // "mutual cancellation makes the money disappear".
+  for (const [a, b] of couplePairs) {
+    const aNet = nets.get(a) ?? 0;
+    const bNet = nets.get(b) ?? 0;
+    if (aNet < 0 && bNet > 0) {
+      const transfer = Math.min(Math.abs(aNet), bNet);
+      if (transfer > 0) {
+        result.push({ from: a, to: b, amount: Math.ceil(transfer), isCoupleInternal: true });
+        nets.set(a, aNet + transfer);
+        nets.set(b, bNet - transfer);
+      }
+    } else if (aNet > 0 && bNet < 0) {
+      const transfer = Math.min(aNet, Math.abs(bNet));
+      if (transfer > 0) {
+        result.push({ from: b, to: a, amount: Math.ceil(transfer), isCoupleInternal: true });
+        nets.set(b, bNet + transfer);
+        nets.set(a, aNet - transfer);
+      }
+    }
+    // Couples whose nets are same-sign (both owe, both owed) can't net
+    // against each other — fall through to the greedy pass below.
+  }
+
+  // ── Pass 2: greedy minimum-transfer for everyone else ──
+  // Build creditor / debtor lists from the POST-couple-pass nets so we don't
+  // double-count anything the couple pass already covered.
   const creditors = memberStats
-    .filter(m => m.net > 0)
-    .map(m => ({ name: m.name, amt: m.net }))
+    .map(m => ({ name: m.name, amt: nets.get(m.name) ?? m.net }))
+    .filter(m => m.amt > 0)
     .sort((a, b) => b.amt - a.amt);
   const debtors = memberStats
-    .filter(m => m.net < 0)
-    .map(m => ({ name: m.name, amt: Math.abs(m.net) }))
+    .map(m => ({ name: m.name, amt: -(nets.get(m.name) ?? m.net) }))
+    .filter(m => m.amt > 0)
     .sort((a, b) => b.amt - a.amt);
 
   let ci = 0, di = 0;

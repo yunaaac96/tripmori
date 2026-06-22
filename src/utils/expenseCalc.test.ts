@@ -392,6 +392,94 @@ describe('computeSettlements', () => {
     expect(result).toHaveLength(1);
     expect(result[0].amount).toBe(1);
   });
+
+  describe('couplePairs — 情侶優先路由', () => {
+    it('一對情侶可完全互抵：產出單筆 couple-internal，無外部', () => {
+      const stats = [
+        { name: 'A', paid: 0, rawPaid: 0, owed: 0, net: -500 },
+        { name: 'B', paid: 0, rawPaid: 0, owed: 0, net: 500 },
+      ];
+      const result = computeSettlements(stats, [['A', 'B']]);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ from: 'A', to: 'B', amount: 500, isCoupleInternal: true });
+    });
+
+    it('情侶部分互抵 + 外部 greedy 接力', () => {
+      // 33 owes 1000, 寶翠 owes 500, 鈞洲 owed 700 (couple w/ 33),
+      // 小乘 owed 800 (couple w/ 寶翠)
+      const stats = [
+        { name: '33',   paid: 0, rawPaid: 0, owed: 0, net: -1000 },
+        { name: '寶翠', paid: 0, rawPaid: 0, owed: 0, net: -500 },
+        { name: '鈞洲', paid: 0, rawPaid: 0, owed: 0, net: 700 },
+        { name: '小乘', paid: 0, rawPaid: 0, owed: 0, net: 800 },
+      ];
+      const result = computeSettlements(stats, [['33', '鈞洲'], ['寶翠', '小乘']]);
+
+      // Couple pass: 33→鈞洲 700, 寶翠→小乘 500
+      // External: 33 still owes 300 → 小乘 still needs 300 → 33→小乘 300
+      const coupleHits = result.filter(s => s.isCoupleInternal);
+      const externalHits = result.filter(s => !s.isCoupleInternal);
+      expect(coupleHits).toHaveLength(2);
+      expect(coupleHits).toContainEqual({ from: '33',   to: '鈞洲', amount: 700, isCoupleInternal: true });
+      expect(coupleHits).toContainEqual({ from: '寶翠', to: '小乘', amount: 500, isCoupleInternal: true });
+      expect(externalHits).toHaveLength(1);
+      expect(externalHits[0]).toEqual({ from: '33', to: '小乘', amount: 300 });
+    });
+
+    it('總轉帳金額不變：有 couplePairs 與沒有 couplePairs 一致', () => {
+      const stats = [
+        { name: 'A', paid: 0, rawPaid: 0, owed: 0, net: -1000 },
+        { name: 'B', paid: 0, rawPaid: 0, owed: 0, net: -500 },
+        { name: 'C', paid: 0, rawPaid: 0, owed: 0, net: 700 },
+        { name: 'D', paid: 0, rawPaid: 0, owed: 0, net: 800 },
+      ];
+      const without = computeSettlements(stats);
+      const withPairs = computeSettlements(stats, [['A', 'C'], ['B', 'D']]);
+      const sumWithout  = without.reduce((s, x) => s + x.amount, 0);
+      const sumWithPairs = withPairs.reduce((s, x) => s + x.amount, 0);
+      expect(sumWithPairs).toBe(sumWithout);
+    });
+
+    it('同向 couple（兩個都欠錢）：couple 不互抵，照常 fall-through 到 greedy', () => {
+      // Both A and B are debtors → couple pass does nothing
+      const stats = [
+        { name: 'A', paid: 0, rawPaid: 0, owed: 0, net: -300 },
+        { name: 'B', paid: 0, rawPaid: 0, owed: 0, net: -200 },
+        { name: 'C', paid: 0, rawPaid: 0, owed: 0, net: 500 },
+      ];
+      const result = computeSettlements(stats, [['A', 'B']]);
+      expect(result.filter(s => s.isCoupleInternal)).toHaveLength(0);
+      expect(result).toHaveLength(2); // A→C, B→C
+    });
+
+    it('couplePairs 順序顛倒（[B,A] vs [A,B]）結果等價', () => {
+      const stats = [
+        { name: 'A', paid: 0, rawPaid: 0, owed: 0, net: -500 },
+        { name: 'B', paid: 0, rawPaid: 0, owed: 0, net: 500 },
+      ];
+      const r1 = computeSettlements(stats, [['A', 'B']]);
+      const r2 = computeSettlements(stats, [['B', 'A']]);
+      expect(r1).toEqual(r2);
+    });
+
+    it('未列入 couplePairs 的成員照常走 greedy', () => {
+      const stats = [
+        { name: 'A', paid: 0, rawPaid: 0, owed: 0, net: -100 },
+        { name: 'B', paid: 0, rawPaid: 0, owed: 0, net: 100 },
+        { name: 'C', paid: 0, rawPaid: 0, owed: 0, net: -200 },
+        { name: 'D', paid: 0, rawPaid: 0, owed: 0, net: 200 },
+      ];
+      // Only A,B are a couple — C,D should go via greedy.
+      const result = computeSettlements(stats, [['A', 'B']]);
+      const coupleHits = result.filter(s => s.isCoupleInternal);
+      const externalHits = result.filter(s => !s.isCoupleInternal);
+      expect(coupleHits).toHaveLength(1);
+      expect(coupleHits[0]).toEqual({ from: 'A', to: 'B', amount: 100, isCoupleInternal: true });
+      // C must pay D (or some external creditor); A & B should NOT appear in
+      // external transfers since the couple pass cleared them.
+      expect(externalHits.every(s => s.from !== 'A' && s.to !== 'B')).toBe(true);
+    });
+  });
 });
 
 // ── 整合測試：實際分帳情境 ────────────────────────────────────────────────────
