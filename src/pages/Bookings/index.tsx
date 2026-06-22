@@ -7,7 +7,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import FirstTimeHint from '../../components/FirstTimeHint';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { getDoc, updateDoc, doc as fsDoc, deleteField } from 'firebase/firestore';
+import { onSnapshot, updateDoc, doc as fsDoc, deleteField } from 'firebase/firestore';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
 import { faMapPin, faBus, faStar, faShip, faEllipsis, faPen, faTrashCan, faClipboardList, faLightbulb, faCircleExclamation, faUsers, faSquareCheck, faLocationDot, faLock, faPlane, faBed, faCircleDot, faMap, faPhone, faQrcode, faArrowRightToBracket, faArrowRightFromBracket, faClock, faRotateLeft, faCalendarDays, faMoneyBill1, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faCheck, faXmark } from '@fortawesome/free-solid-svg-icons';
 import type { IconDefinition } from '@fortawesome/free-solid-svg-icons';
@@ -129,15 +129,20 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 
   useEffect(() => {
     if (!db || !TRIP_ID) return;
-    getDoc(doc(db, 'trips', TRIP_ID)).then(snap => {
+    // Was getDoc — one-shot read. Offline this hung for ~10s waiting on the
+    // network timeout before falling back to Firestore's persistent cache,
+    // making the page look frozen in offline / poor-network conditions
+    // (the most common state for travellers actually using these screens).
+    // onSnapshot reads from cache immediately and live-updates when the
+    // network comes back, so airport-without-wifi navigation works.
+    const unsub = onSnapshot(doc(db, 'trips', TRIP_ID), snap => {
       if (!snap.exists()) { setStaticLoaded(true); return; }
       const d = snap.data();
-      // 若欄位存在（含空陣列）就用 Firestore 資料，否則視為待更新
       setFlights('staticFlights' in d ? d.staticFlights : null);
       setHotels ('staticHotels'  in d ? d.staticHotels  : null);
-      // Backward-compat: old trips store a single `staticCar` object; new trips
-      // store `staticCars` array. Prefer the array; wrap legacy single into
-      // a one-element array on read.
+      // Backward-compat: old trips store a single `staticCar` object; new
+      // trips store a `staticCars` array. Prefer the array; wrap legacy
+      // single into a one-element array on read.
       if ('staticCars' in d) {
         setCars(d.staticCars);
       } else if ('staticCar' in d && d.staticCar) {
@@ -145,12 +150,13 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       } else {
         setCars(null);
       }
-      // 舊版預設行程沿用 hardcoded 資料，並同步寫入 Firestore 供其他頁面（如倒數）讀取
+      // Legacy seeding for the original default Okinawa trip — only runs
+      // once when the doc has no staticFlights yet. Stays gated to TRIP_ID
+      // so it can't accidentally clobber other trips.
       if (!('staticFlights' in d) && TRIP_ID === '74pfE7RXyEIusEdRV0rZ') {
         setFlights(DEFAULT_FLIGHTS);
         setHotels (DEFAULT_HOTELS);
         setCars   ([DEFAULT_CAR]);
-        // Write defaults to Firestore so Schedule page can read flight times
         updateDoc(fsDoc(db, 'trips', TRIP_ID), {
           staticFlights: DEFAULT_FLIGHTS,
           staticHotels:  DEFAULT_HOTELS,
@@ -158,7 +164,11 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
         }).catch(console.error);
       }
       setStaticLoaded(true);
-    }).catch(() => setStaticLoaded(true));
+    }, err => {
+      console.error('[Bookings] trip doc snapshot error:', err);
+      setStaticLoaded(true);
+    });
+    return unsub;
   }, [db, TRIP_ID]);
 
   // ── Static edit modal state ──────────────────────────────

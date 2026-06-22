@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { getDoc } from 'firebase/firestore';
+import { getDoc, onSnapshot } from 'firebase/firestore';
 import { auth } from '../../config/firebase';
 import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../../utils/universalImporter';
 import CurrencySearch from '../../components/CurrencySearch';
@@ -420,16 +420,17 @@ export default function SchedulePage({ events, members = [], project, firestore,
     setBulkImporting(false);
   };
 
-  // Fetch staticFlights → extract outbound departure + return arrival timestamps
+  // Fetch staticFlights → extract outbound departure + return arrival timestamps.
+  // onSnapshot (was getDoc) so the countdown anchor reads from Firestore's
+  // persistent cache immediately on offline reopen, instead of waiting on
+  // the ~10s network timeout that getDoc has when no connection is available.
   useEffect(() => {
     if (!db || !TRIP_ID || !doc) return;
-    getDoc(doc(db, 'trips', TRIP_ID)).then(snap => {
+    const unsub = onSnapshot(doc(db, 'trips', TRIP_ID), snap => {
       if (!snap.exists()) return;
       const flts: any[] = snap.data().staticFlights || [];
       if (!flts.length) return;
-      // Outbound: direction === '去程', fallback to first flight
       const outbound = flts.find(f => f.direction === '去程') ?? flts[0];
-      // Return: direction === '回程', fallback to last flight
       const inbound  = flts.find(f => f.direction === '回程') ?? flts[flts.length - 1];
       if (outbound?.date && outbound?.dep?.time) {
         setFlightStartMs(new Date(`${outbound.date}T${outbound.dep.time}:00`).getTime());
@@ -437,7 +438,10 @@ export default function SchedulePage({ events, members = [], project, firestore,
       if (inbound?.date && inbound?.arr?.time) {
         setFlightEndMs(new Date(`${inbound.date}T${inbound.arr.time}:00`).getTime());
       }
-    }).catch(() => {});
+    }, err => {
+      console.error('[Schedule] flight-times snapshot error:', err);
+    });
+    return unsub;
   }, [db, TRIP_ID]);
 
   // Countdown timer:
@@ -557,56 +561,56 @@ export default function SchedulePage({ events, members = [], project, firestore,
       setWeather(merged);
     };
 
-    getDoc(doc(db, 'trips', TRIP_ID))
-      .then(snap => {
-        let segs: LocationSegment[] = [];
-        if (snap.exists()) {
-          const d = snap.data();
-          // Authoritative once the field exists at all — even if the array is
-          // empty, that means the user has explicitly deleted every segment.
-          // Falling back to the legacy single-location fields in that case
-          // would resurrect the segment the user just removed.
-          if (Array.isArray(d.locationSegments)) {
-            segs = d.locationSegments
-              .filter((s: any) => s && typeof s.lat === 'number' && typeof s.lng === 'number' && s.from && s.to)
-              .map((s: any) => ({
-                from: s.from, to: s.to,
-                lat:  s.lat,  lng: s.lng,
-                tz:   s.tz   || 'Asia/Tokyo',
-                name: s.name || project?.title || '目的地',
-              }))
-              .sort((a: LocationSegment, b: LocationSegment) => a.from.localeCompare(b.from));
-          } else if (d.locationLat && d.locationLng) {
-            // Legacy single-location migration — wrap the old fields as one
-            // segment spanning the whole trip. Stays in memory only; gets
-            // persisted (and the old fields tombstoned) the first time the
-            // user edits via writeSegments().
-            segs = [{
-              from: TRIP_DATES[0],
-              to:   TRIP_DATES[TRIP_DATES.length - 1],
-              lat:  d.locationLat,
-              lng:  d.locationLng,
-              tz:   d.locationTimezone || 'Asia/Tokyo',
-              name: d.locationName || project?.title || '目的地',
-            }];
-          }
+    // Was getDoc — switched to onSnapshot so the location segments load
+    // immediately from Firestore's persistent cache when offline (or on a
+    // slow / dropping network like an airport / a foreign carrier handoff),
+    // instead of waiting on the ~10s default fetch timeout. The location
+    // editor's own write also triggers this listener, so the weather card
+    // updates the moment a new segment is saved without needing a manual
+    // weatherLocationKey++ kick.
+    const unsub = onSnapshot(doc(db, 'trips', TRIP_ID), snap => {
+      let segs: LocationSegment[] = [];
+      if (snap.exists()) {
+        const d = snap.data();
+        if (Array.isArray(d.locationSegments)) {
+          segs = d.locationSegments
+            .filter((s: any) => s && typeof s.lat === 'number' && typeof s.lng === 'number' && s.from && s.to)
+            .map((s: any) => ({
+              from: s.from, to: s.to,
+              lat:  s.lat,  lng: s.lng,
+              tz:   s.tz   || 'Asia/Tokyo',
+              name: s.name || project?.title || '目的地',
+            }))
+            .sort((a: LocationSegment, b: LocationSegment) => a.from.localeCompare(b.from));
+        } else if (d.locationLat && d.locationLng) {
+          // Legacy single-location migration — wrap the old fields as one
+          // segment spanning the whole trip. Stays in memory only; gets
+          // persisted (and the old fields tombstoned) the first time the
+          // user edits via writeSegments().
+          segs = [{
+            from: TRIP_DATES[0],
+            to:   TRIP_DATES[TRIP_DATES.length - 1],
+            lat:  d.locationLat,
+            lng:  d.locationLng,
+            tz:   d.locationTimezone || 'Asia/Tokyo',
+            name: d.locationName || project?.title || '目的地',
+          }];
         }
-        setSegments(segs);
-        if (segs.length === 0) {
-          setWeather(seedFallback());
-          setWeatherSubtitle('尚未設定目的地　輕點兩下設定');
-          return;
-        }
-        // Subtitle now derived from the active day's segment at render time,
-        // so we just clear the legacy state — the render reads segments+
-        // activeDay directly.
-        setWeatherSubtitle('');
-        fetchSegments(segs);
-      })
-      .catch(() => {
+      }
+      setSegments(segs);
+      if (segs.length === 0) {
         setWeather(seedFallback());
-        setWeatherSubtitle(project?.title || '目的地');
-      });
+        setWeatherSubtitle('尚未設定目的地　輕點兩下設定');
+        return;
+      }
+      setWeatherSubtitle('');
+      fetchSegments(segs);
+    }, err => {
+      console.error('[Schedule] weather segments snapshot error:', err);
+      setWeather(seedFallback());
+      setWeatherSubtitle(project?.title || '目的地');
+    });
+    return unsub;
     // flightStartMs is in deps so the horizon threshold re-evaluates the
     // moment the outbound flight time arrives async from a separate Firestore
     // fetch.
