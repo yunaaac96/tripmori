@@ -10,7 +10,7 @@ import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import FirstTimeHint from '../../components/FirstTimeHint';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faArrowUp, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply, faCircleInfo, faXmark } from '@fortawesome/free-solid-svg-icons';
+import { faBus, faUtensils, faTicket, faBagShopping, faBed, faEllipsis, faArrowRightArrowLeft, faPen, faTrashCan, faCamera, faLock, faUsers, faMoneyBill1, faChartPie, faCreditCard, faUser, faPaperclip, faScaleBalanced, faPercent, faCheck, faReceipt, faArrowDown, faArrowUp, faCoins, faChevronUp, faChevronDown, faCalendarDays, faUserShield, faHourglass, faReply, faCircleInfo, faXmark, faHandshake } from '@fortawesome/free-solid-svg-icons';
 
 const CATEGORY_ICONS: Record<string, any> = {
   transport: faBus,
@@ -1687,9 +1687,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           NT$ {s.amount.toLocaleString()}
                         </span>
                         {s.isCoupleInternal && (
-                          <span title="情侶／同行伴內部轉帳"
-                            style={{ fontSize: 9, fontWeight: 700, color: '#9A4A8A', background: 'rgba(154, 74, 138, 0.12)', borderRadius: 6, padding: '1px 5px' }}>
-                            💑 情侶內
+                          <span title="同伴內部轉帳"
+                            style={{ fontSize: 9, fontWeight: 700, color: '#9A4A8A', background: 'rgba(154, 74, 138, 0.12)', borderRadius: 6, padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                            <FontAwesomeIcon icon={faHandshake} style={{ fontSize: 9 }} /> 同伴內
                           </span>
                         )}
                       </div>
@@ -3290,9 +3290,9 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                           <p style={{ fontSize: 11, color: C.earth, fontWeight: 600, margin: 0, display: 'flex', alignItems: 'center', gap: 5, flexWrap: 'wrap' }}>
                             NT$ {debt.amount.toLocaleString()}
                             {debt.isCoupleInternal && (
-                              <span title="情侶／同行伴內部轉帳，優先處理"
-                                style={{ fontSize: 9, fontWeight: 700, color: '#9A4A8A', background: 'rgba(154, 74, 138, 0.12)', borderRadius: 6, padding: '1px 5px' }}>
-                                💑 情侶內
+                              <span title="同伴內部轉帳，優先處理"
+                                style={{ fontSize: 9, fontWeight: 700, color: '#9A4A8A', background: 'rgba(154, 74, 138, 0.12)', borderRadius: 6, padding: '1px 5px', display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                <FontAwesomeIcon icon={faHandshake} style={{ fontSize: 9 }} /> 同伴內
                               </span>
                             )}
                           </p>
