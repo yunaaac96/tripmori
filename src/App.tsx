@@ -789,19 +789,30 @@ function App() {
     const init = async () => {
       setLoading(true);
       try {
-        // 等 Firebase 從 localStorage 還原登入狀態完成後再判斷
-        // （避免 refresh 時 auth.currentUser 瞬間是 null 導致蓋掉 Google 登入）
-        await auth.authStateReady();
-        if (!auth.currentUser) {
+        // Auth restore runs in the BACKGROUND — we do NOT await it before
+        // building the Firestore subscriptions below. Reason: when offline,
+        // signInAnonymously() hangs for the full network timeout (~10-60s)
+        // before rejecting. Awaiting it meant the cache-backed onSnapshot
+        // subscriptions never got created until that timeout fired, leaving
+        // 行程 / 預訂 blank exactly when offline reading matters most.
+        //
+        // Firestore's persistent IndexedDB cache serves reads WITHOUT an
+        // active auth session (rules are server-side only; cache reads are
+        // local), and the SDK automatically re-attaches the auth token to
+        // server queries once it lands. So firing subscriptions first and
+        // letting auth catch up is both safe and much faster offline.
+        //
+        // authStateReady() itself is fast (just reads IndexedDB persistence)
+        // — it's signInAnonymously's network round-trip that blocks — but we
+        // keep the whole thing off the critical path for robustness.
+        (async () => {
           try {
-            await signInAnonymously(auth);
+            await auth.authStateReady();
+            if (!auth.currentUser) await signInAnonymously(auth);
           } catch (anonErr) {
-            // signInAnonymously requires network — fails offline for brand-new sessions.
-            // Continue anyway: Firestore's persistent IndexedDB cache serves data without
-            // an active auth session. Writes will be queued once network is restored.
-            console.warn('[init] anonymous sign-in failed (likely offline):', (anonErr as Error)?.message);
+            console.warn('[init] auth restore failed (likely offline):', (anonErr as Error)?.message);
           }
-        }
+        })();
         const tripRef = doc(db, 'trips', activeTripId);
         const cols: [string, React.Dispatch<React.SetStateAction<any[]>>][] = [
           ['events', setEvents], ['bookings', setBookings],
@@ -810,7 +821,11 @@ function App() {
         ];
         const logErr = (col: string) => (e: Error) => console.warn(`[onSnapshot/${col}]`, e.message);
         unsubs = cols.map(([col, setter]) =>
-          onSnapshot(collection(tripRef, col), snap => {
+          onSnapshot(collection(tripRef, col), { includeMetadataChanges: true }, snap => {
+            // TEMP offline diagnostics — confirm whether the persistent cache
+            // is actually serving rows when the network is down. Remove once
+            // the offline-blank report is resolved.
+            console.log(`[offline-diag/${col}] size=${snap.size} fromCache=${snap.metadata.fromCache} pending=${snap.metadata.hasPendingWrites}`);
             setter(snap.docs.map(d => ({ id: d.id, ...d.data() })));
           }, logErr(col))
         );
