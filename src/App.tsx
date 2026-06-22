@@ -1008,6 +1008,59 @@ function App() {
     return unsub;
   }, [activeTripId, activeProject, journalsLimit]);
 
+  // ── Background offline pre-cache for ALL trips ────────────────────────────
+  // The localStorage backup written by the init() subscriptions only covers
+  // the trip the user has actually OPENED while online. Users expect *every*
+  // trip in their hub to be readable offline (the whole point of the PWA when
+  // travelling), so when online we proactively pull each known trip's data
+  // once and stash a backup — without the user having to visit each one.
+  //
+  // Uses one-shot getDocs (not onSnapshot) to avoid N×4 long-lived listeners,
+  // and a 6-hour per-trip throttle so this doesn't re-read on every app open.
+  // The currently-active trip is skipped (its live subscriptions already keep
+  // its backup fresh).
+  useEffect(() => {
+    if (typeof navigator !== 'undefined' && navigator.onLine === false) return;
+    let cancelled = false;
+    (async () => {
+      try { await auth.authStateReady(); } catch { /* ignore */ }
+      if (!auth.currentUser) return; // need an auth session for server reads
+      const projects = loadProjects();
+      for (const p of projects) {
+        if (cancelled) break;
+        if (activeProject && p.id === activeProject.id) continue; // live-backed already
+        const tsKey = `tripmori_precache_${p.id}`;
+        const last  = Number(localStorage.getItem(tsKey) || '0');
+        if (Date.now() - last < 6 * 3600 * 1000) continue; // throttle: 6h
+        try {
+          const tripRef = doc(db, 'trips', p.id);
+          for (const col of ['events', 'bookings', 'lists', 'members'] as const) {
+            const snap = await getDocs(collection(tripRef, col));
+            let rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            if (col === 'members') rows = rows.filter((m: any) => !!m.name);
+            saveTripBackup(p.id, col, rows);
+          }
+          // Static booking blob lives on the trip doc.
+          const tripSnap = await getDoc(tripRef);
+          if (tripSnap.exists()) {
+            const d = tripSnap.data();
+            const flights = 'staticFlights' in d ? d.staticFlights : null;
+            const hotels  = 'staticHotels'  in d ? d.staticHotels  : null;
+            const cars    = 'staticCars' in d ? d.staticCars
+              : ('staticCar' in d && d.staticCar ? [d.staticCar] : null);
+            saveTripBackup(p.id, 'static', { flights, hotels, cars });
+          }
+          localStorage.setItem(tsKey, String(Date.now()));
+        } catch (e) {
+          console.warn('[precache] failed for trip', p.id, (e as Error)?.message);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // Re-run when the active trip changes (so a newly-switched-away trip can
+    // still be precached) — throttle prevents redundant reads.
+  }, [activeProject?.id]);
+
   // Reset journals pagination when switching trips
   useEffect(() => {
     setJournalsLimit(JOURNAL_PAGE);
