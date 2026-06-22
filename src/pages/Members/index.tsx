@@ -4,7 +4,7 @@ import { avatarTextColor } from '../../utils/helpers';
 import PageHeader from '../../components/layout/PageHeader';
 import FirstTimeHint from '../../components/FirstTimeHint';
 import { FontAwesomeIcon } from '@fortawesome/react-fontawesome';
-import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen, faHandshake, faUserShield, faArrowUpFromBracket, faEye } from '@fortawesome/free-solid-svg-icons';
+import { faPen, faTrashCan, faPlus, faCamera, faLock, faKey, faClipboardList, faLink, faUsers, faEnvelope, faNoteSticky, faSquareCheck, faBell, faBellSlash, faBookmark, faCheck, faXmark, faChevronUp, faChevronDown, faArrowUp, faArrowDown, faDownload, faTriangleExclamation, faMobileScreen, faHandshake, faUserShield, faArrowUpFromBracket, faEye, faArrowRightArrowLeft } from '@fortawesome/free-solid-svg-icons';
 import CropModal from '../../components/CropModal';
 import { useDangerConfirm } from '../../components/DangerConfirmModal';
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
@@ -1166,7 +1166,7 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
             </div>
           )}
 
-          {/* ── Owner-only: 情侶／同行伴配對 ──
+          {/* ── Owner-only: 同伴配對 ──
               Each declared pair gets routed couple-internal first when the
               expense settlement engine runs (see computeSettlements
               couplePairs param). Helps trips where two members effectively
@@ -1177,7 +1177,7 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
               <button onClick={() => setCouplesEditOpen(v => !v)}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', background: 'none', border: 'none', cursor: 'pointer', fontFamily: FONT }}>
                 <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, display: 'flex', alignItems: 'center', gap: 5 }}>
-                  <FontAwesomeIcon icon={faHandshake} style={{ fontSize: 11 }} /> 情侶／同行伴配對 {couplePairs.length > 0 && <span style={{ fontSize: 10, color: C.barkLight, fontWeight: 400 }}>（{couplePairs.length} 組）</span>}
+                  <FontAwesomeIcon icon={faHandshake} style={{ fontSize: 11 }} /> 同伴配對 {couplePairs.length > 0 && <span style={{ fontSize: 10, color: C.barkLight, fontWeight: 400 }}>（{couplePairs.length} 組）</span>}
                 </span>
                 <span style={{ fontSize: 12, color: C.barkLight }}><FontAwesomeIcon icon={couplesEditOpen ? faChevronUp : faChevronDown} /></span>
               </button>
@@ -1191,8 +1191,10 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                       {couplePairs.map((pair, i) => (
                         <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: 'var(--tm-section-bg)', borderRadius: 10, border: `1px solid ${C.creamDark}` }}>
                           <FontAwesomeIcon icon={faHandshake} style={{ fontSize: 11, color: C.sage, flexShrink: 0 }} />
-                          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.bark }}>
-                            {pair[0]} ↔ {pair[1]}
+                          <span style={{ flex: 1, fontSize: 13, fontWeight: 700, color: C.bark, display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                            {pair[0]}
+                            <FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 10, color: C.barkLight }} />
+                            {pair[1]}
                           </span>
                           <button onClick={() => handleDeleteCouple(i)}
                             style={{ background: '#FAE0E0', color: '#9A3A3A', border: 'none', borderRadius: 8, padding: '4px 8px', cursor: 'pointer', fontFamily: FONT, fontSize: 11, fontWeight: 700, flexShrink: 0 }}
@@ -1225,7 +1227,7 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                             <option key={m.id} value={m.name}>{m.name}</option>
                           ))}
                         </select>
-                        <span style={{ fontSize: 12, color: C.barkLight, flexShrink: 0 }}>↔</span>
+                        <span style={{ fontSize: 12, color: C.barkLight, flexShrink: 0 }}><FontAwesomeIcon icon={faArrowRightArrowLeft} style={{ fontSize: 11 }} /></span>
                         <select value={coupleDraftB} onChange={e => setCoupleDraftB(e.target.value)}
                           style={{ flex: 1, padding: '7px 8px', borderRadius: 8, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', color: C.bark, fontSize: 12, fontFamily: FONT, cursor: 'pointer' }}>
                           <option value="">選擇成員</option>
