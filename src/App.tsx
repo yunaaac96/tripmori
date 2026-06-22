@@ -23,6 +23,7 @@ const PlanningPage  = lazy(() => import('./pages/Planning/index'));
 const MembersPage   = lazy(() => import('./pages/Members/index'));
 import { useFcm, enableFcmForMember } from './hooks/useFcm';
 import { avatarTextColor } from './utils/helpers';
+import { saveTripBackup, loadTripBackup } from './utils/localBackup';
 import ProjectHub, {
   ensureDefaultProject, loadProjects, saveProject, removeProject, setActiveProject, getActiveProject,
   checkOwnerRole,
@@ -788,6 +789,17 @@ function App() {
     let unsubs: (() => void)[] = [];
     const init = async () => {
       setLoading(true);
+      // Prime state from the localStorage backup IMMEDIATELY (synchronously,
+      // before any auth or network work) so an offline cold-start paints the
+      // last-seen 行程 / 預訂 / 準備 / 成員 right away — even if iOS has
+      // evicted Firestore's IndexedDB cache. Subscriptions below then overlay
+      // fresh data when it arrives (and refuse to wipe this with an empty
+      // cache miss — see the fromCache+size===0 guard). These four collections
+      // are readable by every role (incl. visitors), so priming isn't gated.
+      const pe = loadTripBackup(activeTripId, 'events');   if (pe) setEvents(pe);
+      const pb = loadTripBackup(activeTripId, 'bookings'); if (pb) setBookings(pb);
+      const pl = loadTripBackup(activeTripId, 'lists');    if (pl) setLists(pl);
+      const pm = loadTripBackup(activeTripId, 'members');  if (pm) setMembers(pm);
       try {
         // Auth restore runs in the BACKGROUND — we do NOT await it before
         // building the Firestore subscriptions below. Reason: when offline,
@@ -820,18 +832,27 @@ function App() {
           // journals handled separately below — it's paginated
         ];
         const logErr = (col: string) => (e: Error) => console.warn(`[onSnapshot/${col}]`, e.message);
+        // Guard: an offline cold-start where Firestore's IndexedDB cache was
+        // evicted fires `fromCache=true, size=0`. That's NOT a real "the
+        // collection is empty" signal — it's "I have nothing cached". If we
+        // let it through it would wipe both the live state AND the localStorage
+        // backup we just primed from, re-blanking the page. So we ignore that
+        // specific shape and keep whatever the backup gave us. A genuine
+        // server-confirmed empty (`fromCache=false, size=0`) IS honoured.
         unsubs = cols.map(([col, setter]) =>
           onSnapshot(collection(tripRef, col), { includeMetadataChanges: true }, snap => {
-            // TEMP offline diagnostics — confirm whether the persistent cache
-            // is actually serving rows when the network is down. Remove once
-            // the offline-blank report is resolved.
-            console.log(`[offline-diag/${col}] size=${snap.size} fromCache=${snap.metadata.fromCache} pending=${snap.metadata.hasPendingWrites}`);
-            setter(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+            if (snap.metadata.fromCache && snap.size === 0) return; // keep backup
+            const rows = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+            setter(rows);
+            saveTripBackup(activeTripId, col, rows);
           }, logErr(col))
         );
         // Members: filter out nameless docs (can be created by stale FCM setDoc)
-        unsubs.push(onSnapshot(collection(tripRef, 'members'), snap => {
-          setMembers(snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((m: any) => !!m.name));
+        unsubs.push(onSnapshot(collection(tripRef, 'members'), { includeMetadataChanges: true }, snap => {
+          if (snap.metadata.fromCache && snap.size === 0) return; // keep backup
+          const rows = snap.docs.map(d => ({ id: d.id, ...d.data() })).filter((m: any) => !!m.name);
+          setMembers(rows);
+          saveTripBackup(activeTripId, 'members', rows);
         }, logErr('members')));
 
         // Visitor-gated collections: only subscribe for editor / owner.

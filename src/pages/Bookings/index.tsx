@@ -3,6 +3,7 @@ import { auth } from '../../config/firebase';
 import { C, FONT, cardStyle, ExpandableNotes } from '../../App';
 import { toTWDCalc } from '../../utils/expenseCalc';
 import { avatarTextColor } from '../../utils/helpers';
+import { saveTripBackup, loadTripBackup } from '../../utils/localBackup';
 import PageHeader from '../../components/layout/PageHeader';
 import CurrencyPicker from '../../components/CurrencyPicker';
 import FirstTimeHint from '../../components/FirstTimeHint';
@@ -129,6 +130,16 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
 
   useEffect(() => {
     if (!db || !TRIP_ID) return;
+    // Prime static booking data from the localStorage backup immediately so
+    // an offline cold-start (where iOS may have evicted Firestore's IndexedDB
+    // cache) still shows the last-seen flights / hotels / cars.
+    const primed = loadTripBackup<{ flights: any; hotels: any; cars: any }>(TRIP_ID, 'static');
+    if (primed) {
+      if (primed.flights !== undefined) setFlights(primed.flights);
+      if (primed.hotels  !== undefined) setHotels(primed.hotels);
+      if (primed.cars    !== undefined) setCars(primed.cars);
+      setStaticLoaded(true);
+    }
     // Was getDoc — one-shot read. Offline this hung for ~10s waiting on the
     // network timeout before falling back to Firestore's persistent cache,
     // making the page look frozen in offline / poor-network conditions
@@ -136,19 +147,31 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
     // onSnapshot reads from cache immediately and live-updates when the
     // network comes back, so airport-without-wifi navigation works.
     const unsub = onSnapshot(doc(db, 'trips', TRIP_ID), snap => {
-      if (!snap.exists()) { setStaticLoaded(true); return; }
+      // Offline + no cached doc → exists()=false with fromCache=true. Don't
+      // wipe the primed backup in that case; just mark loaded and bail.
+      if (!snap.exists()) {
+        if (!(snap.metadata.fromCache && primed)) {
+          setFlights(null); setHotels(null); setCars(null);
+        }
+        setStaticLoaded(true);
+        return;
+      }
       const d = snap.data();
-      setFlights('staticFlights' in d ? d.staticFlights : null);
-      setHotels ('staticHotels'  in d ? d.staticHotels  : null);
+      const nextFlights = 'staticFlights' in d ? d.staticFlights : null;
+      const nextHotels  = 'staticHotels'  in d ? d.staticHotels  : null;
       // Backward-compat: old trips store a single `staticCar` object; new
       // trips store a `staticCars` array. Prefer the array; wrap legacy
       // single into a one-element array on read.
-      if ('staticCars' in d) {
-        setCars(d.staticCars);
-      } else if ('staticCar' in d && d.staticCar) {
-        setCars([d.staticCar]);
-      } else {
-        setCars(null);
+      const nextCars = 'staticCars' in d ? d.staticCars
+        : ('staticCar' in d && d.staticCar ? [d.staticCar] : null);
+      setFlights(nextFlights);
+      setHotels(nextHotels);
+      setCars(nextCars);
+      // Persist a fresh backup whenever real data arrives (skip if this was a
+      // cache-only doc with no static fields, to avoid clobbering the backup
+      // with nulls during an offline read).
+      if (!(snap.metadata.fromCache && nextFlights === null && nextHotels === null && nextCars === null)) {
+        saveTripBackup(TRIP_ID, 'static', { flights: nextFlights, hotels: nextHotels, cars: nextCars });
       }
       // Legacy seeding for the original default Okinawa trip — only runs
       // once when the doc has no staticFlights yet. Stays gated to TRIP_ID
