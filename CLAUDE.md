@@ -206,7 +206,10 @@ Cloud Functions secret（透過 `defineSecret`）：
 - **無路由 library**：頁面切換靠 `App.tsx` 的 `activeTab` state + `BottomNav` 點擊，不用 react-router
 - **共用 style 常數集中在 App.tsx**：`C`（顏色 CSS 變數）、`FONT`、`cardStyle`、`inputStyle`、`btnPrimary` 從 App.tsx import
 - **CSS 變數 dark mode**：主題色透過 `index.css` 的 `--tm-*` 變數控制，dark mode 用 `[data-theme="dark"]` 覆寫
-- **狀態列 theme-color 必須對齊頂部條**：`index.html` 的 `theme-color`（iOS standalone 狀態列底色）必須等於 App 最上方專案標題列顏色（`var(--tm-cream)`：light `#F7F4EB` / dark `#242118`），否則狀態列會浮出一條較淡色帶（「霧化」）。改 `--tm-cream` 時務必同步改 `index.html`
+- **iOS standalone 狀態列「霧面」修正（重要、踩過坑）**：近期 iOS 對「加到主畫面」的 PWA 在狀態列加了一層**半透明/模糊材質**，會把延伸到其下方的網頁內容糊掉（非 App 的 CSS，`grep backdrop-filter` 為空；且 `default` 模式下 `env(safe-area-inset-top)` 回報 **0**，無法靠它 padding）。解法分兩層：
+  - **① 頂部統一單一深色**：`theme-color`（`index.html`）＋ manifest `theme_color`（`public/manifest.json` **和** `vite.config.ts` 兩處都要改）＋ body 底色 ＋ 專案標題列底色，**全部對齊 `var(--tm-page-bg)`**（light `#F7F4EB` / dark `#1C1A17`）。iOS 安裝版狀態列底色吃的是 **manifest `theme_color`，不是 `<meta>`**；改這兩個需**重裝**才生效。
+  - **② 把內容推到霧下方**：`src/index.css` 定義 `--tm-safe-top`，`@media (display-mode: standalone)` 時為 `max(env(safe-area-inset-top,0px), 12px)`；`body { padding-top: var(--tm-safe-top) }`，sticky 橫幅（App.tsx 離線/管理模式兩條）`top` 也用 `var(--tm-safe-top)`。這是純 CSS、**重整即生效不用重裝**。
+  - 診斷法：Safari 網頁檢查器連手機，Console 跑 `document.body.style.setProperty('padding-top','54px','important')` 看內容是否被推出霧外即可定位。
 - **點到點交通估算（Schedule `calcTravelTime`）**：三層 fallback — ① Cloud Function `estimateTravel`（Google Routes API，真實大眾運輸）② 免費 OSRM demo（`router.project-osrm.org`，transit 以開車 ×1.35 近似）③ 直線距離概估（Haversine×道路係數÷各模式均速，顯示「（概估）」）；地理編碼走 Nominatim / Open-Meteo / Photon 多重 fallback
 - **Inline style 優先**：大部分元件使用 React inline style；Tailwind 僅用於少數 utility class
 - **FontAwesome 替代 emoji icon**：所有 icon 用 `@fortawesome/free-solid-svg-icons`，不用 emoji
