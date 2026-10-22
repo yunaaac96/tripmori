@@ -398,10 +398,21 @@
  * translucent status bar, frosting it into a "misty" band. The fill colour must
  * match both the status bar (theme-color) and the strip, so status bar → inset
  * fill → strip read as one uniform band (page-bg would be a 3rd, visible tone). */
+/* iOS standalone draws a frosted/translucent status bar over the top of the
+   webview and, in default mode, reports safe-area-inset-top as 0 — so content
+   sits under the frost and blurs. Push content below it with a floor value
+   (max() so devices that DO report an inset use the real, larger one). Only in
+   standalone: a normal browser tab has no such status bar, so no gap there.
+   The sticky top banners read the same --tm-safe-top so they also pin below
+   the frost instead of under it. */
+:root { --tm-safe-top: 0px; }
+@media (display-mode: standalone) {
+  :root { --tm-safe-top: max(env(safe-area-inset-top, 0px), 12px); }
+}
 body {
   margin: 0;
   background: var(--tm-page-bg);
-  padding-top: env(safe-area-inset-top, 0px);
+  padding-top: var(--tm-safe-top);
 }
 
 #root {

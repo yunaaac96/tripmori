@@ -1349,7 +1349,7 @@ function App() {
 
         {/* ── Offline banner ── */}
         {!isOnline && (
-          <div style={{ position: 'sticky', top: 0, zIndex: 1000, background: '#3A3A3A', color: 'white', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
+          <div style={{ position: 'sticky', top: 'var(--tm-safe-top)', zIndex: 1000, background: '#3A3A3A', color: 'white', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
             <span style={{ fontSize: 14 }}>📡</span>
             <span style={{ flex: 1, lineHeight: 1.4 }}>離線模式・資料來自本機快取・編輯將於恢復連線後自動同步</span>
           </div>
@@ -1475,7 +1475,7 @@ function App() {
           // Sticky pinned to viewport top so user always knows admin mode is on,
           // even after scrolling deep into a long expense list. Shadow + high
           // z-index keep it visually above page content.
-          <div style={{ position: 'sticky', top: 0, zIndex: 200, background: '#E87A30', color: 'white', padding: '7px 16px 8px', fontFamily: FONT, fontSize: 12, fontWeight: 700, boxShadow: '0 2px 8px rgba(232,122,48,0.25)' }}>
+          <div style={{ position: 'sticky', top: 'var(--tm-safe-top)', zIndex: 200, background: '#E87A30', color: 'white', padding: '7px 16px 8px', fontFamily: FONT, fontSize: 12, fontWeight: 700, boxShadow: '0 2px 8px rgba(232,122,48,0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <FontAwesomeIcon icon={faGear} style={{ fontSize: 11 }} />
