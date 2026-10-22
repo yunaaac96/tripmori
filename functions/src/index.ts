@@ -9,6 +9,15 @@ import { Client as NotionClient } from '@notionhq/client';
 const NOTION_API_KEY        = defineSecret('NOTION_API_KEY');
 const NOTION_DATABASE_ID    = '7f17b1ac-1126-4d54-89ca-51cf6160152c'; // 行程備份紀錄（database）
 
+// ── Travel-time routing config ──────────────────────────────────────────────
+// Google Directions API key (supports real public-transit routing, unlike the
+// free OSRM demo server the client falls back to). Set once with:
+//   firebase functions:secrets:set GOOGLE_MAPS_API_KEY
+// and enable "Directions API" + billing on the key's GCP project. Until this is
+// configured, `estimateTravel` throws failed-precondition and the client falls
+// back to OSRM / straight-line estimate, so nothing breaks before setup.
+const GOOGLE_MAPS_API_KEY   = defineSecret('GOOGLE_MAPS_API_KEY');
+
 admin.initializeApp();
 const db = admin.firestore();
 const messaging = admin.messaging();
@@ -632,6 +641,58 @@ export const claimOwnership = onCall(async (request) => {
   }
   return { fixed };
 });
+
+// ── 7b. estimateTravel: point-to-point travel time via Google Directions ──────
+// Called from the Schedule page. Accepts free-text places or "lat,lon" strings
+// so it works even when client-side geocoding fails. Returns duration in
+// seconds for the requested mode, including REAL public-transit routing.
+//
+// Client call example:
+//   const fn = httpsCallable(getFunctions(undefined, 'us-central1'), 'estimateTravel');
+//   const { data } = await fn({ origin, destination, mode: 'transit' });
+export const estimateTravel = onCall(
+  { secrets: [GOOGLE_MAPS_API_KEY] },
+  async (request) => {
+    if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in');
+
+    const { origin, destination, mode } = request.data as {
+      origin: string; destination: string; mode?: 'car' | 'transit' | 'walk';
+    };
+    if (!origin || !destination) {
+      throw new HttpsError('invalid-argument', 'origin and destination required');
+    }
+
+    const key = GOOGLE_MAPS_API_KEY.value();
+    if (!key) throw new HttpsError('failed-precondition', 'no-key');
+
+    const gMode = mode === 'walk' ? 'walking' : mode === 'transit' ? 'transit' : 'driving';
+    const url =
+      'https://maps.googleapis.com/maps/api/directions/json' +
+      `?origin=${encodeURIComponent(origin)}` +
+      `&destination=${encodeURIComponent(destination)}` +
+      `&mode=${gMode}&language=zh-TW&key=${key}`;
+
+    let data: any;
+    try {
+      const res = await fetch(url);
+      data = await res.json();
+    } catch (e) {
+      throw new HttpsError('unavailable', `directions fetch failed: ${String(e).slice(0, 60)}`);
+    }
+
+    const leg = data?.routes?.[0]?.legs?.[0];
+    if (data?.status !== 'OK' || !leg?.duration) {
+      // ZERO_RESULTS (e.g. no transit available), NOT_FOUND, etc.
+      throw new HttpsError('not-found', data?.status || 'no-route');
+    }
+
+    return {
+      seconds: leg.duration.value as number,
+      text:    leg.duration.text as string,
+      source:  'google',
+    };
+  }
+);
 
 // ── 8. backupTripToNotion ─────────────────────────────────────────────────────
 // Callable function: owner triggers a backup of a trip to the Notion database.

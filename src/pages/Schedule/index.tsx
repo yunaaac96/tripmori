@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { getDoc, onSnapshot } from 'firebase/firestore';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import { auth } from '../../config/firebase';
 import { parseUniversalImport, UNIVERSAL_TEMPLATE, UNIVERSAL_SAMPLE } from '../../utils/universalImporter';
 import CurrencySearch from '../../components/CurrencySearch';
@@ -939,18 +940,56 @@ export default function SchedulePage({ events, members = [], project, firestore,
 
   const err = (msg: string) => { setTravelCalcStatus('error'); setTravelCalcMsg(msg); };
 
+  // [lon, lat] → "lat,lon" (the order Google / display expects)
+  const latLonStr = (c: [number, number]) => `${c[1]},${c[0]}`;
+
+  // Straight-line (Haversine) fallback estimate for when every routing service
+  // is unreachable — detour factor × mode-average speed so the user always gets
+  // a ballpark number instead of a hard error.
+  const roadEstimateSecs = (fromC: [number, number], toC: [number, number]) => {
+    const straight = haversineKm(fromC[0], fromC[1], toC[0], toC[1]);
+    const factor = travelMode === 'walk' ? 1.3 : 1.35;               // road is longer than the crow flies
+    const kmh    = travelMode === 'car' ? 40 : travelMode === 'transit' ? 22 : 4.8;
+    return (straight * factor) / kmh * 3600;
+  };
+
   const calcTravelTime = async (nextLoc: string, nextTitle?: string, nextMapUrl?: string) => {
     const from = form.location.trim();
     const to   = nextLoc.trim();
     if (!from || !to) return;
     setTravelCalcStatus('loading'); setTravelCalcMsg('');
 
+    const icon = travelMode === 'car' ? '🚗' : travelMode === 'transit' ? '🚌' : '🚶';
+
     // Resolve short URLs (maps.app.goo.gl → full URL with @lat,lon if CORS allows)
     const fromMapUrl = await resolveShortMapUrl(form.mapUrl);
     const toMapUrl   = await resolveShortMapUrl(nextMapUrl || '');
 
-    // Step 1: origin coords
+    // Coords straight from the map URLs (most accurate; used as origin/dest hints
+    // and for the straight-line fallback).
     let fromC: [number, number] | null = coordsFromMapUrl(fromMapUrl);
+    let toC:   [number, number] | null = coordsFromMapUrl(toMapUrl);
+
+    // ── Step 0: Google Directions via Cloud Function ────────────────────────
+    // Real routing incl. public transit; accepts free-text places so it works
+    // even when client-side geocoding would fail. Any error (key not configured,
+    // ZERO_RESULTS, offline) silently falls through to the OSRM path below.
+    try {
+      const origin = fromC ? latLonStr(fromC) : (from || form.title.trim());
+      const dest   = toC   ? latLonStr(toC)   : (to   || nextTitle || '');
+      if (origin && dest) {
+        const fn = httpsCallable(getFunctions(undefined, 'us-central1'), 'estimateTravel');
+        const resp: any = await fn({ origin, destination: dest, mode: travelMode });
+        const secs = resp?.data?.seconds;
+        if (typeof secs === 'number' && secs > 0) {
+          set('travelTime', `${icon} ${fmtDuration(secs)}`);
+          setTravelCalcStatus('done');
+          return;
+        }
+      }
+    } catch { /* fall through to OSRM / straight-line */ }
+
+    // Step 1: origin coords
     if (!fromC) fromC = await geocodePlace(from);
     if (!fromC && form.title.trim()) fromC = await geocodePlace(form.title.trim());
     if (!fromC) {
@@ -961,7 +1000,6 @@ export default function SchedulePage({ events, members = [], project, firestore,
     if (!fromC) return err(`無法定位起點「${from.slice(0, 20)}」，請確認地點名稱是否正確`);
 
     // Step 2: destination coords
-    let toC: [number, number] | null = coordsFromMapUrl(toMapUrl);
     if (!toC) toC = await geocodePlace(to, fromC);
     if (!toC && nextTitle) toC = await geocodePlace(nextTitle, fromC);
     if (!toC) {
@@ -975,22 +1013,31 @@ export default function SchedulePage({ events, members = [], project, firestore,
     if (distKm > 500) return err(`定位距離異常（${Math.round(distKm)}km），請確認兩站地點是否正確`);
     // Step 3b: walking-specific distance cap — over 15km is not walkable
     if (travelMode === 'walk' && distKm > 15) return err(`直線距離 ${Math.round(distKm)}km，步行不切實際，建議改選開車或大眾運輸`);
-    // Step 4: OSRM routing
+    // Straight-line fallback: when OSRM is down/rate-limited we still have
+    // geocoded coords, so estimate from distance rather than failing outright.
+    const straightLineFallback = () => {
+      const secs = roadEstimateSecs(fromC!, toC!);
+      if (travelMode === 'walk' && secs > 10800) return err(`步行距離過遠（約 ${Math.round(distKm)}km），建議改選開車或大眾運輸`);
+      set('travelTime', `${icon} ${fmtDuration(secs)}（概估）`);
+      setTravelCalcStatus('done');
+      setTravelCalcMsg('路線服務暫時無法使用，已用直線距離概估');
+    };
+
+    // Step 4: OSRM routing (free demo server; falls back to straight-line on any failure)
     const profile = travelMode === 'walk' ? 'foot' : 'driving';
     try {
       const res = await fetch(`https://router.project-osrm.org/route/v1/${profile}/${fromC[0]},${fromC[1]};${toC[0]},${toC[1]}?overview=false`);
-      if (!res.ok) return err(`路線規劃失敗（HTTP ${res.status}），座標：${fromC.map(v=>v.toFixed(4))} → ${toC.map(v=>v.toFixed(4))}`);
+      if (!res.ok) return straightLineFallback();
       const data = await res.json();
       if (data.code === 'Ok' && data.routes?.[0]) {
         let secs = data.routes[0].duration;
         if (travelMode === 'transit') secs = secs * 1.35;
         // Sanity check: walking >3 hrs likely means geocoding error or bad routing
         if (travelMode === 'walk' && secs > 10800) return err(`步行時間異常（${fmtDuration(secs)}），請確認兩站地點名稱是否正確`);
-        const icon = travelMode === 'car' ? '🚗' : travelMode === 'transit' ? '🚌' : '🚶';
         set('travelTime', `${icon} ${fmtDuration(secs)}`);
         setTravelCalcStatus('done');
-      } else { err(`OSRM 無法規劃路線（${data.code}）`); }
-    } catch (e) { err(`網路錯誤：${String(e).slice(0,40)}`); }
+      } else { straightLineFallback(); }
+    } catch { straightLineFallback(); }
   };
 
   // Build a Google Maps URL: prefer explicit mapUrl, fallback to search by location name
@@ -1335,10 +1382,9 @@ export default function SchedulePage({ events, members = [], project, firestore,
                             // into the avatar background of the same color).
                             style={{ position: 'relative', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.45 : 0.25, touchAction: 'manipulation', WebkitTapHighlightColor: 'transparent' }}>
                             <div style={{ position: 'relative', width: 44, height: 44, borderRadius: '50%', overflow: 'visible', flexShrink: 0, pointerEvents: 'none' }}>
-                              <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: sel ? 'none' : 'grayscale(70%)' }}>
-                                {m.avatarUrl
-                                  ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+                              <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden', border: `3px solid ${sel ? C.sage : 'transparent'}`, boxSizing: 'border-box', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: sel ? 'none' : 'grayscale(70%)', position: 'relative' }}>
+                                <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
+                                {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                               </div>
                               {/* ✓ badge for selected — strong, immediate visual cue */}
                               {sel && (
@@ -1677,10 +1723,9 @@ export default function SchedulePage({ events, members = [], project, firestore,
                             style={{ display: 'flex', gap: -4, marginTop: 6, flexWrap: 'wrap', cursor: 'pointer' }}
                             onClick={e => { e.stopPropagation(); setParticipantPopover(prev => prev ? null : ptcMembers.map((m: any) => m.name)); }}>
                             {ptcMembers.map((m: any, i: number) => (
-                              <div key={m.id} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
-                                {m.avatarUrl
-                                  ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  : <span style={{ fontSize: 10, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>}
+                              <div key={m.id} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm, position: 'relative' }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: 'white' }}>{(m.name || '?')[0]}</span>
+                                {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                               </div>
                             ))}
                           </div>
