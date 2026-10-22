@@ -15,8 +15,12 @@ export default defineConfig({
         name: 'TripMori 旅行手帳',
         short_name: 'TripMori',
         description: '團體旅遊規劃手帳',
-        theme_color: '#6B7C58',
-        background_color: '#F7F4EB',
+        // theme_color drives the iOS standalone status-bar colour (installed
+        // app reads the manifest, not the <meta>). Must equal --tm-cream /
+        // --tm-page-bg so the status bar matches the app's top band; the old
+        // green #6B7C58 was the mismatched "misty" tint.
+        theme_color: '#242118',
+        background_color: '#1C1A17',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
