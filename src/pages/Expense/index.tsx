@@ -314,6 +314,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   // Filter / Sort / View
   const [filterCat, setFilterCat] = useState<string>('all');
+  // Payment-method filter: 全部 / 現金 / 刷卡 — lets the user see per-method spend.
+  const [payMethodFilter, setPayMethodFilter] = useState<'all' | 'cash' | 'card'>('all');
   const [sortMode, setSortMode] = useState<SortMode>('newest');
   const [expenseView, setExpenseView] = useState<'all' | 'mine'>('all');
   const [hideSettled, setHideSettled] = useState(false);
@@ -1220,6 +1222,16 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   const nonSettlementExpenses = baseExpenses.filter((e: any) => e.category !== 'settlement');
 
+  // 現金／刷卡 實付金額（換算台幣）— 排除收入與結清記錄，用 effectiveTWD（刷卡外幣
+  // 有補卡單金額就採實際金額）。反映目前檢視範圍（含「與我有關」）的實際花費。
+  const payMethodHelper = (e: any): 'cash' | 'card' => (e.paymentMethod === 'card' ? 'card' : 'cash');
+  const methodTotals = nonSettlementExpenses
+    .filter((e: any) => !e.isIncome)
+    .reduce((acc: { cash: number; card: number }, e: any) => {
+      acc[payMethodHelper(e)] += effectiveTWD(e);
+      return acc;
+    }, { cash: 0, card: 0 });
+
   // 團隊總支出: non-private, non-settlement, excluding anything still awaiting
   // a card statement (real TWD unknown). Income entries subtract from the total.
   const teamTotalTWD = visibleExpenses
@@ -1309,6 +1321,8 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
   // the same second / identical amount don't flip positions on re-render.
   const filteredExpenses = baseExpenses
     .filter((e: any) => filterCat === 'all' || e.category === filterCat)
+    // 現金／刷卡 篩選（結清記錄不受此篩選影響，維持原分類篩選結果）
+    .filter((e: any) => payMethodFilter === 'all' || e.category === 'settlement' || payMethodHelper(e) === payMethodFilter)
     .filter((e: any) => {
       // "收還款記錄已隱藏" toggle: hides category=settlement entries (the repayment records),
       // NOT settled regular expenses. Regular expenses always show regardless of badge.
@@ -3077,6 +3091,35 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 ? `含個人分攤＋私人消費 · 團隊共 NT$ ${teamTotalTWD.toLocaleString()}`
                 : '僅計入分帳費用，私人帳不含在內'}
             </p>
+            {/* 現金／刷卡 實付拆分 — 讓使用者快速看出該趟各付款方式的實際花費 */}
+            {(methodTotals.cash > 0 || methodTotals.card > 0) && (
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                {([
+                  { key: 'cash', label: '現金', icon: faMoneyBill1, val: methodTotals.cash },
+                  { key: 'card', label: '刷卡', icon: faCreditCard, val: methodTotals.card },
+                ] as const).map(m => {
+                  const active = payMethodFilter === m.key;
+                  return (
+                    <button
+                      key={m.key}
+                      onClick={() => setPayMethodFilter(active ? 'all' : m.key)}
+                      style={{
+                        flex: 1, textAlign: 'left', cursor: 'pointer', fontFamily: FONT,
+                        background: active ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.12)',
+                        border: `1.5px solid ${active ? 'rgba(255,255,255,0.7)' : 'transparent'}`,
+                        borderRadius: 12, padding: '8px 10px',
+                      }}>
+                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                        <FontAwesomeIcon icon={m.icon} style={{ fontSize: 10 }} />{m.label}
+                      </span>
+                      <span style={{ fontSize: 16, fontWeight: 800, color: 'white', display: 'block', marginTop: 2 }}>
+                        NT$ {Math.round(m.val).toLocaleString()}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
           </div>
         )}
       </PageHeader>
@@ -3498,6 +3541,15 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.earth}`, background: '#FFF2CC', color: C.earth, fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT }}>
                 {sortLabels[sortMode]}
               </button>
+              {/* 現金／刷卡 篩選中指示（可快速清除）— 篩選由頂部金額卡切換 */}
+              {payMethodFilter !== 'all' && (
+                <button onClick={() => setPayMethodFilter('all')}
+                  style={{ flexShrink: 0, padding: '5px 12px', borderRadius: 20, border: `1.5px solid ${C.sageDark}`, background: C.sage, color: 'white', fontSize: 12, fontWeight: 700, cursor: 'pointer', fontFamily: FONT, display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <FontAwesomeIcon icon={payMethodFilter === 'card' ? faCreditCard : faMoneyBill1} style={{ fontSize: 10 }} />
+                  {payMethodFilter === 'card' ? '刷卡' : '現金'}
+                  <FontAwesomeIcon icon={faXmark} style={{ fontSize: 10 }} />
+                </button>
+              )}
             </div>
             {/* 剔除已結清 toggle — only shown if any expense is settled from viewer's perspective */}
             {currentUserName && (expenses as any[]).some((e: any) =>
