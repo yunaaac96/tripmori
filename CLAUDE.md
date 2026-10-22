@@ -1,6 +1,6 @@
 # CLAUDE.md — TripMori 專案長期記憶
 
-> 最後更新：2026-05-02
+> 最後更新：2026-10-22
 
 ---
 
@@ -139,6 +139,7 @@ TripMori 是一個行動優先的 PWA 旅遊手帳，給多人結伴旅行的小
 | `todoDueDateReminder` | Scheduled | Todo 到期前推播提醒 |
 | `addEditor` | HTTPS Callable | 以 email 新增行程編輯者 |
 | `claimOwnership` | HTTPS Callable | 認領行程 ownership |
+| `estimateTravel` | HTTPS Callable | 行程點到點交通時間（Google Directions API，含**真實大眾運輸**）；需 secret `GOOGLE_MAPS_API_KEY`，未設定時 throw `failed-precondition`，前端自動退回 OSRM／直線距離概估 |
 | `backupTripToNotion` | HTTPS Callable | 將行程資料備份至 Notion（**UI 限 googleEmail === 'yunaaac96@gmail.com'** 顯示按鈕） |
 
 ---
@@ -179,6 +180,7 @@ Cloud Functions secret（透過 `defineSecret`）：
 | Secret | 用途 | 取得位置 |
 |---|---|---|
 | `NOTION_API_KEY` | Notion 備份 API 金鑰 | Notion Developer → Integration token |
+| `GOOGLE_MAPS_API_KEY` | 交通時間路由（`estimateTravel`）| GCP Console → 啟用 **Directions API** + 綁定帳單 → API 金鑰；設定：`firebase functions:secrets:set GOOGLE_MAPS_API_KEY` |
 
 > `.env.local` 和 `.env.example` 均不存在；所有 `VITE_*` 值設在 Vercel Dashboard → Settings → Environment Variables。
 
@@ -204,6 +206,8 @@ Cloud Functions secret（透過 `defineSecret`）：
 - **無路由 library**：頁面切換靠 `App.tsx` 的 `activeTab` state + `BottomNav` 點擊，不用 react-router
 - **共用 style 常數集中在 App.tsx**：`C`（顏色 CSS 變數）、`FONT`、`cardStyle`、`inputStyle`、`btnPrimary` 從 App.tsx import
 - **CSS 變數 dark mode**：主題色透過 `index.css` 的 `--tm-*` 變數控制，dark mode 用 `[data-theme="dark"]` 覆寫
+- **狀態列 theme-color 必須對齊頂部條**：`index.html` 的 `theme-color`（iOS standalone 狀態列底色）必須等於 App 最上方專案標題列顏色（`var(--tm-cream)`：light `#F7F4EB` / dark `#242118`），否則狀態列會浮出一條較淡色帶（「霧化」）。改 `--tm-cream` 時務必同步改 `index.html`
+- **點到點交通估算（Schedule `calcTravelTime`）**：三層 fallback — ① Cloud Function `estimateTravel`（Google Directions，真實大眾運輸）② 免費 OSRM demo（`router.project-osrm.org`，transit 以開車 ×1.35 近似）③ 直線距離概估（Haversine×道路係數÷各模式均速，顯示「（概估）」）；地理編碼走 Nominatim / Open-Meteo / Photon 多重 fallback
 - **Inline style 優先**：大部分元件使用 React inline style；Tailwind 僅用於少數 utility class
 - **FontAwesome 替代 emoji icon**：所有 icon 用 `@fortawesome/free-solid-svg-icons`，不用 emoji
 - **Firestore 直接在元件內 subscribe**：所有 onSnapshot 在 `App.tsx` 的 useEffect，data 透過 props 傳遞
@@ -228,6 +232,7 @@ Cloud Functions secret（透過 `defineSecret`）：
 | 退款記錄 | `linkedExpenseId`：已結清費用點「↩ 建立退款」→ 預填收入表單；原費用顯示「已有退款記錄」 |
 | 結清這筆 button | `settlements.length === 0 && confirmedAmountsMap.size > 0` 時不顯示（整趟已結清）；`myShare <= 0` 時不顯示 |
 | 隱藏收還款記錄 | `hideSettled` toggle 開啟 → 隱藏 `category=settlement` 的記錄，不影響一般費用 |
+| 現金／刷卡篩選 | `payMethodFilter: 'all' \| 'cash' \| 'card'`；頂部金額卡顯示 `methodTotals.cash/card`（排除收入與結清、用 `effectiveTWD`），點擊即切換 list 篩選；結清記錄不受此篩選影響 |
 
 ### Help / FAQ（ProjectHub）
 
@@ -239,40 +244,40 @@ Cloud Functions secret（透過 `defineSecret`）：
 
 ## 目前進度
 
-- **當前分支**：`claude/clever-bhabha-767a14`
-- **工作區狀態**：有未 commit 變更
-  - `src/pages/Expense/index.tsx`（本 session 多項功能修正，尚未 commit）
+- **當前分支**：`main`
+- **工作區狀態**：有未 commit 變更（混合兩批，commit 前需釐清）
+  - **本次 session（三大優化，已 typecheck 通過）**：
+    - `functions/src/index.ts` — 新增 `estimateTravel` callable + `GOOGLE_MAPS_API_KEY` secret
+    - `src/pages/Schedule/index.tsx` — 交通時間三層 fallback（CF → OSRM → 直線概估）
+    - `src/pages/Expense/index.tsx` — 現金／刷卡篩選 + 頂部金額卡分項統計
+    - `index.html` + `src/components/layout/PageHeader.tsx` — 深色 theme-color 對齊頂部條（修霧化）+ 副標題不透明度調高
+  - **先前已存在、非本次修改的未 commit 檔**：`src/App.tsx`、`src/pages/Bookings|Journal|Members|Planning/index.tsx`、未追蹤 `scripts/settle-okinawa-expenses.mjs`（commit 前請先確認這批是否要保留）
 
-### 本 session 完成的主要修正（未 commit）
+### 本 session 完成的三大優化
 
-1. **收入費用權限**：`canEdit/Delete/DescOnly` 限 owner/editor；不顯示已結清 badge
-2. **建立退款（方案 B）**：已結清費用顯示 ↩ 退款按鈕，預填收入表單並記錄 `linkedExpenseId`；退款來源顯示
-3. **結清這筆 button**：修正整趟旅行透過最少轉帳算法結清後仍顯示的問題；`myShare <= 0` 防衛
-4. **隱藏收還款記錄 toggle**：修正邏輯反向 bug（現正確隱藏 settlement records）
-5. **補實際金額 button**：確認僅 payer 本人可操作（移除錯誤的 isOwner bypass）
-6. **代錄編輯/刪除**：`loggedByUid` 檢查已延伸至非 private 費用路徑
-7. **desc-only 編輯模式**：已結清費用可修改說明/日期/備註，金融欄鎖定
-8. **awaitCardStatement 衝突修正**：加 `&& !e.awaitCardStatement` 防衛避免錯誤鎖定
+1. **交通時間可靠度**：原本只用公開 demo OSRM（常限流/CORS 失敗就報錯）。改為 `estimateTravel` Cloud Function 走 Google Directions（真實大眾運輸）優先，失敗退 OSRM，再失敗用 Haversine 直線距離概估 → 幾乎必定給得出數字
+2. **記帳現金／刷卡**：新增 `payMethodFilter`，頂部金額卡顯示現金/刷卡各自實付台幣並可點擊切換 list 篩選
+3. **標題列霧化**：深色 `theme-color` 由 `#3A5A3A` 改為 `#242118`（對齊頂部條 `--tm-cream`），消除狀態列色帶
 
 ### 最近 5 筆 commit
 
 ```
-2c9a737 fix: 關於 TripMori mini-link opens about view, not FAQ
-417e9a1 fix: awaitCardStatement expenses must not show 已結清 or be edit-locked
-95f80f4 feat: proxy edit/delete fix, settled desc-only edit, awaitCard bypass, help banner dismiss
-0c64fcf fix: update in-app FAQ — rephrase Q1 and fix push notification Q2
-faf1407 chore: restrict Notion backup to owner email + add brand gradient cover
+f3791cb feat(offline): background pre-cache ALL trips, not just the opened one
+57931f2 feat(offline): localStorage backup of trip data — survives iOS cache eviction
+4e9feb3 fix(offline): don't let auth restore block cache-backed subscriptions
+2f57503 fix(offline): switch Schedule + Bookings on-mount reads to onSnapshot
+57add3b style(members): replace U+2194 arrow with FontAwesome in couple-pair list
 ```
 
 ---
 
 ## 下一步
 
-1. **Commit 本 session 的 Expense 修正**：`src/pages/Expense/index.tsx` 有大量未 commit 變更，應先整理成一或多個 commit
-2. **驗證結清 button 消失邏輯**：在 production 確認整趟旅行結清後「結清這筆」確實消失（含最少轉帳路由案例）
-3. **確認 Klook 退款顯示已正確**：`收入` 費用現在不顯示已結清 badge，確認解決截圖中誤顯問題
-4. **連結 .vercel/project.json**：在專案根目錄執行 `vercel link --project tripmori`（team: `yunas-projects-1e3cc29c`）產生 `.vercel/project.json`，之後 `vercel deploy` 才能正確指向正確專案
-5. **E2E 測試補全**：`e2e/` 有 8 個 spec，確認 expense 相關新功能（代錄、退款、desc-only、收入限權）有測試覆蓋
+1. **設定 `GOOGLE_MAPS_API_KEY`**：`firebase functions:secrets:set GOOGLE_MAPS_API_KEY` 並在 GCP 啟用 Directions API + 帳單，然後 `firebase deploy --only functions`。未設定前交通功能仍可用（走 OSRM／概估）
+2. **釐清並 commit 未 commit 變更**：先區分本次 session 三大優化與先前已存在的 `App.tsx`/各 page 變更，分批 commit
+3. **驗證三項優化**：交通（各模式、含海外地點）、記帳現金/刷卡金額正確、深淺色標題列在 iPhone standalone 無色帶
+4. **連結 .vercel/project.json**：`vercel link --project tripmori`（team: `yunas-projects-1e3cc29c`）
+5. **E2E 測試補全**：`e2e/` 8 個 spec，補上交通 fallback 與記帳付款方式篩選的覆蓋
 
 ---
 
@@ -283,6 +288,8 @@ faf1407 chore: restrict Notion backup to owner email + add brand gradient cover
 - `App.tsx` 過大：所有 Firestore 訂閱集中在此，未來若功能繼續增加應考慮拆分成 Context 或 custom hooks
 - `TRIP_ID = "74pfE7RXyEIusEdRV0rZ"` 仍硬編碼在 `App.tsx` 作為 fallback，待 ProjectHub 邏輯完整驗證後可移除
 - `.vercel/project.json` 不存在，CLI 部署需手動執行 `vercel link --project tripmori`（team: `yunas-projects-1e3cc29c`）
+- **交通 OSRM/地理編碼仍依賴公開 demo server**：`estimateTravel` 未設金鑰時才會落到這層；長期建議設定金鑰以取得穩定與真實大眾運輸
+- **`transit` 在無金鑰時非真實路線**：OSRM 以開車時間 ×1.35 近似，僅供參考
 
 ---
 
