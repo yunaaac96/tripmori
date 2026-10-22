@@ -26,7 +26,7 @@ export default function PageHeader({ title, subtitle, subtitleAction, emoji, col
         {emoji && <span style={{ marginRight: 8 }}>{emoji}</span>}{title}
       </h1>
       {(subtitle || subtitleAction) && (
-        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.8)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+        <p style={{ fontSize: 12, color: 'rgba(255,255,255,0.92)', margin: '4px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
           {subtitle}{subtitleAction}
         </p>
       )}
