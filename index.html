@@ -8,11 +8,10 @@
     <meta name="application-name" content="TripMori" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <!-- black-translucent: content extends under the status bar so the app can
-         paint a solid colour behind it (see the safe-area underlay in App.tsx).
-         Fixes the frosted/translucent status bar that iOS shows in standalone
-         regardless of theme-color. -->
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- default: status bar is an opaque bar above the webview, tinted by
+         theme-color per colour-scheme (see below). Keeps the OS adaptive text
+         colour and avoids content showing through the status bar. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="TripMori" />
 
     <!-- Open Graph (分享縮圖) -->

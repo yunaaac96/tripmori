@@ -1345,20 +1345,11 @@ function App() {
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--tm-page-bg)', display: 'flex', justifyContent: 'center', fontFamily: FONT }}>
-      <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', backgroundAttachment: 'local', minHeight: '100vh', position: 'relative', paddingTop: 'env(safe-area-inset-top)', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
-
-        {/* ── iOS standalone status-bar underlay ──
-            With black-translucent the webview fills the whole screen, so the
-            status bar floats over page content and iOS gives it a frosted
-            look. This fixed, opaque bar sits behind the status bar at all
-            times (it matches the project strip colour = var(--tm-cream), so
-            the top reads as one solid band). Height collapses to 0 on devices
-            without a safe-area inset (desktop), so it is invisible there. */}
-        <div aria-hidden style={{ position: 'fixed', top: 0, left: 0, right: 0, height: 'env(safe-area-inset-top)', background: 'var(--tm-cream)', zIndex: 3000, pointerEvents: 'none' }} />
+      <div style={{ width: '100%', maxWidth: 430, background: 'var(--tm-page-bg)', backgroundImage: 'radial-gradient(circle, var(--tm-dot-color) 1px, transparent 1px)', backgroundSize: '18px 18px', backgroundAttachment: 'local', minHeight: '100vh', position: 'relative', paddingBottom: 'calc(80px + env(safe-area-inset-bottom))' }}>
 
         {/* ── Offline banner ── */}
         {!isOnline && (
-          <div style={{ position: 'sticky', top: 'env(safe-area-inset-top)', zIndex: 1000, background: '#3A3A3A', color: 'white', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 1000, background: '#3A3A3A', color: 'white', padding: '8px 16px', display: 'flex', alignItems: 'center', gap: 8, fontSize: 12, fontWeight: 600, fontFamily: FONT }}>
             <span style={{ fontSize: 14 }}>📡</span>
             <span style={{ flex: 1, lineHeight: 1.4 }}>離線模式・資料來自本機快取・編輯將於恢復連線後自動同步</span>
           </div>
@@ -1484,7 +1475,7 @@ function App() {
           // Sticky pinned to viewport top so user always knows admin mode is on,
           // even after scrolling deep into a long expense list. Shadow + high
           // z-index keep it visually above page content.
-          <div style={{ position: 'sticky', top: 'env(safe-area-inset-top)', zIndex: 200, background: '#E87A30', color: 'white', padding: '7px 16px 8px', fontFamily: FONT, fontSize: 12, fontWeight: 700, boxShadow: '0 2px 8px rgba(232,122,48,0.25)' }}>
+          <div style={{ position: 'sticky', top: 0, zIndex: 200, background: '#E87A30', color: 'white', padding: '7px 16px 8px', fontFamily: FONT, fontSize: 12, fontWeight: 700, boxShadow: '0 2px 8px rgba(232,122,48,0.25)' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
               <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                 <FontAwesomeIcon icon={faGear} style={{ fontSize: 11 }} />
