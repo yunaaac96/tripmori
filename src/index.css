@@ -400,7 +400,7 @@
  * fill → strip read as one uniform band (page-bg would be a 3rd, visible tone). */
 body {
   margin: 0;
-  background: var(--tm-cream);
+  background: var(--tm-page-bg);
   padding-top: env(safe-area-inset-top, 0px);
 }
 

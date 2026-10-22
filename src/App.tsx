@@ -1411,7 +1411,7 @@ function App() {
 
         {/* ── Project header strip (non-visitor) ── */}
         {!isReadOnly && (
-          <div style={{ background: C.cream, padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottom: `1px solid ${C.creamDark}` }}>
+          <div style={{ background: 'var(--tm-page-bg)', padding: '8px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, borderBottom: `1px solid ${C.creamDark}` }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
               <span style={{ fontSize: 16, flexShrink: 0 }}>{activeProject.emoji}</span>
               <span style={{ fontSize: 12, fontWeight: 700, color: C.bark, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', minWidth: 0 }}>{activeProject.title}</span>

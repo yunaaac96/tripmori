@@ -28,13 +28,13 @@
     <meta name="twitter:image"       content="https://tripmori.vercel.app/icons/icon-512.png" />
 
     <!-- theme-color: light / dark auto-switch.
-         IMPORTANT: these MUST equal --tm-cream — the colour of both the top
-         safe-area fill (the `body` rule in src/index.css) and the project-header
-         strip below it — so the iOS standalone status bar, the inset fill and the
-         strip are one uniform band with no frosted/mismatched seam.
-         Light #F7F4EB and dark #242118 are the exact --tm-cream values. -->
+         IMPORTANT: these MUST equal --tm-page-bg — the single colour the whole
+         top now uses (body safe-area fill + project-header strip + page). Keeping
+         the entire top one flat dark colour is what stops the iOS standalone
+         status-bar material from frosting it into a lighter band (mirrors a
+         known-clean reference PWA). Light #F7F4EB and dark #1C1A17 = --tm-page-bg. -->
     <meta name="theme-color" content="#F7F4EB" media="(prefers-color-scheme: light)" />
-    <meta name="theme-color" content="#242118" media="(prefers-color-scheme: dark)" />
+    <meta name="theme-color" content="#1C1A17" media="(prefers-color-scheme: dark)" />
 
     <!-- Website favicon (瀏覽器分頁圖示) -->
     <link rel="icon" type="image/png" href="/favicon.png" />
