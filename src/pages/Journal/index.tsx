@@ -22,13 +22,11 @@ function MemberAvatar({ name, members, size = 32, fontSize = 14 }: { name: strin
   const b = parseInt(hex.slice(4, 6), 16) || 0;
   const luma = 0.299 * r + 0.587 * g + 0.114 * b;
   const textColor = luma > 160 ? C.bark : 'white';
-  const base: React.CSSProperties = { width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden' };
-  if (member?.avatarUrl) {
-    return <div style={base}><img src={member.avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /></div>;
-  }
+  const base: React.CSSProperties = { width: size, height: size, borderRadius: '50%', flexShrink: 0, overflow: 'hidden', position: 'relative', background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize, color: textColor };
   return (
-    <div style={{ ...base, background: bg, display: 'flex', alignItems: 'center', justifyContent: 'center', fontWeight: 700, fontSize, color: textColor }}>
+    <div style={base}>
       {name?.[0]?.toUpperCase()}
+      {member?.avatarUrl && <img src={member.avatarUrl} alt={name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
     </div>
   );
 }
@@ -374,7 +372,8 @@ export default function JournalPage({ journals, members, journalComments, firest
                     {form.photos.map((url, idx) => (
                       <div key={idx} style={{ position: 'relative', flexShrink: 0 }}>
                         <img src={url} alt="" onClick={() => setLightbox({ photos: form.photos, idx })}
-                          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, display: 'block', cursor: 'pointer' }} />
+                          style={{ width: 80, height: 80, objectFit: 'cover', borderRadius: 10, display: 'block', cursor: 'pointer' }}
+                          onError={e => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }} />
                         <button onClick={() => removePhoto(idx)}
                           style={{ position: 'absolute', top: -6, right: -6, width: 22, height: 22, borderRadius: '50%', background: '#FAE0E0', border: 'none', color: '#9A3A3A', fontSize: 10, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}><FontAwesomeIcon icon={faXmark} /></button>
                       </div>
@@ -572,10 +571,11 @@ export default function JournalPage({ journals, members, journalComments, firest
                         {j.photos.map((url: string, i: number) => (
                           isGuestBlur
                             ? <div key={i} style={{ width: 110, height: 110, borderRadius: 12, flexShrink: 0, overflow: 'hidden', filter: 'blur(6px)', pointerEvents: 'none' }}>
-                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                                <img src={url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }} />
                               </div>
                             : <img key={i} src={url} alt="" onClick={() => setLightbox({ photos: j.photos, idx: i })}
-                                style={{ width: 110, height: 110, objectFit: 'cover', borderRadius: 12, flexShrink: 0, cursor: 'pointer' }} />
+                                style={{ width: 110, height: 110, objectFit: 'cover', borderRadius: 12, flexShrink: 0, cursor: 'pointer' }}
+                                onError={e => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }} />
                         ))}
                       </div>
                     )}
@@ -736,7 +736,8 @@ export default function JournalPage({ journals, members, journalComments, firest
           style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.92)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: 16 }}>
           <img src={lightbox.photos[lightbox.idx]} alt=""
             onClick={e => e.stopPropagation()}
-            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, display: 'block' }} />
+            style={{ maxWidth: '100%', maxHeight: '100%', objectFit: 'contain', borderRadius: 8, display: 'block' }}
+            onError={e => { (e.currentTarget as HTMLImageElement).style.visibility = 'hidden'; }} />
           <button onClick={e => { e.stopPropagation(); setLightbox(null); }}
             aria-label="關閉"
             style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 16px)', right: 16, width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,0.18)', color: 'white', fontSize: 18, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

@@ -621,11 +621,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
             else setPackingTab(id);
           };
 
-          const Av = ({ m }: { m: any }) => m.avatarUrl
-            ? <img src={m.avatarUrl} alt={m.name} style={{ width: 20, height: 20, borderRadius: '50%', objectFit: 'cover', flexShrink: 0 }} />
-            : <div style={{ width: 20, height: 20, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                <span style={{ fontSize: 9, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
-              </div>;
+          const Av = ({ m }: { m: any }) => (
+            <div style={{ width: 20, height: 20, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+              <span style={{ fontSize: 9, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
+              {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
+            </div>
+          );
 
           return (
             <div style={{ display: 'flex', alignItems: 'center', gap: 4, marginBottom: 12 }}>
@@ -717,11 +718,12 @@ export default function PlanningPage({ lists, members, firestore, project }: any
                 const MemberAvatar = ({ uid }: { uid?: string }) => {
                   const m = uid ? members.find((mm: any) => mm.googleUid === uid) : null;
                   if (!m) return null;
-                  return m.avatarUrl
-                    ? <img src={m.avatarUrl} alt={m.name} style={{ width: 16, height: 16, borderRadius: '50%', objectFit: 'cover' }} />
-                    : <div style={{ width: 16, height: 16, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
-                        <span style={{ fontSize: 8, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
-                      </div>;
+                  return (
+                    <div style={{ width: 16, height: 16, borderRadius: '50%', background: m.color || C.sage, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, position: 'relative', overflow: 'hidden' }}>
+                      <span style={{ fontSize: 8, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
+                      {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
+                    </div>
+                  );
                 };
 
                 const renderPackingItem = (item: any, sectionType: 'global' | 'personal' | 'assigned') => {

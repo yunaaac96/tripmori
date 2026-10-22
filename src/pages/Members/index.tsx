@@ -1145,11 +1145,9 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                         : null;
                     return (
                       <div key={m.id} className={rowClass} style={{ display: 'flex', alignItems: 'center', gap: 8, borderRadius: 10, padding: '6px 10px' }}>
-                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: avatarTextColor(m.color), flexShrink: 0, overflow: 'hidden' }}>
-                          {m.avatarUrl
-                            ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                            : m.name?.[0]?.toUpperCase()
-                          }
+                        <div style={{ width: 26, height: 26, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 11, fontWeight: 700, color: avatarTextColor(m.color), flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+                          {m.name?.[0]?.toUpperCase()}
+                          {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                         </div>
                         <span style={{ fontSize: 13, fontWeight: 700, color: C.bark, minWidth: 50, flexShrink: 0 }}>{m.name}</span>
                         {badge}
@@ -1276,11 +1274,9 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                   </div>
                 )}
                 <div style={{ position: 'relative', flexShrink: 0 }}>
-                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: avatarTextColor(m.color), border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden' }}>
-                    {m.avatarUrl
-                      ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : m.name?.[0]?.toUpperCase()
-                    }
+                  <div style={{ width: 56, height: 56, borderRadius: '50%', background: m.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 22, fontWeight: 800, color: avatarTextColor(m.color), border: '3px solid white', boxShadow: '0 2px 8px rgba(107,92,78,0.15)', overflow: 'hidden', position: 'relative' }}>
+                    {m.name?.[0]?.toUpperCase()}
+                    {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                   </div>
                   {canEdit && (
                   <div onClick={() => { existingMemberId.current = m.id; fileExistingRef.current?.click(); }}
@@ -1374,10 +1370,9 @@ export default function MembersPage({ members, memberNotes, proxyGrants = [], pr
                           const isGranted = myProxyUids.includes(tm.googleUid);
                           return (
                             <div key={tm.id} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: tm.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0 }}>
-                                {tm.avatarUrl
-                                  ? <img src={tm.avatarUrl} alt={tm.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                                  : tm.name?.[0]?.toUpperCase()}
+                              <div style={{ width: 24, height: 24, borderRadius: '50%', background: tm.color || C.sageLight, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 10, fontWeight: 700, color: C.bark, overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
+                                {tm.name?.[0]?.toUpperCase()}
+                                {tm.avatarUrl && <img src={tm.avatarUrl} alt={tm.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                               </div>
                               <span style={{ flex: 1, fontSize: 12, fontWeight: 700, color: '#3D2A60' }}>{tm.name}</span>
                               <button

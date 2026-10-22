@@ -1572,8 +1572,9 @@ function App() {
                       .map((m: any) => (
                       <button key={m.id} onClick={() => handleBindMemberCard(m.id)} disabled={bindingMember}
                         style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '12px 14px', borderRadius: 14, border: `1.5px solid ${C.creamDark}`, background: 'var(--tm-card-bg)', cursor: 'pointer', fontFamily: FONT, textAlign: 'left', width: '100%', opacity: bindingMember ? 0.6 : 1 }}>
-                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: m.color || '#E0D9C8', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>
-                          {m.avatarUrl ? <img src={m.avatarUrl} style={{ width: 36, height: 36, borderRadius: '50%', objectFit: 'cover' }} alt="" /> : m.name?.[0] || '?'}
+                        <div style={{ width: 36, height: 36, borderRadius: '50%', background: m.color || '#E0D9C8', flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color), position: 'relative', overflow: 'hidden' }}>
+                          {m.name?.[0] || '?'}
+                          {m.avatarUrl && <img src={m.avatarUrl} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', borderRadius: '50%', objectFit: 'cover' }} alt="" onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                         </div>
                         <div>
                           <p style={{ fontSize: 14, fontWeight: 700, color: C.bark, margin: 0 }}>{m.name}</p>

@@ -514,9 +514,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
       <div style={{ position: 'relative', display: 'inline-flex', marginTop: 8, cursor: 'pointer' }}
         onClick={e => { e.stopPropagation(); setParticipantPopover(participantPopover ? null : names); }}>
         {ptc.map((m: any, i: number) => (
-          <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm }}>
-            {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-              : <span style={{ fontSize: 10, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+          <div key={m.id} title={m.name} style={{ width: 24, height: 24, borderRadius: '50%', overflow: 'hidden', border: '2px solid var(--tm-card-bg)', background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0, marginLeft: i === 0 ? 0 : -6, boxShadow: C.shadowSm, position: 'relative' }}>
+            <span style={{ fontSize: 10, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
+            {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
           </div>
         ))}
       </div>
@@ -570,9 +570,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                 // mobile screens — users tapped but didn't perceive any change.
                 style={{ position: 'relative' as const, display: 'flex', flexDirection: 'column' as const, alignItems: 'center', gap: 4, background: 'none', border: 'none', cursor: canToggle ? 'pointer' : 'default', padding: 0, opacity: sel ? 1 : canToggle ? 0.45 : 0.2, touchAction: 'manipulation' as const, WebkitTapHighlightColor: 'transparent' }}>
                 <div style={{ position: 'relative' as const, width: 44, height: 44, borderRadius: '50%', overflow: 'visible' as const, flexShrink: 0, pointerEvents: 'none' as const }}>
-                  <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden' as const, border: `3px solid ${sel ? C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: sel ? 'none' : 'grayscale(70%)' }}>
-                    {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                      : <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+                  <div style={{ width: 44, height: 44, borderRadius: '50%', overflow: 'hidden' as const, border: `3px solid ${sel ? C.sage : 'transparent'}`, boxSizing: 'border-box' as const, background: m.color || C.cream, display: 'flex', alignItems: 'center', justifyContent: 'center', filter: sel ? 'none' : 'grayscale(70%)', position: 'relative' as const }}>
+                    <span style={{ fontSize: 16, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
+                    {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                   </div>
                   {sel && (
                     <div style={{ position: 'absolute' as const, top: -2, right: -2, width: 16, height: 16, borderRadius: '50%', background: C.sageDark, color: 'white', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, fontWeight: 900, boxShadow: '0 0 0 2px var(--tm-sheet-bg)' }}>✓</div>
@@ -722,9 +722,9 @@ export default function BookingsPage({ bookings, members = [], firestore, projec
                   <div style={{ display: 'flex', alignItems: 'center', marginTop: 12, paddingTop: 10, borderTop: '1px solid rgba(255,255,255,0.2)', cursor: 'pointer' }}
                     onClick={e => { e.stopPropagation(); setParticipantPopover(participantPopover ? null : ptc.map((m: any) => m.name)); }}>
                     {ptc.map((m: any, i: number) => (
-                      <div key={m.id} title={m.name} style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: '2.5px solid white', background: m.color || 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: i === 0 ? 0 : -8, flexShrink: 0 }}>
-                        {m.avatarUrl ? <img src={m.avatarUrl} alt={m.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                          : <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>}
+                      <div key={m.id} title={m.name} style={{ width: 28, height: 28, borderRadius: '50%', overflow: 'hidden', border: '2.5px solid white', background: m.color || 'rgba(255,255,255,0.3)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginLeft: i === 0 ? 0 : -8, flexShrink: 0, position: 'relative' }}>
+                        <span style={{ fontSize: 11, fontWeight: 700, color: avatarTextColor(m.color) }}>{(m.name || '?')[0]}</span>
+                        {m.avatarUrl && <img src={m.avatarUrl} alt={m.name} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} onError={e => { (e.currentTarget as HTMLImageElement).style.display = 'none'; }} />}
                       </div>
                     ))}
                   </div>
