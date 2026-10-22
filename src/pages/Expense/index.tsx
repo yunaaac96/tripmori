@@ -1222,15 +1222,22 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
 
   const nonSettlementExpenses = baseExpenses.filter((e: any) => e.category !== 'settlement');
 
-  // 現金／刷卡 實付金額（換算台幣）— 排除收入與結清記錄，用 effectiveTWD（刷卡外幣
-  // 有補卡單金額就採實際金額）。反映目前檢視範圍（含「與我有關」）的實際花費。
+  // 現金／刷卡「我本人實付」金額（換算台幣）。只算 payer === 自己的支出（= 我實際
+  // 掏出去的錢），排除收入與結清；用 effectiveTWD（刷卡外幣有補卡單金額就採實際）。
+  //   paid     = 我這筆付出去的全額
+  //   advanced = 其中「代墊他人」的部分（全額 − 我自己該分攤的份額；私人帳全額算自己）
+  // 他人代付、我只是分攤的費用不列入（那不是我掏的現金/卡）。
   const payMethodHelper = (e: any): 'cash' | 'card' => (e.paymentMethod === 'card' ? 'card' : 'cash');
-  const methodTotals = nonSettlementExpenses
-    .filter((e: any) => !e.isIncome)
-    .reduce((acc: { cash: number; card: number }, e: any) => {
-      acc[payMethodHelper(e)] += effectiveTWD(e);
+  const methodTotals = (currentUserName ? visibleExpenses : [])
+    .filter((e: any) => !e.isIncome && e.category !== 'settlement' && e.payer === currentUserName)
+    .reduce((acc: { cash: { paid: number; advanced: number }; card: { paid: number; advanced: number } }, e: any) => {
+      const m = payMethodHelper(e);
+      const full = effectiveTWD(e);
+      const mine = e.isPrivate ? full : getPersonalShare(e, currentUserName, memberNames);
+      acc[m].paid     += full;
+      acc[m].advanced += Math.max(0, full - mine);
       return acc;
-    }, { cash: 0, card: 0 });
+    }, { cash: { paid: 0, advanced: 0 }, card: { paid: 0, advanced: 0 } });
 
   // 團隊總支出: non-private, non-settlement, excluding anything still awaiting
   // a card statement (real TWD unknown). Income entries subtract from the total.
@@ -3091,34 +3098,42 @@ export default function ExpensePage({ expenses, members, proxyGrants = [], fires
                 ? `含個人分攤＋私人消費 · 團隊共 NT$ ${teamTotalTWD.toLocaleString()}`
                 : '僅計入分帳費用，私人帳不含在內'}
             </p>
-            {/* 現金／刷卡 實付拆分 — 讓使用者快速看出該趟各付款方式的實際花費 */}
-            {(methodTotals.cash > 0 || methodTotals.card > 0) && (
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                {([
-                  { key: 'cash', label: '現金', icon: faMoneyBill1, val: methodTotals.cash },
-                  { key: 'card', label: '刷卡', icon: faCreditCard, val: methodTotals.card },
-                ] as const).map(m => {
-                  const active = payMethodFilter === m.key;
-                  return (
-                    <button
-                      key={m.key}
-                      onClick={() => setPayMethodFilter(active ? 'all' : m.key)}
-                      style={{
-                        flex: 1, textAlign: 'left', cursor: 'pointer', fontFamily: FONT,
-                        background: active ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.12)',
-                        border: `1.5px solid ${active ? 'rgba(255,255,255,0.7)' : 'transparent'}`,
-                        borderRadius: 12, padding: '8px 10px',
-                      }}>
-                      <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: 5 }}>
-                        <FontAwesomeIcon icon={m.icon} style={{ fontSize: 10 }} />{m.label}
-                      </span>
-                      <span style={{ fontSize: 16, fontWeight: 800, color: 'white', display: 'block', marginTop: 2 }}>
-                        NT$ {Math.round(m.val).toLocaleString()}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+            {/* 我本人實付拆分（現金／刷卡）＋代墊他人標示。只在已綁定成員時顯示。 */}
+            {currentUserName && (methodTotals.cash.paid > 0 || methodTotals.card.paid > 0) && (
+              <>
+                <p style={{ fontSize: 10, color: 'rgba(255,255,255,0.7)', margin: '12px 0 4px' }}>我本人實付（點擊可篩選清單）</p>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  {([
+                    { key: 'cash', label: '現金', icon: faMoneyBill1, val: methodTotals.cash },
+                    { key: 'card', label: '刷卡', icon: faCreditCard, val: methodTotals.card },
+                  ] as const).map(m => {
+                    const active = payMethodFilter === m.key;
+                    return (
+                      <button
+                        key={m.key}
+                        onClick={() => setPayMethodFilter(active ? 'all' : m.key)}
+                        style={{
+                          flex: 1, textAlign: 'left', cursor: 'pointer', fontFamily: FONT,
+                          background: active ? 'rgba(255,255,255,0.32)' : 'rgba(255,255,255,0.12)',
+                          border: `1.5px solid ${active ? 'rgba(255,255,255,0.7)' : 'transparent'}`,
+                          borderRadius: 12, padding: '8px 10px',
+                        }}>
+                        <span style={{ fontSize: 10, color: 'rgba(255,255,255,0.8)', display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <FontAwesomeIcon icon={m.icon} style={{ fontSize: 10 }} />{m.label}
+                        </span>
+                        <span style={{ fontSize: 16, fontWeight: 800, color: 'white', display: 'block', marginTop: 2 }}>
+                          NT$ {Math.round(m.val.paid).toLocaleString()}
+                        </span>
+                        {m.val.advanced > 0 && (
+                          <span style={{ fontSize: 9.5, color: 'rgba(255,255,255,0.72)', display: 'block', marginTop: 2 }}>
+                            含代墊他人 NT$ {Math.round(m.val.advanced).toLocaleString()}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              </>
             )}
           </div>
         )}
