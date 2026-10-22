@@ -392,14 +392,15 @@
   .tm-member-avatar-dynamic { box-shadow: inset 0 0 0 1000px rgba(0,0,0,0.48) !important; }
 }
 
-/* Fill the top safe-area (notch / status bar) with the page background and
- * push content below it. iOS standalone otherwise lays content under a
- * translucent status bar, which frosts it into a lighter "misty" band. With
- * this + a theme-color that equals --tm-page-bg, the status-bar area is one
- * flat colour and the frost is invisible (matches a known-clean reference PWA). */
+/* Fill the top safe-area (notch / status bar) with the SAME colour as the
+ * first element below it — the project-header strip, var(--tm-cream) — and push
+ * content below the inset. iOS standalone otherwise lays content under a
+ * translucent status bar, frosting it into a "misty" band. The fill colour must
+ * match both the status bar (theme-color) and the strip, so status bar → inset
+ * fill → strip read as one uniform band (page-bg would be a 3rd, visible tone). */
 body {
   margin: 0;
-  background: var(--tm-page-bg);
+  background: var(--tm-cream);
   padding-top: env(safe-area-inset-top, 0px);
 }
 
