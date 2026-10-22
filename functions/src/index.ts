@@ -659,8 +659,9 @@ export const estimateTravel = onCall(
   async (request) => {
     if (!request.auth) throw new HttpsError('unauthenticated', 'Must be signed in');
 
-    const { origin, destination, mode } = request.data as {
+    const { origin, destination, mode, originMapUrl, destMapUrl } = request.data as {
       origin: string; destination: string; mode?: 'car' | 'transit' | 'walk';
+      originMapUrl?: string; destMapUrl?: string;
     };
     if (!origin || !destination) {
       throw new HttpsError('invalid-argument', 'origin and destination required');
@@ -668,6 +669,32 @@ export const estimateTravel = onCall(
 
     const key = GOOGLE_MAPS_API_KEY.value();
     if (!key) throw new HttpsError('failed-precondition', 'no-key');
+
+    // Pull "lat,lon" straight out of a Google Maps URL (most precise). Runs
+    // server-side so Google short links (maps.app.goo.gl) can be followed —
+    // the client can't, because the redirect is blocked by CORS.
+    const coordFromUrl = (url?: string): string | null => {
+      if (!url) return null;
+      const at = url.match(/@(-?\d+\.\d+),(-?\d+\.\d+)/);       // @lat,lon
+      if (at) return `${at[1]},${at[2]}`;
+      const q  = url.match(/[?&]q=(-?\d+\.\d+),(-?\d+\.\d+)/);  // ?q=lat,lon
+      if (q)  return `${q[1]},${q[2]}`;
+      const ll = url.match(/[?&]ll=(-?\d+\.\d+),(-?\d+\.\d+)/); // ?ll=lat,lon
+      if (ll) return `${ll[1]},${ll[2]}`;
+      return null;
+    };
+    const resolveShort = async (url?: string): Promise<string | undefined> => {
+      if (!url) return undefined;
+      if (!/maps\.app\.goo\.gl|goo\.gl\/maps/i.test(url)) return url;
+      try { return (await fetch(url, { redirect: 'follow' })).url || url; }
+      catch { return url; }
+    };
+
+    // Prefer precise coords from the user's map link; fall back to the place name.
+    const oCoord = coordFromUrl(await resolveShort(originMapUrl));
+    const dCoord = coordFromUrl(await resolveShort(destMapUrl));
+    const originArg = oCoord || origin;
+    const destArg   = dCoord || destination;
 
     // "lat,lon" → a precise waypoint; anything else → a free-text address.
     const waypoint = (s: string) => {
@@ -679,8 +706,8 @@ export const estimateTravel = onCall(
 
     const travelMode = mode === 'walk' ? 'WALK' : mode === 'transit' ? 'TRANSIT' : 'DRIVE';
     const body: any = {
-      origin:       waypoint(origin),
-      destination:  waypoint(destination),
+      origin:       waypoint(originArg),
+      destination:  waypoint(destArg),
       travelMode,
       languageCode: 'zh-TW',
       units:        'METRIC',

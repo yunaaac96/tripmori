@@ -960,6 +960,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
     setTravelCalcStatus('loading'); setTravelCalcMsg('');
 
     const icon = travelMode === 'car' ? '🚗' : travelMode === 'transit' ? '🚌' : '🚶';
+    let cfErrorMsg = '';   // real Routes-API error, surfaced only if all fallbacks fail
 
     // Resolve short URLs (maps.app.goo.gl → full URL with @lat,lon if CORS allows)
     const fromMapUrl = await resolveShortMapUrl(form.mapUrl);
@@ -979,7 +980,13 @@ export default function SchedulePage({ events, members = [], project, firestore,
       const dest   = toC   ? latLonStr(toC)   : (to   || nextTitle || '');
       if (origin && dest) {
         const fn = httpsCallable(getFunctions(undefined, 'us-central1'), 'estimateTravel');
-        const resp: any = await fn({ origin, destination: dest, mode: travelMode });
+        // Pass the raw map URLs too — the Cloud Function resolves Google short
+        // links server-side (CORS blocks that in the browser) and pulls precise
+        // coords, so a pasted map link locates the place even when the name can't.
+        const resp: any = await fn({
+          origin, destination: dest, mode: travelMode,
+          originMapUrl: form.mapUrl || '', destMapUrl: nextMapUrl || '',
+        });
         const secs = resp?.data?.seconds;
         if (typeof secs === 'number' && secs > 0) {
           set('travelTime', `${icon} ${fmtDuration(secs)}`);
@@ -987,7 +994,11 @@ export default function SchedulePage({ events, members = [], project, firestore,
           return;
         }
       }
-    } catch { /* fall through to OSRM / straight-line */ }
+    } catch (e: any) {
+      // Remember a meaningful routing error (e.g. Routes API not enabled) so we
+      // can show it if every fallback also fails, instead of a generic message.
+      cfErrorMsg = e?.message && !/no-key/.test(e.message) ? String(e.message) : '';
+    }
 
     // Step 1: origin coords
     if (!fromC) fromC = await geocodePlace(from);
@@ -997,7 +1008,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
       if (nameFromUrl && nameFromUrl !== from) fromC = await geocodePlace(nameFromUrl);
     }
     if (!fromC && form.title.trim() && from) fromC = await geocodePlace(`${form.title.trim()} ${from}`);
-    if (!fromC) return err(`無法定位起點「${from.slice(0, 20)}」，請確認地點名稱是否正確`);
+    if (!fromC) return err(`無法定位起點「${from.slice(0, 20)}」，請確認地點名稱或貼上地圖連結${cfErrorMsg ? `（路線服務：${cfErrorMsg.slice(0, 60)}）` : ''}`);
 
     // Step 2: destination coords
     if (!toC) toC = await geocodePlace(to, fromC);
@@ -1007,7 +1018,7 @@ export default function SchedulePage({ events, members = [], project, firestore,
       if (nameFromUrl && nameFromUrl !== to) toC = await geocodePlace(nameFromUrl, fromC);
     }
     if (!toC && nextTitle && to) toC = await geocodePlace(`${nextTitle} ${to}`, fromC);
-    if (!toC) return err(`無法定位終點「${to.slice(0, 15)}…」，請確認地點名稱是否正確`);
+    if (!toC) return err(`無法定位終點「${to.slice(0, 15)}…」，請確認地點名稱或貼上地圖連結${cfErrorMsg ? `（路線服務：${cfErrorMsg.slice(0, 60)}）` : ''}`);
     // Step 3: distance sanity check
     const distKm = haversineKm(fromC[0], fromC[1], toC[0], toC[1]);
     if (distKm > 500) return err(`定位距離異常（${Math.round(distKm)}km），請確認兩站地點是否正確`);
