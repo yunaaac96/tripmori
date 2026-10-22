@@ -642,10 +642,14 @@ export const claimOwnership = onCall(async (request) => {
   return { fixed };
 });
 
-// ── 7b. estimateTravel: point-to-point travel time via Google Directions ──────
+// ── 7b. estimateTravel: point-to-point travel time via Google Routes API ──────
 // Called from the Schedule page. Accepts free-text places or "lat,lon" strings
 // so it works even when client-side geocoding fails. Returns duration in
 // seconds for the requested mode, including REAL public-transit routing.
+//
+// NOTE: uses the modern Routes API (routes.googleapis.com) — the legacy
+// Directions API is not offered to new GCP projects. Prerequisite: enable
+// "Routes API" + billing, then `firebase functions:secrets:set GOOGLE_MAPS_API_KEY`.
 //
 // Client call example:
 //   const fn = httpsCallable(getFunctions(undefined, 'us-central1'), 'estimateTravel');
@@ -665,32 +669,54 @@ export const estimateTravel = onCall(
     const key = GOOGLE_MAPS_API_KEY.value();
     if (!key) throw new HttpsError('failed-precondition', 'no-key');
 
-    const gMode = mode === 'walk' ? 'walking' : mode === 'transit' ? 'transit' : 'driving';
-    const url =
-      'https://maps.googleapis.com/maps/api/directions/json' +
-      `?origin=${encodeURIComponent(origin)}` +
-      `&destination=${encodeURIComponent(destination)}` +
-      `&mode=${gMode}&language=zh-TW&key=${key}`;
+    // "lat,lon" → a precise waypoint; anything else → a free-text address.
+    const waypoint = (s: string) => {
+      const m = s.trim().match(/^(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)$/);
+      return m
+        ? { location: { latLng: { latitude: Number(m[1]), longitude: Number(m[2]) } } }
+        : { address: s };
+    };
+
+    const travelMode = mode === 'walk' ? 'WALK' : mode === 'transit' ? 'TRANSIT' : 'DRIVE';
+    const body: any = {
+      origin:       waypoint(origin),
+      destination:  waypoint(destination),
+      travelMode,
+      languageCode: 'zh-TW',
+      units:        'METRIC',
+    };
+    // Live-traffic ETA is only valid for DRIVE.
+    if (travelMode === 'DRIVE') body.routingPreference = 'TRAFFIC_AWARE';
 
     let data: any;
     try {
-      const res = await fetch(url);
+      const res = await fetch('https://routes.googleapis.com/directions/v2:computeRoutes', {
+        method: 'POST',
+        headers: {
+          'Content-Type':    'application/json',
+          'X-Goog-Api-Key':  key,
+          'X-Goog-FieldMask': 'routes.duration',
+        },
+        body: JSON.stringify(body),
+      });
       data = await res.json();
+      if (!res.ok) {
+        throw new HttpsError('failed-precondition', data?.error?.message || `HTTP ${res.status}`);
+      }
     } catch (e) {
-      throw new HttpsError('unavailable', `directions fetch failed: ${String(e).slice(0, 60)}`);
+      if (e instanceof HttpsError) throw e;
+      throw new HttpsError('unavailable', `routes fetch failed: ${String(e).slice(0, 60)}`);
     }
 
-    const leg = data?.routes?.[0]?.legs?.[0];
-    if (data?.status !== 'OK' || !leg?.duration) {
-      // ZERO_RESULTS (e.g. no transit available), NOT_FOUND, etc.
-      throw new HttpsError('not-found', data?.status || 'no-route');
+    // Routes API returns duration as a protobuf-style string, e.g. "1234s".
+    const dur: string | undefined = data?.routes?.[0]?.duration;
+    const secs = dur ? parseInt(dur, 10) : NaN;
+    if (!secs || isNaN(secs)) {
+      // No route (e.g. no public transit available between the two points).
+      throw new HttpsError('not-found', 'no-route');
     }
 
-    return {
-      seconds: leg.duration.value as number,
-      text:    leg.duration.text as string,
-      source:  'google',
-    };
+    return { seconds: secs, source: 'google-routes' };
   }
 );
 

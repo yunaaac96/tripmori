@@ -139,7 +139,7 @@ TripMori 是一個行動優先的 PWA 旅遊手帳，給多人結伴旅行的小
 | `todoDueDateReminder` | Scheduled | Todo 到期前推播提醒 |
 | `addEditor` | HTTPS Callable | 以 email 新增行程編輯者 |
 | `claimOwnership` | HTTPS Callable | 認領行程 ownership |
-| `estimateTravel` | HTTPS Callable | 行程點到點交通時間（Google Directions API，含**真實大眾運輸**）；需 secret `GOOGLE_MAPS_API_KEY`，未設定時 throw `failed-precondition`，前端自動退回 OSRM／直線距離概估 |
+| `estimateTravel` | HTTPS Callable | 行程點到點交通時間（**Google Routes API** `computeRoutes`，含**真實大眾運輸**；舊版 Directions API 不開放新專案）；需 secret `GOOGLE_MAPS_API_KEY`，未設定時 throw `failed-precondition`，前端自動退回 OSRM／直線距離概估 |
 | `backupTripToNotion` | HTTPS Callable | 將行程資料備份至 Notion（**UI 限 googleEmail === 'yunaaac96@gmail.com'** 顯示按鈕） |
 
 ---
@@ -180,7 +180,7 @@ Cloud Functions secret（透過 `defineSecret`）：
 | Secret | 用途 | 取得位置 |
 |---|---|---|
 | `NOTION_API_KEY` | Notion 備份 API 金鑰 | Notion Developer → Integration token |
-| `GOOGLE_MAPS_API_KEY` | 交通時間路由（`estimateTravel`）| GCP Console → 啟用 **Directions API** + 綁定帳單 → API 金鑰；設定：`firebase functions:secrets:set GOOGLE_MAPS_API_KEY` |
+| `GOOGLE_MAPS_API_KEY` | 交通時間路由（`estimateTravel`）| GCP Console → 啟用 **Routes API** + 綁定帳單 → 建 API 金鑰（限制：Routes API、應用程式限制「無」，因伺服器端呼叫）；設定：`firebase functions:secrets:set GOOGLE_MAPS_API_KEY` |
 
 > `.env.local` 和 `.env.example` 均不存在；所有 `VITE_*` 值設在 Vercel Dashboard → Settings → Environment Variables。
 
@@ -207,7 +207,7 @@ Cloud Functions secret（透過 `defineSecret`）：
 - **共用 style 常數集中在 App.tsx**：`C`（顏色 CSS 變數）、`FONT`、`cardStyle`、`inputStyle`、`btnPrimary` 從 App.tsx import
 - **CSS 變數 dark mode**：主題色透過 `index.css` 的 `--tm-*` 變數控制，dark mode 用 `[data-theme="dark"]` 覆寫
 - **狀態列 theme-color 必須對齊頂部條**：`index.html` 的 `theme-color`（iOS standalone 狀態列底色）必須等於 App 最上方專案標題列顏色（`var(--tm-cream)`：light `#F7F4EB` / dark `#242118`），否則狀態列會浮出一條較淡色帶（「霧化」）。改 `--tm-cream` 時務必同步改 `index.html`
-- **點到點交通估算（Schedule `calcTravelTime`）**：三層 fallback — ① Cloud Function `estimateTravel`（Google Directions，真實大眾運輸）② 免費 OSRM demo（`router.project-osrm.org`，transit 以開車 ×1.35 近似）③ 直線距離概估（Haversine×道路係數÷各模式均速，顯示「（概估）」）；地理編碼走 Nominatim / Open-Meteo / Photon 多重 fallback
+- **點到點交通估算（Schedule `calcTravelTime`）**：三層 fallback — ① Cloud Function `estimateTravel`（Google Routes API，真實大眾運輸）② 免費 OSRM demo（`router.project-osrm.org`，transit 以開車 ×1.35 近似）③ 直線距離概估（Haversine×道路係數÷各模式均速，顯示「（概估）」）；地理編碼走 Nominatim / Open-Meteo / Photon 多重 fallback
 - **Inline style 優先**：大部分元件使用 React inline style；Tailwind 僅用於少數 utility class
 - **FontAwesome 替代 emoji icon**：所有 icon 用 `@fortawesome/free-solid-svg-icons`，不用 emoji
 - **Firestore 直接在元件內 subscribe**：所有 onSnapshot 在 `App.tsx` 的 useEffect，data 透過 props 傳遞
