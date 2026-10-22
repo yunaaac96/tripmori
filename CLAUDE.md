@@ -19,11 +19,11 @@ TripMori 是一個行動優先的 PWA 旅遊手帳，給多人結伴旅行的小
 - **認證**：Firebase Auth — Google Sign-In + 匿名登入（訪客瀏覽）
 - **檔案儲存**：Firebase Storage（頭像、日記圖片上傳，使用 `browser-image-compression` 2.0）
 - **推播**：FCM（Firebase Cloud Messaging）— 已完整實作，含 service worker 背景通知
-- **Cloud Functions**：Firebase Functions v2（Node 20）
+- **Cloud Functions**：Firebase Functions v2（Node 22）
 - **PWA**：`vite-plugin-pwa` 0.19（`injectManifest` 策略，Workbox）
 - **測試**：Vitest 4.1（單元）、Playwright 1.59（E2E）
 - **部署**：Vercel（前端）+ Firebase（Firestore / Functions / Storage）
-- **Node 版本**：無 `.nvmrc`；Cloud Functions 鎖定 Node 20；本機開發實際使用 v24
+- **Node 版本**：無 `.nvmrc`；Cloud Functions 鎖定 Node 22（原 Node 20 於 2026-10-30 停止部署，已升級）；本機開發實際使用 v24
 
 ---
 
