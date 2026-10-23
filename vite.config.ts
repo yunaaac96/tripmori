@@ -16,11 +16,12 @@ export default defineConfig({
         short_name: 'TripMori',
         description: '團體旅遊規劃手帳',
         // theme_color drives the iOS standalone status-bar colour (installed
-        // app reads the manifest, not the <meta>). Must equal --tm-page-bg, the
-        // single flat colour the whole top uses, so the status bar can't frost
-        // into a lighter band. (Old green #6B7C58 was the original misty tint.)
-        theme_color: '#1C1A17',
-        background_color: '#1C1A17',
+        // app reads the manifest, not the <meta>). Set to the splash/launch
+        // background #141C12 so the dark launch screen's top is one colour
+        // (user preference). In-app top is --tm-page-bg #1C1A17 — near-identical,
+        // so the tiny difference is imperceptible.
+        theme_color: '#141C12',
+        background_color: '#141C12',
         display: 'standalone',
         orientation: 'portrait',
         icons: [
