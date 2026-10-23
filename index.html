@@ -39,8 +39,12 @@
     <!-- Website favicon (瀏覽器分頁圖示) -->
     <link rel="icon" type="image/png" href="/favicon.png" />
 
-    <!-- PWA Manifest -->
-    <link rel="manifest" href="/manifest.json" />
+    <!-- PWA Manifest. The ?v= query is a cache-buster: iOS caches an installed
+         PWA's manifest so stubbornly that even "Clear Website Data" + re-add can
+         keep serving the old theme_color. Bumping this version string makes iOS
+         treat it as a new URL and re-fetch (bump again if a future manifest
+         colour change won't take). -->
+    <link rel="manifest" href="/manifest.json?v=2" />
 
     <!-- Apple Touch Icon — 透明背景版，讓 iOS 在淺色/深色/透明/不同色調模式各自貼合適背景 -->
     <link rel="apple-touch-icon" sizes="180x180" href="/icons/icon-180-transparent.png" />
