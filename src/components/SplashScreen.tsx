@@ -82,7 +82,14 @@ export default function SplashScreen() {
       <div
         className="tm-splash-root"
         style={{
-          minHeight: '100dvh',
+          /* Fill the whole viewport edge-to-edge (like the inline #app-splash),
+             so the body's --tm-safe-top padding doesn't push the splash down —
+             that padding is for in-app content only. Keeps the launch screen one
+             solid colour (no dark band above it) and centres the logo at the same
+             height as Safari / the home-screen app. */
+          position: 'fixed',
+          inset: 0,
+          zIndex: 99998,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
